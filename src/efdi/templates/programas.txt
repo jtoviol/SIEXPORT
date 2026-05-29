@@ -1,0 +1,125 @@
+COD_PROGRAMA_DEMIND	DES_PROGRAMA_DEMIND
+00	Vacunación Covid 19 gestantes
+01	Vacunación BCG Recién Nacido
+02	Vacunación Influenza (< 1 Año)
+03	Vacunación Hepatitis A (1 Año)
+04	Vacunación Influenza  (< 5 Años)
+05	Vacunación Varicela (5 años)
+06	VACUNACION VPH
+07	Vacunación Influenza  (60 años en adelante)
+08	Vacunación de gestantes con Influenza a partir de la semana 14
+09	Vacunación de gestantes con DPT acelular (Semana 26, dosis única)
+10	Aplicación de TDAP durante gestación  / MEF (10-49 años)
+11	Profilaxis y remoción de placa Bacteriana (> 1 año)
+12	Detartraje supragingival (> 12 años)
+13	Aplicación Sellantes (3 a 15 años)
+14	Aplicación de flúor de forma tópica: Barniz o gel  (menores de 18 años)
+16	Vasectomía
+17	Fortificación con Micronutrientes (6-8 meses, 12-23 meses)
+18	Suplementación con Micronutrientes (24-60 meses)
+19	Suministro de micronutrientes durante Gestación
+20	Desparasitación intestinal (12-60 meses)
+21	Valoración para la primera infancia (8 días a 5 años, 11 meses y 29 días)
+22	Valoración para la infancia (6 a 11 años, 11 meses y 29 dias)
+23	Valoración en salud para la adolescencia (12 a 17 años, 11 meses y 29 días)
+24	Valoración en salud para la juventud (de 18 a 28 años, 11 meses y 29 días)
+25	Valoración en salud para la adultez (29 a 59 años, 11 meses y 29 días)
+26	Valoración en salud para la vejez (60 años y más)
+27	Valoración en salud por profesional de enfermería
+28	Valoración de la  salud bucal por odontología (> 6 meses)
+29	Valoración de la  salud bucal de la gestante
+31	Valoración en salud visual
+32	Valoración del estado Nutricional (Actividades de sobrepeso y obesidad)
+33	Valoración para la promoción y apoyo de la lactancia materna
+34	Consulta Prenatal primera vez (SMH)
+35	Consulta Prenatal de control (SMH)
+36	Inducción de la gestante a la prueba de VIH (SMH)
+37	Curso de preparación para la maternidad y paternidad (SMH)
+38	Gestante inasistente (SMH)
+39	Inasistentes o perdidos  (PDTC)
+40	Tamizaje para la detección temprana de las alteraciones en la salud del adulto (> 45 años)
+41	Tamizaje para identificación de riesgo de Diabetes (> 18 años)
+42	Tamizaje de riesgo cardiovascular: glicemia basal, perfil lipídico, creatinina, uroanálisis para la juventud (Según riesgo)
+43	TAMIZAJE DE RIESGO CARDIOVASCULAR : GLICEMIA BASAL, PERFIL LIPIDICO, CREATININA Y UROANALISIS
+44	Tamizaje cáncer de mama - Examen clínico por Médico General (Mujeres de 40 a 69 años )
+45	Tamizaje para cáncer de mama (Mamografía bilateral, mujeres de 50 a 69 años)
+46	Tamizaje de cuello uterino (CITOLOGIA)
+47	Consulta de oftalmología (60, 65, 70, 75, 80 y más años)
+48	Tamizaje para cáncer de próstata PSA (hombres > 50 años)
+49	Tamizaje para Hemoglobina
+50	TAMIZAJE PARA CANCER DE COLON Y RECTO (SANGRE OCULTA EN MATERIA FECAL)
+51	Tamizaje para VIH (> 12 años)
+52	Tamizaje para Sífilis prueba rápida Treponémica (> 12 años)
+53	Tamizaje para Hepatitis B  (> 18 años)
+54	Tamizaje para Hepatitis C (> 22 años)
+55	Atencion en salud para la asesoría en anticoncepcion (Hombres 14-79)
+56	Atención en salud para la asesoría en anticoncepción (Mujeres 14-49)
+57	Consulta de oftalmología (60, 65, 70, 75, 80 y más años)
+58	Consulta de oftalmología (60, 65, 70, 75, 80 y más años)
+59	Consulta de oftalmología (60, 65, 70, 75, 80 y más años)
+60	Consulta de oftalmología (60, 65, 70, 75, 80 y más años)
+61	Consulta de oftalmología (60, 65, 70, 75, 80 y más años)
+62	Consulta de oftalmología (60, 65, 70, 75, 80 y más años)
+63	Consulta de oftalmología (60, 65, 70, 75, 80 y más años)
+64	Consulta de oftalmología (60, 65, 70, 75, 80 y más años)
+65	Fortificación con Micronutrientes (6-8 meses, 12-23 meses)
+80	Valoración de la salud sexual y reproductiva (mujeres 14-49 años, hombres 14-79 años)
+81	Valoración de la salud sexual y reproductiva (mujeres 14-49 años, hombres 14-79 años)
+82	Atención del adulto (> 45 años)
+83	Captacion del paciente al Programa DTC
+84	Hipertensión Arterial Control (DTC)
+85	Diabético primera vez (DTC)
+86	Diabético Control (DTC)
+87	PRUEBA
+88	Tamizaje para anemia - Hemoglobina y hematocrito
+89	VACUNACION TOXOIDE TETANICO Y DIFTERICO DEL ADULTO (TD)
+90	Vacunación Antihepatitis B Recién nacido
+91	Vacunación Triple Viral (5 Años)
+92	Vacunación Polio (VIP)( 5 Años)
+93	Vacunación DPT (5 Años)
+94	VACUNACION FIEBRE AMARILLA
+95	Vacunación Polio (VIP)(18 meses)
+96	Vacunación DPT (< 5 Años)
+97	Vacunación Neumococo (1 Año)
+98	Vacunación Varicela (1 Año) 
+99	Vacunación Triple Viral (1 Año) 
+A1	Vacunación Covid 19
+A2	Vacunación Pentavalente  (< 1 Año )
+A3	Vacunación Polio (VIP) (< 1 Año)
+A4	Vacunación Rotavirus (< 1 Año )
+A5	Vacunación Neumococo  (< 1 Año )
+A6	VACUNACION SARAMPION RUBEOLA (6 MESES A 14 AÑOS)
+A7	Asesoría en Anticoncepción de Control
+A8	Pomeroy o Ligadura de Trompas
+A9	Esterilización Femenina
+B1	Inserción de Dispositivo Intrauterino Anticonceptivo
+B2	Inserción de Anticonceptivos subdérmicos
+B3	Suministro de Anticonceptivo Oral Ciclo e Inyectable
+B4	Suministro de Preservativos
+B5	Tamizaje para cáncer de próstata PSA (hombres 40 a 49 años)
+B6	Tamizaje para cáncer de próstata Tacto Rectal (hombres > 50 años)
+B7	Vacunación Covid 19 puérperas
+B8	Prueba Covid 19
+B9	Tamizaje para cáncer Infantil
+C1	Captación de Pacientes con TB
+C2	Captación de Pacientes con Lepra
+C3	Atencion preconcepcional
+C4	Prueba de embarazo
+C5	Asesoria pre test y pos test
+C7	Prueba de Embarazo
+C8	Tamizaje con ADN VPH
+C9	Tamizaje auditivos del recien nacido
+D1	Vacunación Triple Viral (18 meses)
+D2	Pentavalente refuerzo (18 meses)
+D3	Valoración del estado Nutricional (Bajo peso y desnutricion)
+D4	VACUNACION  REFUERZO TRIPLE VIRAL 
+D5	VACUNACION  REFUERZO TRIPLE VIRAL
+D6	VACUNACION  REFUERZO TRIPLE VIRAL
+D7	VACUNACION  REFUERZO TRIPLE VIRAL
+D8	REFUERZO DE DPT
+D9	REFUERZO DE VARICELA
+E1	SEGUNDO REFUERZO DE POLIO INYECTABLE
+E2	VACUNACION VIRUS SINCITIAL RESPIRATORIO GESTANTE
+E3	VACUNACION HEXAVALENTE
+E4	VACUNACION HEXAVALENTE
+E5	VACUNACION HEXAVALENTE

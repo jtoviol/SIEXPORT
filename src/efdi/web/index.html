@@ -1,0 +1,1819 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SIEXPORT — Sistema Inteligente de Exportación de Facturación</title>
+  <script src="https://unpkg.com/@lottiefiles/dotlottie-wc@0.9.14/dist/dotlottie-wc.js" type="module"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50:"#eff5fb", 100:"#dae6f3", 500:"#3b6ea8",
+              600:"#2e5786", 700:"#234674", 800:"#1a3960", 900:"#13294a"
+            }
+          }
+        }
+      }
+    };
+  </script>
+  <style>
+    @keyframes spin      { to { transform: rotate(360deg); } }
+    @keyframes pdot      { 0%,100%{opacity:1} 50%{opacity:.35} }
+    @keyframes float-up  { 0%{transform:translateY(0);opacity:.7} 100%{transform:translateY(-48px);opacity:0} }
+    @keyframes shimmer   { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+    @keyframes bar-grow  { from{width:0} to{width:var(--w)} }
+    @keyframes lote-prog { from{width:0%} to{width:95%} }
+    @keyframes fade-in   { from{opacity:0;transform:translateY(4px)} to{opacity:1;transform:translateY(0)} }
+    .spin  { animation: spin 1s linear infinite; }
+    .pdot  { animation: pdot 1.5s ease-in-out infinite; }
+    .fade-in { animation: fade-in .3s ease both; }
+
+    /* Particle that floats up */
+    .particle {
+      position: absolute; border-radius: 50%; pointer-events: none;
+      animation: float-up var(--dur, 1.8s) ease-out var(--delay, 0s) infinite;
+    }
+    /* Shimmer bar */
+    .shimmer-bar {
+      background: linear-gradient(90deg,#dae6f3 25%,#eff5fb 50%,#dae6f3 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.4s infinite;
+      border-radius: 4px;
+    }
+
+    /* Progress bar with smooth growth */
+    .progress-bar-fill {
+      background: linear-gradient(90deg, #3b6ea8 0%, #234674 100%);
+      border-radius: 9999px;
+      height: 100%;
+      transition: width .6s cubic-bezier(.4,0,.2,1);
+      box-shadow: 0 0 12px rgba(35,70,116,.35);
+    }
+
+    /* Lote row */
+    .lote-row {
+      transition: background .2s, border-color .2s;
+      animation: fade-in .3s ease both;
+    }
+    .lote-row.is-running {
+      background: linear-gradient(90deg, #eff6ff, #eff5fb, #eff6ff);
+      background-size: 200% 100%;
+      animation: shimmer 2s infinite, fade-in .3s ease both;
+      border-left: 3px solid #3b6ea8;
+    }
+    .lote-row.is-completed {
+      background: #f0fdf4;
+      border-left: 3px solid #10b981;
+    }
+    .lote-row.is-pending {
+      background: #fffbeb;
+      border-left: 3px solid #fbbf24;
+      opacity: .6;
+    }
+    .lote-row.is-failed {
+      background: #fef2f2;
+      border-left: 3px solid #ef4444;
+    }
+
+    /* Number counter — gentle bounce on change */
+    @keyframes bump { 0% { transform: scale(1); } 50% { transform: scale(1.12); color: #234674; } 100% { transform: scale(1); } }
+    .num-bump { animation: bump .35s ease; }
+
+    .job-item { border-left: 3px solid transparent; transition: background .12s, border-color .12s; position: relative; }
+    .job-item:hover:not(.selected) { background: #f8fafc; }
+    .job-item.selected { border-left-color: #234674; background: #eff5fb; }
+    .job-item .del-btn { opacity: 0; transition: opacity .12s, background .12s, color .12s; }
+    .job-item:hover .del-btn { opacity: 1; }
+    #sidebar.collapsed .job-item .del-btn { display: none; }
+
+    /* Collapsible form */
+    #form-wrap { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .22s ease; }
+    #form-wrap.open { grid-template-rows: 1fr; }
+    #form-wrap > div { overflow: hidden; }
+
+    /* File hover */
+    .frow .dlbtn { opacity: 0; transition: opacity .12s; }
+    .frow:hover .dlbtn { opacity: 1; }
+    .frow { transition: background .1s; }
+    .frow:hover { background: #f1f5f9; }
+
+    /* Type chip toggle */
+    .chip-btn { transition: opacity .15s, transform .1s; }
+    .chip-btn.active { opacity: 1 !important; transform: scale(1.05); }
+    .chip-btn:hover { opacity: 0.75; }
+
+    /* Tab underline */
+    .tab-btn { transition: background .15s, color .15s; }
+    .tab-btn.active { background: #234674; color: #fff; font-weight: 600; }
+    .tab-btn:not(.active):not(:disabled) { color: #64748b; }
+    .tab-btn:not(.active):not(:disabled):hover { background: #f1f5f9; color: #1e293b; }
+
+    /* Flash verde cuando job completa */
+    @keyframes flash-ok { 0%,40%{background:#dcfce7} 100%{background:transparent} }
+    .job-item.flash-ok { animation: flash-ok 1.4s ease forwards; }
+
+    /* Sidebar collapsible */
+    #sidebar {
+      width: 288px;
+      transition: width .24s cubic-bezier(.4,0,.2,1);
+      overflow: hidden;
+    }
+    #sidebar.collapsed { width: 52px; }
+
+    /* Hide labels when sidebar is collapsed */
+    #sidebar.collapsed .s-label  { display: none; }
+    #sidebar.collapsed #form-wrap { display: none !important; }
+
+    /* Nueva button: icon-only pill */
+    #sidebar.collapsed #btn-toggle {
+      width: 36px; height: 36px;
+      margin: 6px auto 0;
+      padding: 0;
+      border-radius: 8px;
+    }
+
+    /* Section header: center the icon */
+    #sidebar.collapsed .s-section-hdr { justify-content: center; padding: 6px 0; }
+
+    /* Job items: center the icon in icon-rail */
+    #sidebar.collapsed .job-item { padding: 6px 0; }
+    #sidebar.collapsed .jrow { justify-content: center; }
+    #sidebar.collapsed .job-meta { display: none; }
+
+    /* Toggle button — offset by p-2 (8px) of the container */
+    #sidebar-toggle {
+      position: absolute;
+      left: calc(288px + 8px);   /* sidebar width + container padding */
+      top: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 25;
+      transition: left .24s cubic-bezier(.4,0,.2,1);
+    }
+    #sidebar-toggle svg { transition: transform .24s ease; }
+
+    /* ─── MOBILE ─── */
+    @media (max-width: 639px) {
+      /* Sidebar ocupa todo el ancho */
+      #sidebar { width: 100% !important; border-radius: 0 !important; box-shadow: none !important; border: none !important; }
+
+      /* Right panel cubre todo el split-layout al abrirse */
+      #rp {
+        position: absolute; inset: 0; background: white; z-index: 30;
+        transform: translateX(100%); transition: transform .28s cubic-bezier(.4,0,.2,1);
+        border-radius: 0 !important; box-shadow: none !important; border: none !important;
+      }
+      #rp.mopen { transform: translateX(0); }
+
+      /* Ocultar elementos solo-desktop */
+      #sidebar-toggle { display: none; }
+
+      /* Touch targets: mínimo 44px */
+      .job-item { min-height: 56px; }
+      .frow     { min-height: 44px; }
+    }
+
+    /* Bottom tab bar (mobile only) */
+    .mob-tab { transition: color .15s; color: #94a3b8; }
+    .mob-tab.active { color: #234674; }
+    .mob-tab span { font-size: 10px; line-height: 1.2; }
+  </style>
+</head>
+
+<body class="h-screen flex flex-col overflow-hidden text-slate-900 antialiased"
+      style="font-family: system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+             background: linear-gradient(145deg, #e4eef8 0%, #eef3f9 35%, #f1f5f9 65%, #e8f0f7 100%)">
+
+<!-- ═══ HEADER ═══ -->
+<header class="h-20 shrink-0 bg-white border-b border-slate-200 flex items-center px-4 gap-3 z-20"
+        style="box-shadow:0 1px 4px rgba(0,0,0,.05)">
+  <!-- Logo -->
+  <div class="flex items-center gap-3 shrink-0">
+    <img src="/static/siexport_logo.jpeg" alt="SIEXPORT" class="h-16 w-auto object-contain" />
+    <div class="flex flex-col leading-tight">
+      <span class="text-xl font-black tracking-wide">
+        <span style="color:#22a84a">SI</span><span style="color:#1a2f6e">EXPORT</span>
+      </span>
+      <span class="text-xs font-medium" style="color:#1a2f6e">
+        Sistema inteligente de exportación de
+        <span style="color:#22a84a" class="font-semibold">datos</span>
+        para
+        <span style="color:#22a84a" class="font-semibold">facturación</span>
+      </span>
+    </div>
+  </div>
+  <!-- Tabs centrados (solo desktop) -->
+  <nav class="flex-1 hidden sm:flex items-center justify-center gap-1">
+    <button data-tab="demanda-inducida" onclick="switchTab('demanda-inducida')"
+            class="tab-btn active px-3.5 py-1.5 text-sm font-medium outline-none whitespace-nowrap rounded-full transition-all">
+      Demanda Inducida
+    </button>
+    <button disabled title="Proximo modulo"
+            class="px-3.5 py-1.5 text-sm text-slate-300 cursor-not-allowed whitespace-nowrap select-none rounded-full">
+      Vacunacion
+    </button>
+    <button disabled title="Proximo modulo"
+            class="px-3.5 py-1.5 text-sm text-slate-300 cursor-not-allowed whitespace-nowrap select-none rounded-full">
+      Control Prenatal
+    </button>
+  </nav>
+  <!-- Health badge -->
+  <div class="shrink-0" id="health-badge"></div>
+</header>
+
+<!-- ═══ SPLIT LAYOUT ═══ -->
+<div class="flex-1 flex overflow-hidden relative sm:p-2 sm:gap-2">
+
+  <!-- Sidebar toggle button (sits on the border) -->
+  <button id="sidebar-toggle" onclick="toggleSidebar()"
+          title="Colapsar panel"
+          class="h-6 w-6 rounded-full bg-white border border-slate-200 shadow-md
+                 flex items-center justify-center text-slate-400
+                 hover:text-brand-700 hover:border-brand-300 hover:shadow-brand-100 transition-colors">
+    <svg id="toggle-icon" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24"
+         stroke="currentColor" stroke-width="2.5">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/>
+    </svg>
+  </button>
+
+  <!-- ─── LEFT: Job list ─── -->
+  <aside id="sidebar" class="shrink-0 flex flex-col bg-white sm:rounded-xl sm:border sm:border-white/80"
+         style="box-shadow: 0 2px 12px rgba(35,70,116,.1), 0 0 0 1px rgba(35,70,116,.06)">
+
+    <div class="px-3 pt-3 pb-2 shrink-0">
+      <button id="btn-toggle" onclick="toggleForm()"
+              class="w-full flex items-center justify-center gap-1.5 h-9 rounded-lg
+                     bg-brand-700 hover:bg-brand-800 text-white text-sm font-medium transition-colors">
+        <svg id="ico-plus" class="h-4 w-4 transition-transform duration-200"
+             fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
+        </svg>
+        <span id="lbl-btn" class="s-label">Nueva extraccion</span>
+      </button>
+    </div>
+
+    <!-- Collapsible form -->
+    <div id="form-wrap">
+      <div>
+        <form id="fext" class="px-3 pb-3 space-y-2.5 border-b border-slate-200 bg-slate-50">
+          <div class="grid grid-cols-2 gap-2 pt-0.5">
+            <div>
+              <label class="text-xs font-medium text-slate-500 block mb-1">Desde</label>
+              <input id="desde" type="date" required
+                     class="w-full h-8 px-2 rounded-md border border-slate-300 text-xs bg-white
+                            outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500"/>
+            </div>
+            <div>
+              <label class="text-xs font-medium text-slate-500 block mb-1">Hasta</label>
+              <input id="hasta" type="date" required
+                     class="w-full h-8 px-2 rounded-md border border-slate-300 text-xs bg-white
+                            outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500"/>
+            </div>
+          </div>
+          <div>
+            <label class="text-xs font-medium text-slate-500 block mb-1">Limite de registros</label>
+            <!-- Toggle Auto / Manual -->
+            <div class="flex rounded-md overflow-hidden border border-slate-300 mb-1.5 text-xs">
+              <button type="button" id="btn-modo-auto" onclick="setModoLimite('auto')"
+                      class="flex-1 h-7 font-medium transition-colors bg-brand-700 text-white">
+                Auto
+              </button>
+              <button type="button" id="btn-modo-manual" onclick="setModoLimite('manual')"
+                      class="flex-1 h-7 font-medium transition-colors bg-white text-slate-600 hover:bg-slate-50">
+                Manual
+              </button>
+            </div>
+            <!-- Descripcion modo Auto -->
+            <div id="auto-desc" class="space-y-1">
+              <p class="text-[10px] text-brand-600 leading-tight">Trae todos los registros del rango seleccionado</p>
+              <!-- Preview de conteo -->
+              <div id="auto-preview" class="hidden rounded-md px-2 py-1.5 text-[10px] leading-snug border">
+                <span id="auto-preview-txt"></span>
+              </div>
+            </div>
+            <!-- Input modo Manual -->
+            <div id="manual-wrap" class="hidden">
+              <input id="limite" type="number" min="1" max="600000" value="25"
+                     oninput="updateLotePreview()"
+                     class="w-full h-8 px-2 rounded-md border border-slate-300 text-xs bg-white
+                            outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500"/>
+              <p id="lote-preview" class="text-[10px] text-slate-400 mt-1"></p>
+            </div>
+          </div>
+          <p id="ferr" class="text-xs text-red-500 hidden"></p>
+          <button type="submit" id="btn-gen"
+                  class="w-full h-8 rounded-md bg-brand-700 hover:bg-brand-800 text-white
+                         text-xs font-semibold transition-colors disabled:opacity-50
+                         inline-flex items-center justify-center gap-1.5">
+            <span class="bico">
+              <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round"
+                      d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
+              </svg>
+            </span>
+            <span class="blbl">Generar</span>
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <!-- List header -->
+    <div class="s-section-hdr px-4 py-2 flex items-center justify-between shrink-0">
+      <div class="s-label flex items-center gap-2">
+        <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Extracciones</span>
+        <span id="job-count" class="text-xs text-slate-400 tabular-nums"></span>
+      </div>
+      <button onclick="loadJobs()" title="Refrescar"
+              class="h-6 w-6 rounded hover:bg-slate-100 flex items-center justify-center text-slate-400 transition-colors">
+        <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round"
+                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+        </svg>
+      </button>
+    </div>
+
+    <div class="flex-1 overflow-y-auto">
+      <div id="jempty" class="hidden px-4 py-10 text-center">
+        <svg class="h-8 w-8 text-slate-200 mx-auto mb-2" fill="none" viewBox="0 0 24 24"
+             stroke="currentColor" stroke-width="1.5">
+          <path stroke-linecap="round" stroke-linejoin="round"
+                d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10"/>
+        </svg>
+        <p class="text-xs text-slate-400">Sin extracciones aun</p>
+      </div>
+      <ul id="jlist" class="divide-y divide-slate-100"></ul>
+    </div>
+  </aside>
+
+  <!-- ─── RIGHT: File explorer ─── -->
+  <main id="rp" class="flex-1 flex flex-col bg-white sm:rounded-xl overflow-hidden sm:border sm:border-white/80"
+        style="box-shadow: 0 2px 12px rgba(35,70,116,.1), 0 0 0 1px rgba(35,70,116,.06)">
+
+    <!-- Empty state -->
+    <div id="rp-empty" class="flex-1 flex flex-col items-center justify-center gap-4 select-none">
+      <svg class="h-16 w-16 text-slate-200" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="0.75">
+        <path stroke-linecap="round" stroke-linejoin="round"
+              d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
+      </svg>
+      <div class="text-center">
+        <p class="text-sm font-medium text-slate-300">Selecciona un job</p>
+        <p class="text-xs text-slate-200 mt-0.5">para explorar sus archivos</p>
+      </div>
+    </div>
+
+    <!-- Explorer content -->
+    <div id="rp-content" class="hidden flex-1 flex flex-col overflow-hidden">
+
+      <!-- Explorer header -->
+      <div class="shrink-0 flex items-center gap-3 px-5 py-3 border-b border-slate-200">
+        <button onclick="closeMobile()"
+                class="sm:hidden h-10 w-10 -ml-2 rounded-xl hover:bg-slate-100 flex items-center
+                       justify-center text-slate-600 shrink-0 transition-colors active:bg-slate-200">
+          <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/>
+          </svg>
+        </button>
+        <svg class="h-4 w-4 text-amber-400 shrink-0" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z"/>
+        </svg>
+        <div class="flex-1 min-w-0">
+          <p id="exp-name" class="text-sm font-semibold text-slate-800 tracking-tight truncate"></p>
+          <p id="exp-meta" class="text-xs text-slate-400 mt-0.5"></p>
+        </div>
+        <a id="exp-dl" href="#" download
+           class="shrink-0 inline-flex items-center gap-1.5 px-3 h-8 rounded-lg border
+                  border-slate-200 hover:bg-slate-50 text-xs font-medium text-slate-600 transition-colors">
+          <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+            <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+          </svg>
+          <span class="hidden sm:inline">Descargar</span> .zip
+        </a>
+      </div>
+
+      <!-- Filter bar (visible only when tree has data) -->
+      <div id="filter-bar" class="hidden shrink-0 px-5 py-2.5 border-b border-slate-100 bg-slate-50/60 space-y-2">
+        <div class="relative">
+          <svg class="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none"
+               fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+          </svg>
+          <input id="filter-text"
+                 type="search" placeholder="Buscar por numero de documento..."
+                 oninput="applyFilters()"
+                 class="w-full h-8 pl-8 pr-3 rounded-md border border-slate-200 text-xs bg-white
+                        outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500"/>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="text-xs text-slate-400 shrink-0">Tipo:</span>
+          <div id="chip-container" class="flex flex-wrap gap-1.5"></div>
+          <span id="filter-count" class="ml-auto text-xs text-slate-400 tabular-nums shrink-0"></span>
+        </div>
+      </div>
+
+      <!-- Tree -->
+      <div id="exp-tree" class="flex-1 overflow-y-auto"></div>
+    </div>
+
+  </main>
+</div>
+
+<!-- ═══ MODAL: CONFIRMAR ELIMINACION ═══ -->
+<div id="del-overlay"
+     class="hidden fixed inset-0 bg-black/40 backdrop-blur-sm z-[60] flex items-center justify-center p-4"
+     onclick="cancelDelete()">
+  <div id="del-modal"
+       class="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden"
+       style="transform:scale(.94) translateY(8px);opacity:0;transition:transform .22s cubic-bezier(.34,1.56,.64,1),opacity .18s ease"
+       onclick="event.stopPropagation()">
+    <!-- Red accent top bar -->
+    <div class="h-1 w-full bg-gradient-to-r from-red-400 to-red-600"></div>
+    <div class="p-6">
+      <!-- Icon + title -->
+      <div class="flex items-start gap-4 mb-4">
+        <div class="h-10 w-10 rounded-xl bg-red-50 flex items-center justify-center shrink-0">
+          <svg class="h-5 w-5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3"/>
+          </svg>
+        </div>
+        <div>
+          <h3 class="font-semibold text-slate-900 text-base leading-tight">Eliminar extraccion</h3>
+          <p class="text-xs text-slate-500 mt-0.5 font-mono" id="del-job-id"></p>
+        </div>
+      </div>
+      <!-- Body -->
+      <p class="text-sm text-slate-600 leading-relaxed">
+        Se borrarán del disco <strong class="text-slate-800">todos los PDFs y el archivo .zip</strong> generados.
+        Esta accion no se puede deshacer.
+      </p>
+      <!-- Buttons -->
+      <div class="flex gap-3 mt-6">
+        <button onclick="cancelDelete()"
+                class="flex-1 h-10 rounded-xl border border-slate-200 text-sm font-medium
+                       text-slate-600 hover:bg-slate-50 active:bg-slate-100 transition-colors">
+          Cancelar
+        </button>
+        <button id="del-confirm-btn" onclick="confirmDelete()"
+                class="flex-1 h-10 rounded-xl bg-red-500 hover:bg-red-600 active:bg-red-700
+                       text-white text-sm font-semibold transition-colors
+                       inline-flex items-center justify-center gap-1.5">
+          <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+            <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7"/>
+          </svg>
+          Si, eliminar
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ MODAL: CONFIRMAR CANCELACION ═══ -->
+<div id="cancel-overlay"
+     class="hidden fixed inset-0 bg-black/40 backdrop-blur-sm z-[60] flex items-center justify-center p-4"
+     onclick="cancelarModal()">
+  <div id="cancel-modal"
+       class="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden"
+       style="transform:scale(.94) translateY(8px);opacity:0;transition:transform .22s cubic-bezier(.34,1.56,.64,1),opacity .18s ease"
+       onclick="event.stopPropagation()">
+    <div class="h-1 w-full bg-gradient-to-r from-amber-400 to-orange-500"></div>
+    <div class="p-6">
+      <div class="flex items-start gap-4 mb-4">
+        <div class="h-10 w-10 rounded-xl bg-amber-50 flex items-center justify-center shrink-0">
+          <svg class="h-5 w-5 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+        </div>
+        <div>
+          <h3 class="font-semibold text-slate-900 text-base leading-tight">Detener extraccion</h3>
+          <p class="text-xs text-slate-500 mt-0.5 font-mono" id="cancel-job-id"></p>
+        </div>
+      </div>
+      <p class="text-sm text-slate-600 leading-relaxed">
+        Los lotes ya generados se <strong class="text-slate-800">conservan y podras descargarlos</strong>.
+        Los lotes pendientes no se procesaran.
+      </p>
+      <div class="flex gap-3 mt-6">
+        <button onclick="cancelarModal()"
+                class="flex-1 h-10 rounded-xl border border-slate-200 text-sm font-medium
+                       text-slate-600 hover:bg-slate-50 active:bg-slate-100 transition-colors">
+          Seguir generando
+        </button>
+        <button id="cancel-confirm-btn" onclick="confirmarCancelacion()"
+                class="flex-1 h-10 rounded-xl bg-amber-500 hover:bg-amber-600 active:bg-amber-700
+                       text-white text-sm font-semibold transition-colors
+                       inline-flex items-center justify-center gap-1.5">
+          <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+          Si, detener
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ MOBILE BOTTOM NAV ═══ -->
+<nav class="sm:hidden shrink-0 bg-white border-t border-slate-100 z-20"
+     style="padding-bottom: env(safe-area-inset-bottom, 0px)">
+  <div class="flex">
+    <button data-mob-tab="demanda-inducida" onclick="switchTab('demanda-inducida')"
+            class="mob-tab active flex-1 flex flex-col items-center gap-0.5 py-2.5 transition-colors">
+      <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+        <path stroke-linecap="round" stroke-linejoin="round"
+              d="M9 12h6m-6 4h6M9 8h6m-3 12H7a2 2 0 01-2-2V6a2 2 0 012-2h7l5 5v9a2 2 0 01-2 2h-2"/>
+      </svg>
+      <span class="font-medium">Demanda</span>
+    </button>
+    <button disabled
+            class="mob-tab flex-1 flex flex-col items-center gap-0.5 py-2.5 cursor-not-allowed opacity-40 select-none">
+      <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+        <path stroke-linecap="round" stroke-linejoin="round"
+              d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+      </svg>
+      <span>Vacunacion</span>
+    </button>
+    <button disabled
+            class="mob-tab flex-1 flex flex-col items-center gap-0.5 py-2.5 cursor-not-allowed opacity-40 select-none">
+      <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+        <path stroke-linecap="round" stroke-linejoin="round"
+              d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/>
+      </svg>
+      <span>C. Prenatal</span>
+    </button>
+  </div>
+</nav>
+
+<!-- ═══ TOAST STACK ═══ -->
+<div id="toast-stack"
+     class="fixed right-4 z-50 flex flex-col-reverse gap-2 pointer-events-none"
+     style="bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+            min-width: min(300px, calc(100vw - 2rem)); max-width: 360px"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════
+// CONFIG
+// ═══════════════════════════════════════════════════════════════════
+const API = "";
+const $ = id => document.getElementById(id);
+
+const DOC_COLORS = {
+  CC: { pill: "bg-cyan-500 text-white",   soft: "bg-cyan-50 text-cyan-700"   },
+  TI: { pill: "bg-orange-400 text-white", soft: "bg-orange-50 text-orange-700" },
+  RC: { pill: "bg-rose-500 text-white",   soft: "bg-rose-50 text-rose-700"   },
+  CE: { pill: "bg-amber-500 text-white",  soft: "bg-amber-50 text-amber-700" },
+  MS: { pill: "bg-purple-500 text-white", soft: "bg-purple-50 text-purple-700"},
+  PA: { pill: "bg-slate-500 text-white",  soft: "bg-slate-100 text-slate-600" },
+};
+
+const STATUS = {
+  pending:   {
+    dot: "bg-amber-400", label: "Pendiente",
+    iconBg: "bg-amber-50", iconColor: "text-amber-500",
+    iconPath: `<path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>`,
+  },
+  running:   {
+    dot: "bg-blue-500 pdot", label: "Generando...",
+    iconBg: "bg-blue-50", iconColor: "text-blue-500",
+    iconPath: `<path stroke-linecap="round" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>`,
+    spin: true,
+  },
+  completed: {
+    dot: "bg-emerald-500", label: "Completado",
+    iconBg: "bg-emerald-50", iconColor: "text-emerald-600",
+    iconPath: `<path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>`,
+  },
+  failed:    {
+    dot: "bg-red-500", label: "Fallido",
+    iconBg: "bg-red-50", iconColor: "text-red-500",
+    iconPath: `<path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>`,
+  },
+  cancelled: {
+    dot: "bg-slate-400", label: "Cancelado",
+    iconBg: "bg-slate-100", iconColor: "text-slate-500",
+    iconPath: `<path stroke-linecap="round" stroke-linejoin="round" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z"/>`,
+  },
+};
+
+// ═══════════════════════════════════════════════════════════════════
+// UTILS
+// ═══════════════════════════════════════════════════════════════════
+function fmtRel(iso) {
+  const d = new Date(iso), diff = (Date.now() - d.getTime()) / 1000;
+  if (diff < 60)    return `hace ${Math.floor(diff)}s`;
+  if (diff < 3600)  return `hace ${Math.floor(diff / 60)} min`;
+  if (diff < 86400) return `hace ${Math.floor(diff / 3600)} h`;
+  return d.toLocaleDateString("es-CO", { day: "2-digit", month: "short" });
+}
+
+function fmtSz(b) {
+  if (b < 1024)    return `${b} B`;
+  if (b < 1048576) return `${(b / 1024).toFixed(1)} KB`;
+  return `${(b / 1048576).toFixed(1)} MB`;
+}
+
+function parseKey(name) {
+  const m = name.match(/^([A-Z]{2})_(.+)$/);
+  return m ? { t: m[1], n: m[2] } : { t: "??", n: name };
+}
+
+const TOAST_CFG = {
+  success: {
+    bar: "bg-emerald-500", ic: "text-emerald-600",
+    border: "border-emerald-100", bg: "bg-emerald-50",
+    d: "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+  },
+  error: {
+    bar: "bg-red-500", ic: "text-red-600",
+    border: "border-red-100", bg: "bg-red-50",
+    d: "M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"
+  },
+  info: {
+    bar: "bg-amber-400", ic: "text-amber-600",
+    border: "border-amber-100", bg: "bg-amber-50",
+    d: "M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+  },
+};
+
+function dismissToast(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  clearTimeout(el._timer);
+  el.style.transform = "translateX(110%)";
+  el.style.opacity   = "0";
+  setTimeout(() => el.remove(), 320);
+}
+
+function toast(title, desc = "", v = "success") {
+  const C   = TOAST_CFG[v] || TOAST_CFG.info;
+  const id  = `toast-${Date.now()}`;
+  const dur = 4200;
+  const el  = document.createElement("div");
+  el.id = id;
+  el.className = `pointer-events-auto w-full rounded-2xl shadow-lg border overflow-hidden ${C.border} ${C.bg}`;
+  el.style.cssText = "transform:translateX(110%);opacity:0;transition:transform .32s cubic-bezier(.34,1.56,.64,1),opacity .25s ease";
+  el.innerHTML = `
+    <div class="flex items-start gap-3 px-4 py-3">
+      <div class="${C.ic} mt-0.5 shrink-0">
+        <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="${C.d}"/>
+        </svg>
+      </div>
+      <div class="flex-1 min-w-0">
+        <p class="text-sm font-semibold text-slate-900 leading-tight">${title}</p>
+        ${desc ? `<p class="text-xs text-slate-500 mt-0.5 leading-snug">${desc}</p>` : ""}
+      </div>
+      <button onclick="dismissToast('${id}')"
+              class="shrink-0 -mr-1 -mt-0.5 h-6 w-6 rounded-lg flex items-center justify-center
+                     text-slate-400 hover:text-slate-700 hover:bg-black/5 transition-colors">
+        <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+      </button>
+    </div>
+    <!-- Progress bar -->
+    <div class="h-0.5 w-full bg-black/5">
+      <div id="${id}-bar" class="h-full ${C.bar} opacity-60 rounded-full"
+           style="width:100%;transition:width ${dur}ms linear"></div>
+    </div>`;
+
+  $("toast-stack").appendChild(el);
+
+  // Slide in
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    el.style.transform = "translateX(0)";
+    el.style.opacity   = "1";
+    // Shrink progress bar
+    const bar = document.getElementById(`${id}-bar`);
+    if (bar) bar.style.width = "0%";
+  }));
+
+  el._timer = setTimeout(() => dismissToast(id), dur);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// API
+// ═══════════════════════════════════════════════════════════════════
+async function apiGet(path) {
+  const r = await fetch(API + path);
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || r.statusText);
+  return r.json();
+}
+async function apiPost(path, body) {
+  const r = await fetch(API + path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || r.statusText);
+  return r.json();
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// HEALTH
+// ═══════════════════════════════════════════════════════════════════
+async function loadHealth() {
+  try {
+    const h = await apiGet("/health");
+    const real = h.modo === "sqlserver";
+    $("health-badge").innerHTML = `
+      <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium
+            ${real ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                   : "bg-slate-100 text-slate-500 border border-slate-200"}">
+        <span class="h-1.5 w-1.5 rounded-full ${real ? "bg-emerald-500" : "bg-slate-400"}"></span>
+        ${real ? "SQL Server" : "Mock"} &middot; v${h.version}
+      </span>`;
+  } catch {
+    $("health-badge").innerHTML = `<span class="text-xs text-red-500">API offline</span>`;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// TABS
+// ═══════════════════════════════════════════════════════════════════
+let activeTab = "demanda-inducida";
+
+function hasActiveJobs() {
+  return Object.values(prevSt).some(s => s === "pending" || s === "running");
+}
+
+function switchTab(tabId) {
+  if (tabId === activeTab) return;
+  if (hasActiveJobs()) {
+    toast("No se puede cambiar de modulo", "Hay una extraccion en curso. Espera a que finalice.", "info");
+    return;
+  }
+  activeTab = tabId;
+  document.querySelectorAll(".tab-btn").forEach(btn =>
+    btn.classList.toggle("active", btn.dataset.tab === tabId)
+  );
+  document.querySelectorAll(".mob-tab").forEach(btn =>
+    btn.classList.toggle("active", btn.dataset.mobTab === tabId)
+  );
+  // Reset right panel when switching modules
+  selId = null;
+  $("rp-empty").classList.remove("hidden");
+  $("rp-content").classList.add("hidden");
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// JOBS LIST
+// ═══════════════════════════════════════════════════════════════════
+let selId = null, prevSt = {}, _poll = null;
+
+function jobHtml(e) {
+  const s  = STATUS[e.estado] || STATUS.pending;
+  const ok = e.estado === "completed";
+  const ko = e.estado === "failed";
+  const sub = ok ? `${e.total_afiliados} afil &middot; ${e.total_pdfs} PDFs`
+            : ko ? `<span class="text-red-400 truncate">${e.mensaje_error || "Error"}</span>`
+            : s.label;
+  const shortId = e.id.slice(0, 8);
+  const tipLabel = ok ? `${shortId} · ${e.total_pdfs} PDFs` : `${shortId} · ${s.label}`;
+  const spinClass = s.spin ? " spin" : "";
+  const icon = `
+    <div class="shrink-0 h-8 w-8 rounded-lg ${s.iconBg} flex items-center justify-center">
+      <svg class="h-4 w-4 ${s.iconColor}${spinClass}" fill="none" viewBox="0 0 24 24"
+           stroke="currentColor" stroke-width="1.8">${s.iconPath}</svg>
+    </div>`;
+  const isActive = e.estado === "pending" || e.estado === "running";
+  const delBtn = isActive
+    ? ""
+    : `<button onclick="deleteJob(event, '${e.id}')"
+                title="Eliminar esta extracción"
+                class="del-btn absolute top-1.5 right-1.5 h-6 w-6 rounded-md
+                       text-slate-300 hover:bg-red-50 hover:text-red-500
+                       flex items-center justify-center z-10">
+          <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3"/>
+          </svg>
+        </button>`;
+  return `
+    <li>
+      <div class="job-item w-full px-3 py-2.5 block cursor-pointer"
+           data-id="${e.id}" onclick="selJob('${e.id}')" title="${tipLabel}">
+        ${delBtn}
+        <div class="jrow flex items-center gap-2.5">
+          ${icon}
+          <div class="s-label flex-1 min-w-0 pr-6">
+            <div class="flex items-center justify-between gap-1">
+              <span class="text-sm font-semibold text-slate-800 tracking-tight truncate">${shortId}<span class="text-slate-400 font-normal">&hellip;</span></span>
+              <span class="text-xs text-slate-400 shrink-0">${fmtRel(e.creado_en)}</span>
+            </div>
+            <div class="job-meta mt-0.5 text-xs text-slate-400 truncate">${sub}</div>
+          </div>
+        </div>
+      </div>
+    </li>`;
+}
+
+// ─── Delete confirmation modal ───
+let _pendingDeleteId = null;
+
+function deleteJob(ev, id) {
+  ev.stopPropagation();
+  ev.preventDefault();
+  _pendingDeleteId = id;
+  $("del-job-id").textContent = `job_${id}`;
+  const overlay = $("del-overlay");
+  const modal   = $("del-modal");
+  overlay.classList.remove("hidden");
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    modal.style.transform = "scale(1) translateY(0)";
+    modal.style.opacity   = "1";
+  }));
+  setTimeout(() => $("del-confirm-btn")?.focus(), 220);
+}
+
+function cancelDelete() {
+  const modal = $("del-modal");
+  modal.style.transform = "scale(.94) translateY(8px)";
+  modal.style.opacity   = "0";
+  setTimeout(() => $("del-overlay").classList.add("hidden"), 220);
+  _pendingDeleteId = null;
+}
+
+async function confirmDelete() {
+  const id = _pendingDeleteId;
+  if (!id) return;
+  cancelDelete();
+  const short = id.slice(0, 8);
+  try {
+    const r = await fetch(`/extractions/${id}`, { method: "DELETE" });
+    if (!r.ok) {
+      const body = await r.json().catch(() => ({}));
+      throw new Error(body.detail || r.statusText);
+    }
+    toast("Extraccion eliminada", `${short}… borrada del disco`, "success");
+    if (selId === id) {
+      selId = null;
+      $("rp-empty").classList.remove("hidden");
+      $("rp-content").classList.add("hidden");
+      clearTimeout(_progressTimer);
+    }
+    if (window._eventLog) delete window._eventLog[id];
+    loadJobs();
+  } catch (e) {
+    toast("Error al eliminar", e.message, "error");
+  }
+}
+
+async function loadJobs() {
+  try {
+    const data = await apiGet("/extractions");
+    const empty = $("jempty"), list = $("jlist");
+    if (!data.length) {
+      list.innerHTML = ""; empty.classList.remove("hidden");
+    } else {
+      empty.classList.add("hidden");
+      list.innerHTML = data.map(jobHtml).join("");
+      markSel(selId);
+    }
+    // Detectar cambios de estado
+    data.forEach(e => {
+      const was = prevSt[e.id];
+      if (was && was !== "completed" && e.estado === "completed") {
+        // Flash verde en el item
+        const li = document.querySelector(`.job-item[data-id="${e.id}"]`);
+        if (li) { li.classList.add("flash-ok"); li.addEventListener("animationend", () => li.classList.remove("flash-ok"), { once: true }); }
+        // Si es el seleccionado → carga el árbol
+        if (e.id === selId) loadTree(e.id);
+        // Si no había nada seleccionado → auto-selecciona
+        if (!selId) selJob(e.id);
+      }
+      // Actualizar meta en panel si sigue activo
+      if (e.id === selId && (e.estado === "pending" || e.estado === "running")) {
+        const meta = $("exp-meta"); if (meta) meta.textContent = STATUS[e.estado].label;
+      }
+    });
+
+    // Badge de conteo en el sidebar
+    const total  = data.length;
+    const activos = data.filter(e => e.estado === "pending" || e.estado === "running").length;
+    const badge  = $("job-count");
+    if (badge) badge.textContent = activos > 0 ? `${total} · ${activos} activo${activos !== 1 ? "s" : ""}` : `${total}`;
+
+    prevSt = Object.fromEntries(data.map(e => [e.id, e.estado]));
+    const active = data.some(e => e.estado === "pending" || e.estado === "running");
+    updateGenButtons(active);  // ← bloquea/habilita botones según haya jobs activos
+    clearTimeout(_poll);
+    _poll = setTimeout(loadJobs, active ? 45000 : 5000);
+  } catch {
+    clearTimeout(_poll);
+    _poll = setTimeout(loadJobs, 45000);
+  }
+}
+
+function markSel(id) {
+  document.querySelectorAll(".job-item").forEach(el =>
+    el.classList.toggle("selected", el.dataset.id === id)
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// JOB SELECTION
+// ═══════════════════════════════════════════════════════════════════
+async function selJob(id) {
+  selId = id;
+  markSel(id);
+  $("rp").classList.add("mopen");
+  $("rp-empty").classList.add("hidden");
+  $("rp-content").classList.remove("hidden");
+  $("filter-bar").classList.add("hidden");
+  $("filter-text").value = "";
+  activeChips.clear();
+
+  let job = null;
+  try { job = await apiGet(`/extractions/${id}`); } catch {}
+
+  if (job) {
+    $("exp-name").textContent = `job_${id}`;
+    $("exp-dl").href = `/extractions/${id}/download`;
+
+    const disabled = job.estado !== "completed";
+    $("exp-dl").classList.toggle("opacity-40", disabled);
+    $("exp-dl").classList.toggle("pointer-events-none", disabled);
+
+    if (job.estado === "completed") {
+      $("exp-meta").textContent = `${job.total_afiliados} afiliados · ${job.total_pdfs} PDFs · ${fmtRel(job.creado_en)}`;
+      await loadTreeWithSummary(id, job);
+    } else if (job.estado === "failed") {
+      $("exp-meta").textContent = STATUS.failed.label;
+      showErr(job.mensaje_error);
+    } else {
+      $("exp-meta").textContent = STATUS[job.estado]?.label || "";
+      showProgress(job);  // ← vista de progreso con animaciones de lotes
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// LIVE PROGRESS VIEW (lotes con animación)
+// ═══════════════════════════════════════════════════════════════════
+let _progressTimer = null;
+let _lastLoteStates = {};
+
+async function showProgress(job) {
+  $("filter-bar").classList.add("hidden");
+  clearTimeout(_progressTimer);
+
+  let lotes = [];
+  try { lotes = await apiGet(`/extractions/${job.id}/lotes`); } catch {}
+
+  renderProgress(job, lotes);
+
+  if (job.estado === "pending" || job.estado === "running") {
+    _progressTimer = setTimeout(async () => {
+      if (selId !== job.id) return;
+      try {
+        const j = await apiGet(`/extractions/${job.id}`);
+        if (j.estado === "completed") {
+          $("exp-meta").textContent = `${j.total_afiliados} afiliados · ${j.total_pdfs} PDFs · ${fmtRel(j.creado_en)}`;
+          $("exp-dl").classList.remove("opacity-40", "pointer-events-none");
+          toast("Extracción completada", `${j.total_pdfs.toLocaleString()} PDFs en ${j.total_lotes} lote${j.total_lotes > 1 ? "s" : ""}`, "success");
+          loadTree(job.id);
+        } else if (j.estado === "failed") {
+          $("exp-meta").textContent = STATUS.failed.label;
+          showErr(j.mensaje_error);
+        } else {
+          showProgress(j);
+        }
+      } catch {
+        _progressTimer = setTimeout(() => showProgress(job), 45000);
+      }
+    }, 45000);
+  }
+}
+
+// ─── Cancel generation modal ───
+let _pendingCancelId = null;
+
+function cancelarExtraccion(jobId) {
+  _pendingCancelId = jobId;
+  $("cancel-job-id").textContent = `job_${jobId}`;
+  const overlay = $("cancel-overlay");
+  const modal   = $("cancel-modal");
+  overlay.classList.remove("hidden");
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    modal.style.transform = "scale(1) translateY(0)";
+    modal.style.opacity   = "1";
+  }));
+  setTimeout(() => $("cancel-confirm-btn")?.focus(), 220);
+}
+
+function cancelarModal() {
+  const modal = $("cancel-modal");
+  modal.style.transform = "scale(.94) translateY(8px)";
+  modal.style.opacity   = "0";
+  setTimeout(() => $("cancel-overlay").classList.add("hidden"), 220);
+  _pendingCancelId = null;
+}
+
+async function confirmarCancelacion() {
+  const jobId = _pendingCancelId;
+  if (!jobId) return;
+  cancelarModal();
+  try {
+    const r = await fetch(`/extractions/${jobId}/cancel`, { method: "POST" });
+    if (!r.ok) {
+      const body = await r.json().catch(() => ({}));
+      throw new Error(body.detail || r.statusText);
+    }
+    const data = await r.json();
+    toast("Cancelando…", data.mensaje || "Se aplica al terminar el lote actual", "info");
+    loadJobs();
+  } catch (e) {
+    toast("Error al cancelar", e.message, "error");
+  }
+}
+
+// Acumulador de eventos por job para feed estilo GitHub Actions
+const _eventLog = {};  // { jobId: [{ts, type, msg}] }
+
+function pushEvent(jobId, type, msg, ts) {
+  if (!_eventLog[jobId]) _eventLog[jobId] = [];
+  const t = ts ? new Date(ts).getTime() : Date.now();
+  // Dedup por (type+msg) si timestamps muy cercanos (<500ms)
+  const exists = _eventLog[jobId].some(e =>
+    e.type === type && e.msg === msg && Math.abs(e.ts - t) < 500
+  );
+  if (!exists) _eventLog[jobId].push({ ts: t, type, msg });
+}
+
+function buildEventsFromState(job, lotes) {
+  const events = _eventLog[job.id] || [];
+  // Si es la primera vez que vemos el job, sembrar el evento de inicio
+  if (events.length === 0) {
+    pushEvent(job.id, "info", `Extracción iniciada · ${job.limite.toLocaleString()} registros en ${Math.max(job.total_lotes, 1)} lotes`, job.creado_en);
+  }
+  // Por cada lote, generar eventos para iniciado/completado/fallado si aún no están
+  lotes.forEach(l => {
+    if (l.iniciado_en) {
+      pushEvent(job.id, "run", `Lote #${String(l.numero).padStart(3, "0")} · consultando base de datos…`, l.iniciado_en);
+    }
+    if (l.estado === "completed" && l.completado_en) {
+      pushEvent(
+        job.id, "ok",
+        `Lote #${String(l.numero).padStart(3, "0")} · ${l.total_atenciones.toLocaleString()} atenciones · ${l.total_afiliados.toLocaleString()} afiliados · ${l.total_pdfs.toLocaleString()} PDFs`,
+        l.completado_en,
+      );
+    }
+    if (l.estado === "failed" && l.completado_en) {
+      pushEvent(job.id, "err", `Lote #${String(l.numero).padStart(3, "0")} · ${l.mensaje_error || "falló"}`, l.completado_en);
+    }
+  });
+  // Detectar early stop: un lote completed con menos atenciones de las que pidió
+  lotes.forEach(l => {
+    if (l.estado === "completed" && l.total_atenciones < l.tamano && l.total_atenciones > 0 && l.completado_en) {
+      pushEvent(
+        job.id, "warn",
+        `Lote #${String(l.numero).padStart(3, "0")} · rango parcial (${l.total_atenciones.toLocaleString()} de ${l.tamano.toLocaleString()})`,
+        l.completado_en,
+      );
+    }
+    if (l.estado === "completed" && l.total_atenciones === 0 && l.completado_en) {
+      pushEvent(
+        job.id, "warn",
+        `Lote #${String(l.numero).padStart(3, "0")} · sin datos, rango agotado — deteniendo extracción`,
+        l.completado_en,
+      );
+    }
+  });
+
+  if (job.estado === "completed" && job.completado_en) {
+    if (job.total_atenciones > 0 && job.total_atenciones < job.limite) {
+      pushEvent(
+        job.id, "warn",
+        `Extracción terminada con datos parciales · ${job.total_atenciones.toLocaleString()} de ${job.limite.toLocaleString()} pedidos (rango sin más datos)`,
+        job.completado_en,
+      );
+    } else {
+      pushEvent(
+        job.id, "ok",
+        `Extracción completada · ${job.total_pdfs.toLocaleString()} PDFs · listo para descargar`,
+        job.completado_en,
+      );
+    }
+  }
+  if (job.estado === "failed" && job.completado_en) {
+    pushEvent(job.id, "err", `Extracción falló · ${job.mensaje_error || ""}`, job.completado_en);
+  }
+  if (job.estado === "cancelled" && job.completado_en) {
+    pushEvent(job.id, "warn", `Extracción cancelada por el usuario · ${job.total_pdfs.toLocaleString()} PDFs generados antes de cancelar`, job.completado_en);
+  }
+  return [...(_eventLog[job.id] || [])].sort((a, b) => a.ts - b.ts);
+}
+
+function fmtTime(ts) {
+  const d = new Date(ts);
+  return d.toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
+}
+
+function renderProgress(job, lotes) {
+  const completados = lotes.filter(l => l.estado === "completed").length;
+  const corriendo  = lotes.filter(l => l.estado === "running").length;
+  const fallidos   = lotes.filter(l => l.estado === "failed").length;
+  const total      = Math.max(job.total_lotes, lotes.length, 1);
+  const pct        = Math.round((completados / total) * 100);
+
+  const loteIcon = {
+    pending:   `<svg class="h-3.5 w-3.5 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>`,
+    running:   `<svg class="h-3.5 w-3.5 text-brand-700 spin" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>`,
+    completed: `<svg class="h-3.5 w-3.5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>`,
+    failed:    `<svg class="h-3.5 w-3.5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>`,
+  };
+  const loteLabel = { pending: "En cola", running: "Procesando…", completed: "Listo", failed: "Falló" };
+
+  // Compacta cada lote SIN botón descargar individual (eso solo aparece cuando termina TODO)
+  const lotesHtml = lotes.length
+    ? lotes.map(l => {
+        const err = l.mensaje_error
+          ? `<div class="mt-1 text-xs text-red-500 truncate">${l.mensaje_error}</div>`
+          : "";
+
+        // Barra de progreso estimada para lotes en ejecución
+        let barraHtml = "";
+        if (l.estado === "running") {
+          const durSeg  = Math.max(30, (l.tamano || job.tamano_lote) / 200); // ~60s para 12k registros
+          const elapsed = l.iniciado_en
+            ? Math.max(0, (Date.now() - new Date(l.iniciado_en).getTime()) / 1000)
+            : 0;
+          barraHtml = `
+            <div class="mt-1.5 h-1 bg-slate-200 rounded-full overflow-hidden">
+              <div style="height:100%;background:#234674;border-radius:9999px;
+                          animation:lote-prog ${durSeg}s linear forwards;
+                          animation-delay:-${elapsed}s"></div>
+            </div>`;
+        }
+
+        return `
+          <div class="lote-row is-${l.estado} flex flex-col px-3 py-1.5 rounded-md">
+            <div class="flex items-center gap-2.5">
+              ${loteIcon[l.estado] || loteIcon.pending}
+              <div class="shrink-0 w-12 font-mono text-xs font-semibold text-slate-700">#${String(l.numero).padStart(3, "0")}</div>
+              <div class="flex-1 min-w-0 text-xs text-slate-600 truncate">
+                ${loteLabel[l.estado] || l.estado}
+                ${err}
+              </div>
+            </div>
+            ${barraHtml}
+          </div>`;
+      }).join("")
+    : `<div class="text-center text-xs text-slate-400 py-4">Preparando lotes…</div>`;
+
+  // Feed de eventos estilo GitHub Actions
+  const eventos = buildEventsFromState(job, lotes);
+  const eventTypeColor = {
+    info: "text-slate-400",
+    run:  "text-brand-500",
+    ok:   "text-emerald-500",
+    warn: "text-amber-400",
+    err:  "text-red-500",
+  };
+  const eventTypeIcon = {
+    info: "•",
+    run:  "▸",
+    ok:   "✓",
+    warn: "⚠",
+    err:  "✗",
+  };
+  const eventosHtml = eventos.length
+    ? eventos.map(e => `
+        <div class="flex items-start gap-3 px-3 py-1 hover:bg-slate-800/40">
+          <span class="text-slate-500 tabular-nums shrink-0 select-none">${fmtTime(e.ts)}</span>
+          <span class="${eventTypeColor[e.type] || "text-slate-400"} shrink-0 w-3 text-center">${eventTypeIcon[e.type] || "·"}</span>
+          <span class="text-slate-200 break-all">${e.msg}</span>
+        </div>`).join("")
+    : `<div class="text-center text-xs text-slate-500 py-4">Esperando eventos…</div>`;
+
+  $("exp-tree").innerHTML = `
+    <div class="p-5 space-y-4 fade-in">
+
+      <!-- ANIMACIÓN + RESUMEN GLOBAL -->
+      <div class="grid grid-cols-1 sm:grid-cols-[200px_1fr] gap-5 items-center bg-gradient-to-br from-brand-50 to-white border border-brand-100 rounded-xl p-4">
+        <div class="flex justify-center sm:justify-start">
+          <dotlottie-wc
+            src="${LOTTIE_SRCS[_lottieIdx]}"
+            style="width:180px;height:180px"
+            autoplay loop>
+          </dotlottie-wc>
+        </div>
+        <div class="min-w-0">
+          <div class="flex items-start justify-between gap-3 mb-2">
+            <div class="min-w-0">
+              <h3 class="text-sm font-semibold text-slate-800">Generando extracción</h3>
+              <p class="text-xs text-slate-500 mt-0.5">${job.limite.toLocaleString()} registros · lotes de ${job.tamano_lote.toLocaleString()}</p>
+            </div>
+            <div class="text-right shrink-0">
+              <div class="text-2xl font-bold text-brand-700 tabular-nums leading-none">${pct}<span class="text-sm">%</span></div>
+              <div class="text-xs text-slate-500 tabular-nums mt-0.5">${completados} / ${total} lotes</div>
+            </div>
+          </div>
+          <div class="h-2 bg-slate-200/70 rounded-full overflow-hidden">
+            <div class="progress-bar-fill" style="width: ${pct}%"></div>
+          </div>
+          <div class="flex items-center gap-3 mt-3 text-xs">
+            ${completados > 0 ? `<span class="text-emerald-600">✓ ${completados} ok</span>` : ""}
+            ${corriendo > 0 ? `<span class="text-brand-700">▸ ${corriendo} corriendo</span>` : ""}
+            ${fallidos > 0 ? `<span class="text-red-500">✗ ${fallidos} fallidos</span>` : ""}
+            <button onclick="cancelarExtraccion('${job.id}')"
+                    class="ml-auto inline-flex items-center gap-1 px-2.5 h-7 rounded-md
+                           bg-red-50 hover:bg-red-100 border border-red-200 text-red-600
+                           text-xs font-medium transition-colors">
+              <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+              </svg>
+              Cancelar
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- LOTES (compactos, sin botones) -->
+      <div>
+        <div class="flex items-center justify-between mb-1.5 px-1">
+          <h4 class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Lotes</h4>
+          <span class="text-xs text-slate-400">${lotes.length} de ${total}</span>
+        </div>
+        <div class="space-y-1 max-h-48 overflow-y-auto pr-1">${lotesHtml}</div>
+      </div>
+
+      <!-- FEED DE ACTIVIDAD ESTILO GITHUB ACTIONS -->
+      <div>
+        <div class="flex items-center justify-between mb-1.5 px-1">
+          <h4 class="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+            <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+            </svg>
+            Actividad
+          </h4>
+          <span class="text-xs text-slate-400 tabular-nums">${eventos.length} eventos</span>
+        </div>
+        <div id="activity-feed"
+             class="bg-slate-900 rounded-lg overflow-y-auto max-h-72 py-2"
+             style="font-family: ui-monospace, 'SF Mono', Monaco, 'Cascadia Mono', 'Roboto Mono', Consolas, monospace; font-size: 12px;">
+          ${eventosHtml}
+        </div>
+      </div>
+
+    </div>`;
+
+  // Auto-scroll del feed al final
+  requestAnimationFrame(() => {
+    const feed = document.getElementById("activity-feed");
+    if (feed) feed.scrollTop = feed.scrollHeight;
+  });
+}
+
+function showLoading() {
+  $("filter-bar").classList.add("hidden");
+  $("exp-tree").innerHTML = `
+    <div class="flex flex-col items-center justify-center h-full py-8 gap-4 select-none fade-in">
+      <dotlottie-wc
+        src="https://lottie.host/7d53473a-2c7d-4156-9453-3d28fdea42cb/WUvgaB8a1u.lottie"
+        style="width:300px;height:300px"
+        autoplay loop>
+      </dotlottie-wc>
+      <div class="text-center -mt-4">
+        <p class="text-sm font-medium text-slate-600">Generando PDFs&hellip;</p>
+        <p class="text-xs text-slate-400 mt-1">Consultando la base de datos y construyendo los archivos</p>
+        <div class="space-y-2 pt-3 w-48 mx-auto">
+          <div class="shimmer-bar h-1.5 w-full"></div>
+          <div class="shimmer-bar h-1.5" style="width:70%"></div>
+          <div class="shimmer-bar h-1.5" style="width:45%"></div>
+        </div>
+      </div>
+    </div>`;
+}
+
+function showErr(msg) {
+  $("filter-bar").classList.add("hidden");
+  $("exp-tree").innerHTML = `
+    <div class="flex flex-col items-center justify-center h-48 gap-3">
+      <div class="h-10 w-10 rounded-full bg-red-50 flex items-center justify-center">
+        <svg class="h-5 w-5 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+        </svg>
+      </div>
+      <div class="text-center px-4">
+        <p class="text-sm font-medium text-slate-500">La extraccion fallo</p>
+        <p class="text-xs text-red-400 mt-1">${msg || ""}</p>
+      </div>
+    </div>`;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// FILE TREE + FILTERS
+// ═══════════════════════════════════════════════════════════════════
+let treeData = null;
+let activeChips = new Set();
+
+// Resumen de configuración del job (qué se pidió, cuándo, cuánto)
+function renderJobSummary(job) {
+  const dur = job.completado_en
+    ? Math.max(1, Math.round((new Date(job.completado_en) - new Date(job.creado_en)) / 1000))
+    : 0;
+  const durStr = dur < 60 ? `${dur}s` : `${Math.floor(dur / 60)}m ${dur % 60}s`;
+  const fmtDT = iso => {
+    if (!iso) return "—";
+    const d = new Date(iso);
+    return d.toLocaleString("es-CO", {
+      day: "2-digit", month: "2-digit", year: "numeric",
+      hour: "2-digit", minute: "2-digit", hour12: false,
+    });
+  };
+
+  // Detectar "datos parciales": pediste X pero la BD solo tenía menos
+  const esParcial = job.estado === "completed"
+    && job.total_atenciones > 0
+    && job.total_atenciones < job.limite;
+  const pctRecibido = esParcial ? Math.round((job.total_atenciones / job.limite) * 100) : 100;
+
+  const bannerParcial = esParcial ? `
+    <div class="mx-5 mt-3 mb-1 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 flex items-start gap-3">
+      <svg class="h-5 w-5 shrink-0 text-amber-600 mt-px" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M5 19h14a2 2 0 001.84-2.75L13.74 4a2 2 0 00-3.48 0L3.16 16.25A2 2 0 005 19z"/>
+      </svg>
+      <div class="flex-1 min-w-0 text-xs">
+        <p class="font-semibold text-amber-900">Datos parciales — el rango no tenía suficientes registros</p>
+        <p class="text-amber-800 mt-0.5">
+          Pediste <span class="font-semibold tabular-nums">${job.limite.toLocaleString()}</span> registros pero solo había
+          <span class="font-semibold tabular-nums">${job.total_atenciones.toLocaleString()}</span> en el rango <span class="font-mono">${job.desde}</span> → <span class="font-mono">${job.hasta}</span>
+          (<span class="tabular-nums">${pctRecibido}%</span> del límite). El sistema procesó todo lo disponible y se detuvo.
+        </p>
+      </div>
+    </div>` : "";
+
+  const resultadoLine = esParcial
+    ? `<div class="font-semibold text-amber-700 tabular-nums">${job.total_pdfs.toLocaleString()} PDFs <span class="text-[10px] font-normal text-amber-600">(de ${job.limite.toLocaleString()} pedidos)</span></div>`
+    : `<div class="font-semibold text-emerald-600 tabular-nums">${job.total_pdfs.toLocaleString()} PDFs</div>`;
+
+  return bannerParcial + `
+    <div class="px-5 pt-4 pb-3 border-b border-slate-100 bg-slate-50/60 fade-in">
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+        <div>
+          <div class="text-slate-400 uppercase tracking-wider text-[10px] mb-0.5">Rango</div>
+          <div class="font-mono text-slate-700">${job.desde}</div>
+          <div class="font-mono text-slate-700">${job.hasta}</div>
+        </div>
+        <div>
+          <div class="text-slate-400 uppercase tracking-wider text-[10px] mb-0.5">Solicitado</div>
+          <div class="font-semibold text-slate-700 tabular-nums">${job.limite.toLocaleString()} registros</div>
+          <div class="text-slate-500 tabular-nums">${job.total_lotes} lote${job.total_lotes !== 1 ? "s" : ""} de ${job.tamano_lote.toLocaleString()}</div>
+        </div>
+        <div>
+          <div class="text-slate-400 uppercase tracking-wider text-[10px] mb-0.5">Resultado</div>
+          ${resultadoLine}
+          <div class="text-slate-500 tabular-nums">${job.total_afiliados.toLocaleString()} afiliados · ${job.total_atenciones.toLocaleString()} atenciones</div>
+        </div>
+        <div>
+          <div class="text-slate-400 uppercase tracking-wider text-[10px] mb-0.5">Tiempos</div>
+          <div class="text-slate-700">${fmtDT(job.creado_en)}</div>
+          <div class="text-slate-500">duración ${durStr}</div>
+        </div>
+      </div>
+    </div>`;
+}
+
+async function loadTreeWithSummary(id, job) {
+  $("filter-bar").classList.add("hidden");
+  // Mostrar resumen inmediato + cargar tree
+  $("exp-tree").innerHTML = renderJobSummary(job) + `
+    <div class="flex items-center justify-center h-32 gap-2 text-slate-400 text-sm">
+      <svg class="h-4 w-4 spin" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+      </svg>
+      Cargando archivos&hellip;
+    </div>`;
+  try {
+    treeData = await apiGet(`/extractions/${id}/files`);
+    activeChips.clear();
+    $("filter-text").value = "";
+    buildChips(treeData);
+    const summary = renderJobSummary(job);
+    // Renderizar tree y prepender summary
+    applyFilters();
+    const treeContent = $("exp-tree").innerHTML;
+    $("exp-tree").innerHTML = summary + `<div>${treeContent}</div>`;
+    $("filter-bar").classList.remove("hidden");
+  } catch (e) {
+    $("exp-tree").innerHTML = renderJobSummary(job) +
+      `<div class="p-8 text-center text-sm text-red-400">${e.message}</div>`;
+  }
+}
+
+async function loadTree(id) {
+  $("filter-bar").classList.add("hidden");
+  $("exp-tree").innerHTML = `
+    <div class="flex items-center justify-center h-32 gap-2 text-slate-400 text-sm">
+      <svg class="h-4 w-4 spin" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+      </svg>
+      Cargando archivos&hellip;
+    </div>`;
+  try {
+    treeData = await apiGet(`/extractions/${id}/files`);
+    activeChips.clear();
+    $("filter-text").value = "";
+    buildChips(treeData);
+    applyFilters();
+    $("filter-bar").classList.remove("hidden");
+  } catch (e) {
+    $("exp-tree").innerHTML = `<div class="p-8 text-center text-sm text-red-400">${e.message}</div>`;
+  }
+}
+
+function buildChips(data) {
+  // Collect unique doc types present in this job
+  const types = [...new Set(data.folders.map(f => parseKey(f.name).t))].sort();
+  const container = $("chip-container");
+  container.innerHTML = types.map(t => {
+    const color = (DOC_COLORS[t] || DOC_COLORS.PA).pill;
+    return `
+      <button data-type="${t}" onclick="toggleChip('${t}')"
+              class="chip-btn px-2.5 py-0.5 rounded-full text-xs font-bold opacity-40 ${color}">
+        ${t}
+      </button>`;
+  }).join("");
+}
+
+function toggleChip(type) {
+  if (activeChips.has(type)) activeChips.delete(type);
+  else activeChips.add(type);
+
+  // Update chip visual state
+  document.querySelectorAll("[data-type]").forEach(btn => {
+    btn.classList.toggle("active", activeChips.has(btn.dataset.type));
+  });
+  applyFilters();
+}
+
+function applyFilters() {
+  if (!treeData) return;
+  const text = ($("filter-text").value || "").toLowerCase().trim();
+
+  const filtered = treeData.folders.filter(folder => {
+    const { t, n } = parseKey(folder.name);
+    const matchText = !text || folder.name.toLowerCase().includes(text) || n.toLowerCase().includes(text);
+    const matchType = activeChips.size === 0 || activeChips.has(t);
+    return matchText && matchType;
+  });
+
+  // Update count
+  const total = treeData.folders.length;
+  $("filter-count").textContent = filtered.length === total
+    ? `${total} afiliados`
+    : `${filtered.length} / ${total} afiliados`;
+
+  renderTree({ ...treeData, folders: filtered });
+}
+
+function toggleFolder(i) {
+  const files = $(`ff-${i}`), chev = $(`fc-${i}`);
+  const open = files.dataset.open === "1";
+  files.dataset.open = open ? "0" : "1";
+  files.style.display = open ? "none" : "";
+  chev.style.transform = open ? "rotate(0deg)" : "rotate(90deg)";
+}
+
+function renderTree(data) {
+  if (!data.folders.length) {
+    $("exp-tree").innerHTML = `
+      <div class="flex flex-col items-center justify-center h-40 gap-3 text-slate-300">
+        <svg class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+          <path stroke-linecap="round" stroke-linejoin="round"
+                d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
+        </svg>
+        <p class="text-sm">Sin resultados</p>
+      </div>`;
+    return;
+  }
+
+  $("exp-tree").innerHTML = data.folders.map((folder, i) => {
+    const { t, n } = parseKey(folder.name);
+    const colors = DOC_COLORS[t] || DOC_COLORS.PA;
+    const cnt  = folder.files.length;
+
+    const files = folder.files.map(f => `
+      <div class="frow flex items-center gap-3 border-b border-slate-50 last:border-0"
+           style="padding: 8px 16px 8px 52px">
+        <svg class="h-4 w-4 text-red-400 shrink-0" fill="none" viewBox="0 0 24 24"
+             stroke="currentColor" stroke-width="1.5">
+          <path stroke-linecap="round" stroke-linejoin="round"
+                d="M9 12h6m-6 4h6M9 8h6m-3 12H7a2 2 0 01-2-2V6a2 2 0 012-2h7l5 5v9a2 2 0 01-2 2h-2"/>
+        </svg>
+        <span class="flex-1 text-xs font-mono text-slate-600 truncate">${f.name}</span>
+        <span class="text-xs text-slate-400 tabular-nums shrink-0">${fmtSz(f.size)}</span>
+        <a href="/extractions/${data.job_id}/files/${folder.name}/${f.name}"
+           download="${f.name}" title="Descargar PDF"
+           class="dlbtn shrink-0 h-6 w-6 rounded-md flex items-center justify-center
+                  text-slate-400 hover:text-brand-700 hover:bg-slate-200 transition-colors">
+          <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+            <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+          </svg>
+        </a>
+      </div>`).join("");
+
+    return `
+      <div class="border-b border-slate-100">
+        <button onclick="toggleFolder(${i})"
+                class="w-full flex items-center gap-3 py-2.5 hover:bg-slate-50 text-left transition-colors"
+                style="padding-left: 20px; padding-right: 16px">
+          <!-- Chevron: pointing right = closed (default) -->
+          <svg id="fc-${i}"
+               class="h-3.5 w-3.5 text-slate-400 shrink-0 transition-transform duration-150"
+               fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/>
+          </svg>
+          <svg class="h-4 w-4 text-amber-400 shrink-0" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z"/>
+          </svg>
+          <!-- número solo, sin prefijo del tipo -->
+          <span class="flex-1 text-sm font-medium text-slate-700 truncate min-w-0">${n}</span>
+          <!-- chip sólido + conteo, alineados a la derecha -->
+          <span class="shrink-0 flex items-center gap-1.5">
+            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold ${colors.pill}">${t}</span>
+            <span class="text-xs text-slate-400 tabular-nums">${cnt} PDF${cnt !== 1 ? "s" : ""}</span>
+          </span>
+        </button>
+        <!-- Closed by default: display:none -->
+        <div id="ff-${i}" data-open="0" style="display:none"
+             class="bg-slate-50/40 divide-y divide-slate-100/60">
+          ${files}
+        </div>
+      </div>`;
+  }).join("");
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// MODO LIMITE (Auto / Manual)
+// ═══════════════════════════════════════════════════════════════════
+let modoLimite = "auto";
+
+function setModoLimite(modo) {
+  modoLimite = modo;
+  const esAuto = modo === "auto";
+  $("btn-modo-auto").className =
+    `flex-1 h-7 font-medium transition-colors ${esAuto ? "bg-brand-700 text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`;
+  $("btn-modo-manual").className =
+    `flex-1 h-7 font-medium transition-colors ${!esAuto ? "bg-brand-700 text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`;
+  $("auto-desc").classList.toggle("hidden", !esAuto);
+  $("manual-wrap").classList.toggle("hidden", esAuto);
+  if (esAuto) fetchAutoPreview(); else setAutoPreview(null);
+}
+
+// ── Preview de conteo en modo Auto ──────────────────────────────────
+let _previewTimer = null;
+
+function fetchAutoPreview() {
+  const desde = $("desde").value;
+  const hasta  = $("hasta").value;
+  if (!desde || !hasta || modoLimite !== "auto") { setAutoPreview(null); return; }
+  if (new Date(hasta) < new Date(desde)) { setAutoPreview("err"); return; }
+  setAutoPreview("loading");
+  setBtnGenDisabled(true);
+  clearTimeout(_previewTimer);
+  _previewTimer = setTimeout(async () => {
+    try {
+      const r = await fetch(`/extractions/count?desde=${desde}&hasta=${hasta}`);
+      if (!r.ok) { setAutoPreview("err"); setBtnGenDisabled(false); return; }
+      setAutoPreview(await r.json());
+    } catch { setAutoPreview("err"); }
+    finally { setBtnGenDisabled(false); }
+  }, 500);
+}
+
+function setBtnGenDisabled(on) {
+  const btn = $("btn-gen");
+  if (!btn || btn.dataset.submitting === "1") return;
+  btn.disabled = on;
+  btn.classList.toggle("opacity-50", on);
+  btn.classList.toggle("cursor-not-allowed", on);
+}
+
+function setAutoPreview(data) {
+  const box = $("auto-preview");
+  const txt = $("auto-preview-txt");
+  if (!box || !txt) return;
+  if (!data) { box.classList.add("hidden"); return; }
+  box.classList.remove("hidden");
+  if (data === "loading") {
+    box.className = "rounded-md px-2 py-1.5 text-[10px] leading-snug border bg-slate-50 border-slate-200 text-slate-500";
+    txt.textContent = "Consultando base de datos…";
+    return;
+  }
+  if (data === "err") {
+    box.className = "rounded-md px-2 py-1.5 text-[10px] leading-snug border bg-red-50 border-red-200 text-red-600";
+    txt.textContent = "No se pudo obtener el conteo. Verificá la conexión a la DB.";
+    return;
+  }
+  if (data.total_en_db === 0) {
+    box.className = "rounded-md px-2 py-1.5 text-[10px] leading-snug border bg-amber-50 border-amber-200 text-amber-700";
+    txt.textContent = "No hay registros para este rango de fechas.";
+    return;
+  }
+  const cap = data.capeado ? ` (cap: la DB tiene más de 600.000)` : "";
+  box.className = "rounded-md px-2 py-1.5 text-[10px] leading-snug border bg-brand-50 border-brand-200 text-brand-700";
+  txt.innerHTML =
+    `<span class="font-semibold">${data.limite_efectivo.toLocaleString()} registros</span>` +
+    ` · ${data.lotes_estimados} lote${data.lotes_estimados !== 1 ? "s" : ""}` +
+    ` de ${data.tamano_lote.toLocaleString()}${cap}`;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// FORM
+// ═══════════════════════════════════════════════════════════════════
+let formOpen = false;
+
+function toggleForm() {
+  const btn = $("btn-toggle");
+  // Si está disabled (extracción en curso), no abrir el form
+  if (btn?.disabled && !formOpen) return;
+  formOpen = !formOpen;
+  $("form-wrap").classList.toggle("open", formOpen);
+  $("lbl-btn").textContent = formOpen ? "Cancelar" : "Nueva extraccion";
+  $("ico-plus").style.transform = formOpen ? "rotate(45deg)" : "rotate(0deg)";
+  btn.className = `w-full flex items-center justify-center gap-1.5 h-9 rounded-lg
+    text-sm font-medium transition-colors
+    ${formOpen ? "bg-slate-200 hover:bg-slate-300 text-slate-600"
+               : "bg-brand-700 hover:bg-brand-800 text-white"}`;
+}
+
+// Bloquear/desbloquear los botones de Generar mientras haya extracciones activas
+function updateGenButtons(busy) {
+  const btnToggle = $("btn-toggle");
+  const btnGen    = $("btn-gen");
+  const lbl       = $("lbl-btn");
+  if (btnToggle) {
+    btnToggle.disabled = busy;
+    btnToggle.title = busy ? "Espera a que termine la extraccion en curso" : "";
+    btnToggle.classList.toggle("opacity-50", busy);
+    btnToggle.classList.toggle("cursor-not-allowed", busy);
+    if (lbl && !formOpen) {
+      lbl.textContent = busy ? "Extraccion en curso..." : "Nueva extraccion";
+    }
+  }
+  if (btnGen) {
+    btnGen.disabled = busy || btnGen.dataset.submitting === "1";
+    btnGen.classList.toggle("opacity-50", btnGen.disabled);
+  }
+  // Si el form está abierto y empieza una extracción, cerrar form para evitar otro submit
+  if (busy && formOpen) toggleForm();
+}
+
+// Fórmula auto del tamaño de lote — lotes pequeños (max 12K) y 5-50 lotes por job
+function calcularTamanoLote(limite) {
+  if (limite <= 50)      return limite;                    // 1 lote
+  if (limite <= 500)     return Math.ceil(limite / 5);     // 5 lotes balanceados
+  if (limite <= 5000)    return 500;                       // 1-10 lotes
+  if (limite <= 50000)   return 1000;                      // 5-50 lotes
+  if (limite <= 100000)  return 5000;                      // 10-20 lotes
+  if (limite <= 400000)  return 8000;                      // 13-50 lotes
+  return 12000;                                             // 600K → 50 lotes
+}
+
+function updateLotePreview() {
+  const limite = parseInt($("limite").value, 10);
+  const el = $("lote-preview");
+  if (!el) return;
+  if (!Number.isFinite(limite) || limite < 1) {
+    el.textContent = "";
+    return;
+  }
+  if (limite > 600000) {
+    el.innerHTML = `<span class="text-red-500">&#9888; maximo 600.000</span>`;
+    return;
+  }
+  const t = calcularTamanoLote(limite);
+  const n = Math.ceil(limite / t);
+  el.textContent = `Auto: ${n} lote${n !== 1 ? "s" : ""} de ${t.toLocaleString()} registros`;
+}
+
+function setGenLoading(on) {
+  const btn = $("btn-gen");
+  btn.disabled = on;
+  btn.querySelector(".blbl").textContent = on ? "Procesando..." : "Generar";
+  btn.querySelector(".bico").innerHTML = on
+    ? `<svg class="h-3.5 w-3.5 spin" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
+         <path stroke-linecap="round" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+       </svg>`
+    : `<svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+         <path stroke-linecap="round" stroke-linejoin="round"
+               d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
+       </svg>`;
+}
+
+$("desde").addEventListener("change", fetchAutoPreview);
+$("hasta").addEventListener("change", fetchAutoPreview);
+
+$("fext").addEventListener("submit", async ev => {
+  ev.preventDefault();
+  $("ferr").classList.add("hidden");
+  // Guarda dura: si hay una extracción corriendo, bloquear
+  const hayActivos = Object.values(prevSt).some(s => s === "pending" || s === "running");
+  if (hayActivos) {
+    $("ferr").textContent = "Hay una extraccion en curso. Espera a que termine.";
+    $("ferr").classList.remove("hidden"); return;
+  }
+  const esAuto = modoLimite === "auto";
+  const limite = esAuto ? null : parseInt($("limite").value, 10);
+  if (!esAuto && (!Number.isFinite(limite) || limite < 1)) {
+    $("ferr").textContent = "El limite debe ser un numero mayor a 0.";
+    $("ferr").classList.remove("hidden"); return;
+  }
+  if (!esAuto && limite > 600000) {
+    $("ferr").textContent = "El maximo permitido es 600.000 registros.";
+    $("ferr").classList.remove("hidden"); return;
+  }
+  if (new Date($("hasta").value) < new Date($("desde").value)) {
+    $("ferr").textContent = "'Hasta' debe ser mayor o igual a 'Desde'.";
+    $("ferr").classList.remove("hidden"); return;
+  }
+  const body = {
+    desde: $("desde").value, hasta: $("hasta").value,
+    modo_pdf: "uno_por_atencion",
+  };
+  if (!esAuto) {
+    body.limite = limite;
+    body.tamano_lote = calcularTamanoLote(limite);
+  }
+  setGenLoading(true);
+  try {
+    const r = await apiPost("/extractions", body);
+    toast("Extraccion iniciada", `ID ${r.id.slice(0, 8)} — generando ${r.limite.toLocaleString()} registros`, "success");
+    toggleForm();
+    await loadJobs();
+    // Auto-seleccionar el nuevo job → muestra vista de progreso con animaciones
+    await selJob(r.id);
+  } catch (e) {
+    toast("Error", e.message, "error");
+  } finally {
+    setGenLoading(false);
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// SIDEBAR TOGGLE
+// ═══════════════════════════════════════════════════════════════════
+let sidebarCollapsed = false;
+
+function toggleSidebar() {
+  sidebarCollapsed = !sidebarCollapsed;
+  const sidebar = $("sidebar");
+  const btn     = $("sidebar-toggle");
+  const icon    = $("toggle-icon");
+
+  sidebar.classList.toggle("collapsed", sidebarCollapsed);
+  btn.style.left = sidebarCollapsed ? "calc(52px + 8px)" : "calc(288px + 8px)";
+  icon.style.transform = sidebarCollapsed ? "rotate(180deg)" : "rotate(0deg)";
+  btn.title = sidebarCollapsed ? "Expandir panel" : "Colapsar panel";
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// MOBILE
+// ═══════════════════════════════════════════════════════════════════
+function closeMobile() { $("rp").classList.remove("mopen"); }
+
+// Escape cierra modal de confirmacion
+document.addEventListener("keydown", e => {
+  if (e.key !== "Escape") return;
+  if (!$("del-overlay").classList.contains("hidden"))    cancelDelete();
+  if (!$("cancel-overlay").classList.contains("hidden")) cancelarModal();
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════════════
+// ── Rotación de animaciones cada 15s ────────────────────────────────
+const LOTTIE_SRCS = [
+  "https://lottie.host/7d53473a-2c7d-4156-9453-3d28fdea42cb/WUvgaB8a1u.lottie",
+  "https://lottie.host/87f60cd5-c8bb-4b92-80fa-ebd6b0f6fb3c/7KUExKhYKR.lottie",
+];
+let _lottieIdx = 0;
+setInterval(() => {
+  const els = document.querySelectorAll("dotlottie-wc");
+  if (!els.length) return;
+  _lottieIdx = (_lottieIdx + 1) % LOTTIE_SRCS.length;
+  els.forEach(el => el.setAttribute("src", LOTTIE_SRCS[_lottieIdx]));
+}, 15000);
+
+(function () {
+  const hoy = new Date().toISOString().slice(0, 10);
+  const mes  = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
+  $("desde").value = mes; $("desde").max = hoy;
+  $("hasta").value = hoy; $("hasta").max = hoy;
+  updateLotePreview();
+  loadHealth();
+  loadJobs();
+  setInterval(loadHealth, 30000);
+})();
+</script>
+</body>
+</html>
