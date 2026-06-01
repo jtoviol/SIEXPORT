@@ -7,7 +7,7 @@ from threading import Lock
 
 from efdi.config import settings
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 3
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_version (version INTEGER PRIMARY KEY);
@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS extracciones (
     limite INTEGER NOT NULL,
     tamano_lote INTEGER NOT NULL DEFAULT 10000,
     total_lotes INTEGER NOT NULL DEFAULT 0,
+    tipo TEXT NOT NULL DEFAULT 'demanda_inducida',
     modo_pdf TEXT NOT NULL,
     estado TEXT NOT NULL,
     total_atenciones INTEGER NOT NULL DEFAULT 0,
@@ -36,6 +37,7 @@ CREATE TABLE IF NOT EXISTS lotes (
     offset_inicio INTEGER NOT NULL,
     tamano INTEGER NOT NULL,
     estado TEXT NOT NULL DEFAULT 'pending',
+    fase TEXT NOT NULL DEFAULT '',
     total_atenciones INTEGER NOT NULL DEFAULT 0,
     total_afiliados INTEGER NOT NULL DEFAULT 0,
     total_pdfs INTEGER NOT NULL DEFAULT 0,
@@ -60,13 +62,31 @@ class Database:
         self._lock = Lock()
         self._init_schema()
 
+    def _migrate(self, conn: sqlite3.Connection, current_version: int) -> None:
+        if current_version < 2:
+            try:
+                conn.execute("ALTER TABLE lotes ADD COLUMN fase TEXT NOT NULL DEFAULT ''")
+            except Exception:
+                pass
+        if current_version < 3:
+            try:
+                conn.execute("ALTER TABLE extracciones ADD COLUMN tipo TEXT NOT NULL DEFAULT 'demanda_inducida'")
+            except Exception:
+                pass
+
     def _init_schema(self) -> None:
         with self.connect() as conn:
             conn.executescript(SCHEMA)
             row = conn.execute("SELECT version FROM schema_version").fetchone()
-            if row is None:
-                conn.execute("INSERT INTO schema_version (version) VALUES (?)", (SCHEMA_VERSION,))
-            conn.commit()
+            current_version = row["version"] if row else 0
+            if current_version < SCHEMA_VERSION:
+                conn.execute("BEGIN")
+                self._migrate(conn, current_version)
+                if row is None:
+                    conn.execute("INSERT INTO schema_version (version) VALUES (?)", (SCHEMA_VERSION,))
+                else:
+                    conn.execute("UPDATE schema_version SET version = ?", (SCHEMA_VERSION,))
+                conn.execute("COMMIT")
 
     @contextmanager
     def connect(self) -> Iterator[sqlite3.Connection]:

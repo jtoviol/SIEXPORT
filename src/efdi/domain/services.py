@@ -1,7 +1,7 @@
-"""Lógica de dominio — agrupación de atenciones por afiliado."""
+"""Lógica de dominio — agrupación de atenciones/registros por afiliado."""
 from collections import defaultdict
 
-from efdi.domain.models import AfiliadoConAtenciones, Atencion
+from efdi.domain.models import AfiliadoConAtenciones, AfiliadoConFindrisc, Atencion, RegistroFindrisc
 
 
 def agrupar_por_afiliado(atenciones: list[Atencion]) -> list[AfiliadoConAtenciones]:
@@ -30,6 +30,29 @@ def agrupar_por_afiliado(atenciones: list[Atencion]) -> list[AfiliadoConAtencion
                 nombre_completo=nombre,
                 fecha_registro=primera.fecha_registro,
                 atenciones=grupo,
+            )
+        )
+    return sorted(resultado, key=lambda x: (x.doc_key, x.fecha_registro))
+
+
+def agrupar_por_afiliado_findrisc(registros: list[RegistroFindrisc]) -> list[AfiliadoConFindrisc]:
+    """Agrupa registros FINDRISC por (documento, fecha_registro) — 1 PDF por afiliado por día."""
+    grupos: dict[str, list[RegistroFindrisc]] = defaultdict(list)
+    for r in registros:
+        clave = f"{r.doc_key}_{r.fecha_registro}"
+        grupos[clave].append(r)
+
+    resultado: list[AfiliadoConFindrisc] = []
+    for _, grupo in grupos.items():
+        primero = grupo[0]
+        resultado.append(
+            AfiliadoConFindrisc(
+                doc_key=primero.doc_key,
+                tipo_documento=primero.tipo_documento,
+                num_documento=primero.num_documento,
+                nombre_completo=primero.nombre_completo,
+                fecha_registro=primero.fecha_registro,
+                registros=grupo,
             )
         )
     return sorted(resultado, key=lambda x: (x.doc_key, x.fecha_registro))

@@ -9,6 +9,7 @@ from fastapi.staticfiles import StaticFiles
 
 from efdi import __version__
 from efdi.api.routes import router
+from efdi.api.routes_findrisc import router as router_findrisc
 from efdi.config import settings
 
 logging.basicConfig(
@@ -36,6 +37,7 @@ app.add_middleware(
 )
 
 app.include_router(router)
+app.include_router(router_findrisc)
 
 
 WEB_DIR = Path(__file__).parent / "web"

@@ -120,6 +120,103 @@ class EstadoExtraccion(str, Enum):
     CANCELLED = "cancelled"
 
 
+class ExtraccionTipo(str, Enum):
+    DEMANDA_INDUCIDA = "demanda_inducida"
+    FINDRISC = "findrisc"
+
+
+class RegistroFindrisc(BaseModel):
+    """Una fila del SELECT FINDRISC — evaluación de riesgo de diabetes tipo 2."""
+
+    model_config = ConfigDict(use_enum_values=True, str_strip_whitespace=True)
+
+    seq_seragil: int
+    consecutivo: int
+
+    # Identificación
+    tipo_documento: TipoDocumento
+    num_documento: str
+    primer_nombre: str
+    segundo_nombre: str | None = None
+    primer_apellido: str
+    segundo_apellido: str | None = None
+    fecha_nacimiento: date | None = None
+    edad: int = Field(default=0, ge=0, le=120)
+    genero: str | None = None
+
+    # Fechas del formulario
+    fecha_realizacion: date | None = None
+    fecha_registro: date
+
+    # Contacto y ubicación
+    direccion: str | None = None
+    telefono_1: str | None = None
+    correo: str | None = None
+    departamento: str | None = None
+    municipio: str | None = None
+    curso_vida: str | None = None
+    regimen: str | None = None
+
+    # Proveedor / encuestador
+    ips: str | None = None
+    regional: str | None = None
+    encuestador_nombre: str | None = None
+    cargo_encuestador: str | None = None
+
+    # Mediciones antropométricas
+    peso: float | None = None
+    talla: float | None = None
+    imc: float | None = None
+    perimetro_cintura: float | None = None
+
+    # Cuestionario FINDRISC
+    actividad_fisica: bool = False
+    frecuencia_verduras: str | None = None        # "TODOS LOS DIAS" / "NO TODOS LOS DIAS"
+    medicamentos_hipertension: bool = False
+    glucosa_alta: bool = False
+    antecedente_diabetes: str | None = None       # texto decodificado del CASE
+    aplica_prueba: bool = False
+
+    # Puntajes individuales y total
+    puntaje_edad: int = 0
+    puntaje_imc: int = 0
+    puntaje_perimetro: int = 0
+    puntaje_actividad_fisica: int = 0
+    puntaje_verduras: int = 0
+    puntaje_medicamentos: int = 0
+    puntaje_glucosa: int = 0
+    puntaje_diabetes: int = 0
+    puntaje_total: int = 0
+
+    @property
+    def doc_key(self) -> str:
+        return f"{self.tipo_documento}_{self.num_documento}"
+
+    @property
+    def nombre_completo(self) -> str:
+        return " ".join(
+            p for p in [
+                self.primer_nombre, self.segundo_nombre or "",
+                self.primer_apellido, self.segundo_apellido or "",
+            ] if p
+        ).strip()
+
+
+class AfiliadoConFindrisc(BaseModel):
+    """Un afiliado con sus registros FINDRISC agrupados por fecha."""
+
+    doc_key: str
+    tipo_documento: TipoDocumento
+    num_documento: str
+    nombre_completo: str
+    fecha_registro: date
+    registros: list[RegistroFindrisc]
+
+    @property
+    def pdf_key(self) -> str:
+        return f"{self.doc_key}_{self.fecha_registro}"
+
+
 class ModoPdf(str, Enum):
     UNO_POR_ATENCION = "uno_por_atencion"
 
@@ -151,6 +248,7 @@ class Extraccion(BaseModel):
     limite: int = Field(ge=1, le=600_000, description="Total de registros a generar (sumando lotes)")
     tamano_lote: int = Field(default=10_000, ge=1, le=50_000, description="Registros por lote")
     total_lotes: int = 0
+    tipo: ExtraccionTipo = ExtraccionTipo.DEMANDA_INDUCIDA
     modo_pdf: ModoPdf = ModoPdf.UNO_POR_ATENCION
     estado: EstadoExtraccion = EstadoExtraccion.PENDING
     total_atenciones: int = 0

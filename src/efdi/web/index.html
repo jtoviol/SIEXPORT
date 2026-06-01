@@ -211,9 +211,9 @@
             class="tab-btn active px-3.5 py-1.5 text-sm font-medium outline-none whitespace-nowrap rounded-full transition-all">
       Demanda Inducida
     </button>
-    <button disabled title="Proximo modulo"
-            class="px-3.5 py-1.5 text-sm text-slate-300 cursor-not-allowed whitespace-nowrap select-none rounded-full">
-      Vacunacion
+    <button data-tab="findrisc" onclick="switchTab('findrisc')"
+            class="tab-btn px-3.5 py-1.5 text-sm font-medium outline-none whitespace-nowrap rounded-full transition-all">
+      FINDRISC
     </button>
     <button disabled title="Proximo modulo"
             class="px-3.5 py-1.5 text-sm text-slate-300 cursor-not-allowed whitespace-nowrap select-none rounded-full">
@@ -530,13 +530,13 @@
       </svg>
       <span class="font-medium">Demanda</span>
     </button>
-    <button disabled
-            class="mob-tab flex-1 flex flex-col items-center gap-0.5 py-2.5 cursor-not-allowed opacity-40 select-none">
+    <button data-mob-tab="findrisc" onclick="switchTab('findrisc')"
+            class="mob-tab flex-1 flex flex-col items-center gap-0.5 py-2.5 transition-colors">
       <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
         <path stroke-linecap="round" stroke-linejoin="round"
-              d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+              d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
       </svg>
-      <span>Vacunacion</span>
+      <span>FINDRISC</span>
     </button>
     <button disabled
             class="mob-tab flex-1 flex flex-col items-center gap-0.5 py-2.5 cursor-not-allowed opacity-40 select-none">
@@ -561,6 +561,12 @@
 // ═══════════════════════════════════════════════════════════════════
 const API = "";
 const $ = id => document.getElementById(id);
+
+function getModuleApi() {
+  return activeTab === "findrisc" ? "/findrisc/extractions" : "/extractions";
+}
+// API base capturada al seleccionar un job — persiste en callbacks deferred
+let _selApiBase = "/extractions";
 
 const DOC_COLORS = {
   CC: { pill: "bg-cyan-500 text-white",   soft: "bg-cyan-50 text-cyan-700"   },
@@ -755,10 +761,15 @@ function switchTab(tabId) {
   document.querySelectorAll(".mob-tab").forEach(btn =>
     btn.classList.toggle("active", btn.dataset.mobTab === tabId)
   );
-  // Reset right panel when switching modules
+  // Reset state for new module
   selId = null;
+  prevSt = {};
+  clearTimeout(_poll);
+  _selApiBase = getModuleApi();
   $("rp-empty").classList.remove("hidden");
   $("rp-content").classList.add("hidden");
+  clearTimeout(_progressTimer);
+  loadJobs();
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -845,7 +856,7 @@ async function confirmDelete() {
   cancelDelete();
   const short = id.slice(0, 8);
   try {
-    const r = await fetch(`/extractions/${id}`, { method: "DELETE" });
+    const r = await fetch(`${_selApiBase}/${id}`, { method: "DELETE" });
     if (!r.ok) {
       const body = await r.json().catch(() => ({}));
       throw new Error(body.detail || r.statusText);
@@ -866,7 +877,7 @@ async function confirmDelete() {
 
 async function loadJobs() {
   try {
-    const data = await apiGet("/extractions");
+    const data = await apiGet(getModuleApi());
     const empty = $("jempty"), list = $("jlist");
     if (!data.length) {
       list.innerHTML = ""; empty.classList.remove("hidden");
@@ -921,6 +932,7 @@ function markSel(id) {
 // ═══════════════════════════════════════════════════════════════════
 async function selJob(id) {
   selId = id;
+  _selApiBase = getModuleApi();
   markSel(id);
   $("rp").classList.add("mopen");
   $("rp-empty").classList.add("hidden");
@@ -930,11 +942,14 @@ async function selJob(id) {
   activeChips.clear();
 
   let job = null;
-  try { job = await apiGet(`/extractions/${id}`); } catch {}
+  try { job = await apiGet(`${_selApiBase}/${id}`); } catch {}
 
   if (job) {
-    $("exp-name").textContent = `job_${id}`;
-    $("exp-dl").href = `/extractions/${id}/download`;
+    const modLabel = _selApiBase.includes("findrisc")
+      ? `<span class="ml-2 text-xs font-semibold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700">FINDRISC</span>`
+      : `<span class="ml-2 text-xs font-semibold px-1.5 py-0.5 rounded-full bg-brand-100 text-brand-700">Demanda Inducida</span>`;
+    $("exp-name").innerHTML = `job_${id}` + modLabel;
+    $("exp-dl").href = `${_selApiBase}/${id}/download`;
 
     const disabled = job.estado !== "completed";
     $("exp-dl").classList.toggle("opacity-40", disabled);
@@ -959,12 +974,13 @@ async function selJob(id) {
 let _progressTimer = null;
 let _lastLoteStates = {};
 
-async function showProgress(job) {
+async function showProgress(job, apiBase) {
+  if (!apiBase) apiBase = _selApiBase;
   $("filter-bar").classList.add("hidden");
   clearTimeout(_progressTimer);
 
   let lotes = [];
-  try { lotes = await apiGet(`/extractions/${job.id}/lotes`); } catch {}
+  try { lotes = await apiGet(`${apiBase}/${job.id}/lotes`); } catch {}
 
   renderProgress(job, lotes);
 
@@ -972,7 +988,7 @@ async function showProgress(job) {
     _progressTimer = setTimeout(async () => {
       if (selId !== job.id) return;
       try {
-        const j = await apiGet(`/extractions/${job.id}`);
+        const j = await apiGet(`${apiBase}/${job.id}`);
         if (j.estado === "completed") {
           $("exp-meta").textContent = `${j.total_afiliados} afiliados · ${j.total_pdfs} PDFs · ${fmtRel(j.creado_en)}`;
           $("exp-dl").classList.remove("opacity-40", "pointer-events-none");
@@ -982,10 +998,10 @@ async function showProgress(job) {
           $("exp-meta").textContent = STATUS.failed.label;
           showErr(j.mensaje_error);
         } else {
-          showProgress(j);
+          showProgress(j, apiBase);
         }
       } catch {
-        _progressTimer = setTimeout(() => showProgress(job), 45000);
+        _progressTimer = setTimeout(() => showProgress(job, apiBase), 45000);
       }
     }, 45000);
   }
@@ -1020,7 +1036,7 @@ async function confirmarCancelacion() {
   if (!jobId) return;
   cancelarModal();
   try {
-    const r = await fetch(`/extractions/${jobId}/cancel`, { method: "POST" });
+    const r = await fetch(`${_selApiBase}/${jobId}/cancel`, { method: "POST" });
     if (!r.ok) {
       const body = await r.json().catch(() => ({}));
       throw new Error(body.detail || r.statusText);
@@ -1370,7 +1386,7 @@ function renderJobSummary(job) {
         <div>
           <div class="text-slate-400 uppercase tracking-wider text-[10px] mb-0.5">Resultado</div>
           ${resultadoLine}
-          <div class="text-slate-500 tabular-nums">${job.total_afiliados.toLocaleString()} afiliados · ${job.total_atenciones.toLocaleString()} atenciones</div>
+          <div class="text-slate-500 tabular-nums">${job.total_afiliados.toLocaleString()} afiliados · ${job.total_atenciones.toLocaleString()} ${_selApiBase.includes("findrisc") ? "registros" : "atenciones"}</div>
         </div>
         <div>
           <div class="text-slate-400 uppercase tracking-wider text-[10px] mb-0.5">Tiempos</div>
@@ -1383,7 +1399,6 @@ function renderJobSummary(job) {
 
 async function loadTreeWithSummary(id, job) {
   $("filter-bar").classList.add("hidden");
-  // Mostrar resumen inmediato + cargar tree
   $("exp-tree").innerHTML = renderJobSummary(job) + `
     <div class="flex items-center justify-center h-32 gap-2 text-slate-400 text-sm">
       <svg class="h-4 w-4 spin" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -1392,12 +1407,11 @@ async function loadTreeWithSummary(id, job) {
       Cargando archivos&hellip;
     </div>`;
   try {
-    treeData = await apiGet(`/extractions/${id}/files`);
+    treeData = await apiGet(`${_selApiBase}/${id}/files`);
     activeChips.clear();
     $("filter-text").value = "";
     buildChips(treeData);
     const summary = renderJobSummary(job);
-    // Renderizar tree y prepender summary
     applyFilters();
     const treeContent = $("exp-tree").innerHTML;
     $("exp-tree").innerHTML = summary + `<div>${treeContent}</div>`;
@@ -1418,7 +1432,7 @@ async function loadTree(id) {
       Cargando archivos&hellip;
     </div>`;
   try {
-    treeData = await apiGet(`/extractions/${id}/files`);
+    treeData = await apiGet(`${_selApiBase}/${id}/files`);
     activeChips.clear();
     $("filter-text").value = "";
     buildChips(treeData);
@@ -1510,7 +1524,7 @@ function renderTree(data) {
         </svg>
         <span class="flex-1 text-xs font-mono text-slate-600 truncate">${f.name}</span>
         <span class="text-xs text-slate-400 tabular-nums shrink-0">${fmtSz(f.size)}</span>
-        <a href="/extractions/${data.job_id}/files/${folder.name}/${f.name}"
+        <a href="${_selApiBase}/${data.job_id}/files/${folder.name}/${f.name}"
            download="${f.name}" title="Descargar PDF"
            class="dlbtn shrink-0 h-6 w-6 rounded-md flex items-center justify-center
                   text-slate-400 hover:text-brand-700 hover:bg-slate-200 transition-colors">
@@ -1582,7 +1596,7 @@ function fetchAutoPreview() {
   clearTimeout(_previewTimer);
   _previewTimer = setTimeout(async () => {
     try {
-      const r = await fetch(`/extractions/count?desde=${desde}&hasta=${hasta}`);
+      const r = await fetch(`${getModuleApi()}/count?desde=${desde}&hasta=${hasta}`);
       if (!r.ok) { setAutoPreview("err"); setBtnGenDisabled(false); return; }
       setAutoPreview(await r.json());
     } catch { setAutoPreview("err"); }
@@ -1746,7 +1760,7 @@ $("fext").addEventListener("submit", async ev => {
   }
   setGenLoading(true);
   try {
-    const r = await apiPost("/extractions", body);
+    const r = await apiPost(getModuleApi(), body);
     toast("Extraccion iniciada", `ID ${r.id.slice(0, 8)} — generando ${r.limite.toLocaleString()} registros`, "success");
     toggleForm();
     await loadJobs();
