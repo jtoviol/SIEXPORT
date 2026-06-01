@@ -42,9 +42,12 @@ app.add_middleware(
 
 # ── Autenticación con cookie firmada (HMAC-SHA256) ─────────────────────────────
 # Stateless: funciona con --workers N sin estado compartido entre procesos.
-# El secreto puede fijarse en .env como AUTH_SECRET; si no, se genera al arrancar
-# (las sesiones expiran al reiniciar el servidor).
-_SECRET = (settings.auth_secret if settings.auth_secret else secrets.token_hex(32)).encode()
+# _SECRET se deriva de las credenciales para que todos los workers obtengan
+# exactamente el mismo valor — clave para que los tokens sean verificables
+# independientemente del worker que los recibió.
+_SECRET = hashlib.sha256(
+    f"siexport-v1:{settings.auth_user}:{settings.auth_password}:{settings.auth_secret}".encode()
+).digest()
 _PWD_HASH = hashlib.sha256(settings.auth_password.encode()).hexdigest()
 _SESSION_TTL = timedelta(hours=8)
 _COOKIE = "siexport_session"
