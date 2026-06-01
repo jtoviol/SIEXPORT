@@ -132,6 +132,7 @@ class Lote(BaseModel):
     offset_inicio: int = Field(ge=0)
     tamano: int = Field(ge=1)
     estado: EstadoExtraccion = EstadoExtraccion.PENDING
+    fase: str = ""
     total_atenciones: int = 0
     total_afiliados: int = 0
     total_pdfs: int = 0

@@ -180,18 +180,19 @@ def _flags_table(atencion: Atencion) -> Table:
     return t
 
 
-def _programas_table(cod_marcado: str) -> Table:
+def _programas_table(codigos_marcados: list[str]) -> Table:
     """Tabla de 4 columnas con los 124 programas del catálogo.
 
-    Marca con ☒ + fondo verde el que coincide con cod_marcado.
+    Marca con ☒ + fondo verde todos los códigos en codigos_marcados.
     """
     catalogo = cargar_catalogo()
     if not catalogo:
         return Table([["Catálogo de programas no disponible"]])
 
+    marcados = set(codigos_marcados)
     items = []
     for cod, desc in catalogo:
-        es_marcado = cod == cod_marcado
+        es_marcado = cod in marcados
         cuadro = "☒" if es_marcado else "☐"
         style = STYLE_PROG_MARKED if es_marcado else STYLE_PROG_NORMAL
         texto = f"{cuadro}&nbsp;<font name='Courier'>{cod:>2}</font>&nbsp;{desc}"
@@ -236,112 +237,113 @@ def _programas_table(cod_marcado: str) -> Table:
     return t
 
 
-def _construir_pagina(afiliado: AfiliadoConAtenciones, atencion: Atencion,
-                     page_n: int, page_total: int) -> list:
-    """Arma los flowables de UNA página (correspondiente a una atención)."""
+def _atenciones_del_dia_table(atenciones: list[Atencion]) -> Table:
+    """Tabla resumen con una fila por atención del día."""
+    encabezado = ["Cód", "Programa", "Modo ingreso", "IPS remite", "Encuestador", "Cargo", "Not.", "Urg.", "C.Ext."]
+    filas = [encabezado]
+    for a in atenciones:
+        def mark(v: bool) -> str: return "✓" if v else "—"
+        filas.append([
+            a.cod_programa,
+            a.des_programa,
+            str(a.modo_ingreso or "—"),
+            a.ips_remite or "—",
+            a.encuestador_nombre or "—",
+            a.cargo_encuestador or "—",
+            mark(a.notificacion_obligatoria),
+            mark(a.recuperacion_urgencias),
+            mark(a.recuperacion_consulta_externa),
+        ])
+    col_widths = [1.2*cm, 7*cm, 2.5*cm, 4.5*cm, 4.5*cm, 3.5*cm, 1*cm, 1*cm, 1.2*cm]
+    t = Table(filas, colWidths=col_widths, repeatRows=1)
+    style_cmds = [
+        ("FONT",        (0, 0), (-1, 0),  "Helvetica-Bold", 7),
+        ("FONT",        (0, 1), (-1, -1), "Helvetica", 7),
+        ("BACKGROUND",  (0, 0), (-1, 0),  COLOR_PRIMARY),
+        ("TEXTCOLOR",   (0, 0), (-1, 0),  colors.white),
+        ("TEXTCOLOR",   (0, 1), (-1, -1), COLOR_TEXT),
+        ("BOX",         (0, 0), (-1, -1), 0.5, COLOR_BORDER),
+        ("INNERGRID",   (0, 0), (-1, -1), 0.25, COLOR_BORDER),
+        ("ALIGN",       (6, 0), (-1, -1), "CENTER"),
+        ("VALIGN",      (0, 0), (-1, -1), "MIDDLE"),
+        ("TOPPADDING",  (0, 0), (-1, -1), 2.5),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 2.5),
+        ("LEFTPADDING", (0, 0), (-1, -1), 3),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 3),
+    ]
+    # Fondo alternado en filas de datos
+    for i in range(1, len(filas)):
+        if i % 2 == 0:
+            style_cmds.append(("BACKGROUND", (0, i), (-1, i), COLOR_LABEL_BG))
+    t.setStyle(TableStyle(style_cmds))
+    return t
+
+
+def _construir_pagina_multi(afiliado: AfiliadoConAtenciones) -> list:
+    """Arma los flowables de UNA página con TODAS las atenciones del día."""
+    atenciones = afiliado.atenciones
+    primera = atenciones[0]
     elems: list = []
-    sexo_full = "Femenino" if afiliado.atenciones[0].sexo == "F" else "Masculino"
+    sexo_full = "Femenino" if primera.sexo == "F" else "Masculino"
+    codigos = [a.cod_programa for a in atenciones]
 
-    # Cabecera con logo
-    elems.append(_header_table(afiliado, atencion, page_n, page_total))
+    # Cabecera — reutiliza _header_table con la primera atención
+    elems.append(_header_table(afiliado, primera, 1, 1))
     elems.append(Spacer(1, 4))
 
-    # Datos del afiliado (compacto, una sola línea con 4 columnas)
+    # Datos del afiliado
     elems.append(Paragraph("DATOS DEL AFILIADO", STYLE_SECTION))
-    nac = atencion.fecha_nacimiento
     elems.append(_label_value_table([
-        ("Documento", f"{afiliado.tipo_documento} {afiliado.num_documento}"),
-        ("Nombre", afiliado.nombre_completo),
-        ("Sexo", sexo_full),
-        ("Edad", f"{atencion.edad} años"),
-        ("Fecha nac.", str(nac)),
-        ("Curso de vida", atencion.curso_vida or ""),
-        ("Tel 1", atencion.telefono_1 or ""),
-        ("Tel 2", atencion.telefono_2 or ""),
-        ("Correo", atencion.correo or ""),
-        ("Régimen", atencion.regimen or ""),
-        ("Dirección", atencion.direccion or ""),
-        ("Depto / Mun.", f"{atencion.departamento or ''} / {atencion.municipio or ''}"),
+        ("Documento",    f"{afiliado.tipo_documento} {afiliado.num_documento}"),
+        ("Nombre",       afiliado.nombre_completo),
+        ("Sexo",         sexo_full),
+        ("Edad",         f"{primera.edad} años"),
+        ("Fecha nac.",   str(primera.fecha_nacimiento)),
+        ("Curso de vida", primera.curso_vida or ""),
+        ("Tel 1",        primera.telefono_1 or ""),
+        ("Tel 2",        primera.telefono_2 or ""),
+        ("Correo",       primera.correo or ""),
+        ("Régimen",      primera.regimen or ""),
+        ("Dirección",    primera.direccion or ""),
+        ("Depto / Mun.", f"{primera.departamento or ''} / {primera.municipio or ''}"),
     ]))
 
-    # Detalle de la atención
+    # Atenciones del día
     elems.append(Spacer(1, 3))
-    elems.append(Paragraph("DETALLE DE LA ATENCIÓN", STYLE_SECTION))
-    modo_label = str(atencion.modo_ingreso or "—")
-    elems.append(_label_value_table([
-        ("Fecha registro", str(atencion.fecha_registro)),
-        ("Fecha ejecución", str(atencion.fecha_atencion) if atencion.fecha_atencion else "—"),
-        ("Cód programa", atencion.cod_programa),
-        ("Modo ingreso", modo_label),
-        ("Programa", atencion.des_programa),
-        ("", ""),
-        ("IPS remite", atencion.ips_remite or ""),
-        ("IPS atiende", atencion.ips_atiende or ""),
-        ("Encuestador", atencion.encuestador_nombre or ""),
-        ("Cargo", atencion.cargo_encuestador or ""),
-        ("Tipo remitente", atencion.des_remitente or ""),
-        ("RIAS grupo riesgo", atencion.rias_grupo_riesgo or ""),
-    ]))
-    elems.append(Spacer(1, 3))
-    elems.append(_flags_table(atencion))
-    elems.append(Spacer(1, 4))
-
-    # Catálogo de programas con la X marcada
+    codigos_str = ", ".join(f"<font color='#16A34A'>{c}</font>" for c in codigos)
     elems.append(Paragraph(
-        f"PROGRAMAS DE DEMANDA INDUCIDA · marcado: <font color='#16A34A'>{atencion.cod_programa}</font>",
+        f"ATENCIONES DEL {primera.fecha_registro} · {len(atenciones)} programa(s): {codigos_str}",
         STYLE_SECTION,
     ))
-    elems.append(_programas_table(atencion.cod_programa))
+    elems.append(_atenciones_del_dia_table(atenciones))
+    elems.append(Spacer(1, 4))
+
+    # Catálogo con todos los programas del día marcados
+    elems.append(Paragraph(
+        f"PROGRAMAS DE DEMANDA INDUCIDA · marcados: {codigos_str}",
+        STYLE_SECTION,
+    ))
+    elems.append(_programas_table(codigos))
 
     return elems
 
 
 def generar_pdf_afiliado(afiliado: AfiliadoConAtenciones, output_path: Path) -> Path:
-    """Genera UN solo PDF con N páginas (una por atención del afiliado).
-
-    Cada página marca el programa correspondiente y lista el resto en ☐.
-    """
+    """Genera UN PDF de UNA página con todas las atenciones del mismo día."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
     doc = SimpleDocTemplate(
         str(output_path),
-        pagesize=landscape(letter),  # ANCHO (apaisado, 11"x8.5")
+        pagesize=landscape(letter),
         leftMargin=10*mm, rightMargin=10*mm,
         topMargin=8*mm, bottomMargin=8*mm,
-        title=f"Demanda inducida — {afiliado.doc_key}",
-        author="DataDownload",
+        title=f"Demanda inducida — {afiliado.pdf_key}",
+        author="SIEXPORT",
     )
-    elems: list = []
-    total = afiliado.total_atenciones
-
-    for i, atencion in enumerate(afiliado.atenciones, start=1):
-        elems.extend(_construir_pagina(afiliado, atencion, i, total))
-        if i < total:
-            elems.append(PageBreak())
-
-    # Footer global solo al final de la última página
+    elems = _construir_pagina_multi(afiliado)
     elems.append(Spacer(1, 6))
     elems.append(Paragraph(
-        "Documento generado automáticamente por DataDownload — Sistema de exportación",
+        "Documento generado automáticamente por SIEXPORT — Sistema Inteligente de Exportación de Facturación",
         STYLE_FOOTER,
     ))
-
     doc.build(elems)
     return output_path
-
-
-# Compatibilidad: la función vieja sigue existiendo pero ahora redirige al modo nuevo
-def generar_pdf_atencion(atencion: Atencion, output_path: Path) -> Path:
-    """Genera un PDF de UNA atención (1 página). Mantenido por compatibilidad."""
-    # Construir un afiliado virtual con esta sola atención
-    nombre = " ".join(p for p in [
-        atencion.primer_nombre, atencion.segundo_nombre,
-        atencion.primer_apellido, atencion.segundo_apellido,
-    ] if p)
-    afiliado_virtual = AfiliadoConAtenciones(
-        doc_key=atencion.doc_key,
-        tipo_documento=atencion.tipo_documento,
-        num_documento=atencion.num_documento,
-        nombre_completo=nombre,
-        atenciones=[atencion],
-    )
-    return generar_pdf_afiliado(afiliado_virtual, output_path)

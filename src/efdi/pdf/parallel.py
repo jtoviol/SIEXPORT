@@ -7,29 +7,21 @@ import multiprocessing as mp
 import os
 from pathlib import Path
 
-from efdi.domain.models import AfiliadoConAtenciones, Atencion
-from efdi.pdf.generator import generar_pdf_afiliado, generar_pdf_atencion
+from efdi.domain.models import AfiliadoConAtenciones
+from efdi.pdf.generator import generar_pdf_afiliado
 
 
 def _worker(args: tuple) -> str:
-    """Worker que corre en un proceso separado.
-
-    Acepta dos formas:
-    - (AfiliadoConAtenciones, path_str) → genera multi-página
-    - (Atencion, path_str) → compatibilidad, genera 1 página
-    """
+    """Worker que corre en un proceso separado."""
     obj, path_str = args
     out = Path(path_str)
     out.parent.mkdir(parents=True, exist_ok=True)
-    if isinstance(obj, AfiliadoConAtenciones):
-        generar_pdf_afiliado(obj, out)
-    else:
-        generar_pdf_atencion(obj, out)
+    generar_pdf_afiliado(obj, out)
     return path_str
 
 
 def generar_pdfs_paralelo(
-    tareas: list[tuple[Atencion, Path]],
+    tareas: list[tuple[AfiliadoConAtenciones, Path]],
     n_workers: int | None = None,
 ) -> int:
     """Genera todos los PDFs usando un Pool de procesos.
