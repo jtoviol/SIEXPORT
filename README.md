@@ -1,29 +1,64 @@
 # SIEXPORT — Sistema Inteligente de Exportación de Facturación
 
-Herramienta web que extrae registros desde SQL Server (o datos mock para pruebas), los agrupa por afiliado y genera un `.zip` con un PDF limpio por cada registro.
+Herramienta web que extrae registros desde SQL Server (BD `seragil`), los agrupa por afiliado y genera un `.zip` con un PDF por paciente. Soporta múltiples módulos de extracción, cada uno con su propia consulta, modelo de datos y diseño de PDF.
+
+---
+
+## Módulos disponibles
+
+### Demanda Inducida
+
+Extrae registros de `AVS_REGISTRO_SERAGIL` cruzados con `AVS_PROGRAMA_ASOCIADO_DEMIND`. Genera un PDF por afiliado por día con todas sus atenciones y el catálogo de 124 programas marcado.
 
 ```
-extraccion.zip
-├── CC_18327520862/
-│   └── atencion_001_2026-05-11.pdf
-├── CC_50839198571/
-│   ├── atencion_001_2026-04-02.pdf
-│   ├── atencion_002_2026-04-16.pdf
-│   └── atencion_003_2026-04-18.pdf
+lote_001.zip
+├── CC_12345678/
+│   └── CC_12345678_2026-05-15.pdf
+├── TI_98765432/
+│   └── TI_98765432_2026-05-10.pdf
 └── …
 ```
+
+**Filtro fuente:** `FLG_REGIND_DEMIND = 'SI'`  
+**API:** `/extractions/...`
+
+---
+
+### FINDRISC *(Evaluación de Riesgo de Diabetes Tipo 2)*
+
+Extrae registros de `SRG_FORMATO_FINDRISC`. Genera un PDF por afiliado con datos demográficos, mediciones antropométricas, respuestas al cuestionario FINDRISC, desglose de puntajes por criterio y clasificación de riesgo con color indicativo.
+
+```
+lote_001.zip
+├── CC_12345678/
+│   └── CC_12345678_2026-05-15.pdf   ← puntaje total + nivel de riesgo
+└── …
+```
+
+**Filtro fuente:** `FLG_FORMATO_COLDRISC = 'SI'`  
+**API:** `/findrisc/extractions/...`
+
+**Clasificación de riesgo FINDRISC:**
+
+| Puntaje | Nivel | Riesgo estimado DM2 |
+|---------|-------|---------------------|
+| 0 – 6   | BAJO | ~1% |
+| 7 – 11  | LIGERAMENTE ELEVADO | ~4% |
+| 12 – 14 | MODERADO | ~17% |
+| 15 – 20 | ALTO | ~33% |
+| ≥ 21    | MUY ALTO | ~50% |
 
 ---
 
 ## Stack
 
-| Capa | Tecnología | Por qué |
-|---|---|---|
-| Backend | **FastAPI + Pydantic v2** | Validación tipada + Swagger automático |
-| PDF | **ReportLab** | Generación nativa, diseño propio |
-| DB | **pyodbc** (opcional) | Driver oficial SQL Server |
-| Frontend | **HTML + Tailwind CDN + Vanilla JS** | Sin build step, una página, servida por FastAPI |
-| Tests | **pytest + httpx** | 10 tests E2E + unit |
+| Capa | Tecnología |
+|---|---|
+| Backend | **FastAPI + Pydantic v2** |
+| PDF | **ReportLab** |
+| DB | **pyodbc** — SQL Server via ODBC Driver 17 |
+| Persistencia jobs | **SQLite** (WAL mode) — sobrevive reinicios |
+| Frontend | **HTML + Tailwind CDN + Vanilla JS** — SPA sin build step |
 
 ---
 
@@ -32,26 +67,26 @@ extraccion.zip
 ### Requisitos
 
 - Python ≥ 3.10
-- pip
 - (Solo para SQL real) ODBC Driver 17 for SQL Server
 
-### Pasos
-
 ```bash
-cd /mnt/d/proyecto
+# Clonar y entrar al proyecto
+cd D:\proyecto
 
-# Recomendado: venv aislado
-python3 -m venv .venv
-source .venv/bin/activate
+# Entorno virtual
+python -m venv .venv
+.venv\Scripts\activate          # Windows
+# source .venv/bin/activate     # Linux/macOS
 
-# Dependencias
+# Dependencias base
 pip install -e ".[dev]"
-# Si vas a SQL Server real, agregar el extra:
+
+# Dependencias con SQL Server real
 pip install -e ".[dev,sqlserver]"
 
-# Config
+# Configuración
 cp .env.example .env
-# editar .env con tus valores
+# Editar .env con tus valores
 ```
 
 ---
@@ -59,8 +94,7 @@ cp .env.example .env
 ## Configuración (`.env`)
 
 ```bash
-USE_MOCK=true              # true=mock | false=SQL Server real
-LIMITE_REGISTROS=25
+USE_MOCK=false              # false=SQL Server real | true=datos ficticios
 
 DB_HOST=10.244.21.11
 DB_PORT=1433
@@ -69,173 +103,216 @@ DB_USER=sa
 DB_PASSWORD=tu-password
 DB_DRIVER=ODBC Driver 17 for SQL Server
 
-DATA_DIR=./data
+DATA_DIR=./data             # Directorio de salida de ZIPs y PDFs
 API_HOST=0.0.0.0
-API_PORT=8765
+API_PORT=8000
 LOG_LEVEL=INFO
+
+LOTE_WORKERS=2              # Lotes procesados en paralelo
+PDF_WORKERS=-1              # -1=auto (todos los cores) | 0=secuencial
+PDF_PARALLEL_THRESHOLD=100  # Mínimo de afiliados para activar Pool
 ```
 
-> ⚠️ Nunca commitees `.env`. Ya está en `.gitignore`.
+> `.env` está en `.gitignore`. Nunca lo commitees.
 
 ---
 
 ## Cómo correr
 
-### Desarrollo (con auto-reload)
-
 ```bash
-python3 -m efdi.main
-```
+# Desarrollo (auto-reload)
+python -m efdi.main
 
-O con uvicorn directo:
-
-```bash
-uvicorn efdi.main:app --reload --host 127.0.0.1 --port 8765
-```
-
-### Producción
-
-```bash
-uvicorn efdi.main:app --host 0.0.0.0 --port 8765 --workers 4
+# O con uvicorn directo
+uvicorn efdi.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 ### URLs
 
 | URL | Qué tiene |
 |---|---|
-| `http://127.0.0.1:8765/` | **Vista web** |
-| `http://127.0.0.1:8765/docs` | Swagger |
-| `http://127.0.0.1:8765/health` | Status |
-| `http://127.0.0.1:8765/db/ping` | Test SQL Server |
+| `http://localhost:8000/` | **Vista web** |
+| `http://localhost:8000/docs` | Swagger interactivo (todos los módulos) |
+| `http://localhost:8000/health` | Estado de la API y modo |
+| `http://localhost:8000/db/ping` | Test de conectividad SQL Server |
+| `http://localhost:8000/diagnostics` | Diagnóstico completo (DB, disco, métricas) |
 
 ---
 
 ## Cómo usar (vista web)
 
-1. Abrir http://127.0.0.1:8765/
-2. **Nueva extracción** → elegir rango + límite → Generar
-3. Tabla **Extracciones recientes** se actualiza sola (1s con jobs activos, 5s si no)
-4. Cuando el badge dice **Completado** → click **Descargar**
+1. Abrir `http://localhost:8000/`
+2. Seleccionar el módulo en las pestañas superiores: **Demanda Inducida** o **FINDRISC**
+3. Hacer clic en **Nueva extracción** → elegir rango de fechas → Generar
+4. La vista muestra en tiempo real el progreso de cada lote con su fase actual
+5. Al completar → explorar archivos o descargar el `.zip`
 
-El badge superior derecho indica modo **Mock** o **SQL Server**.
+El badge superior derecho indica si la conexión es **SQL Server** o **Mock**.
 
 ---
 
 ## API REST
 
-### `GET /health`
-```json
-{ "status": "ok", "version": "0.1.0", "modo": "mock" }
+### Meta
+
+```
+GET  /health
+GET  /db/ping
+GET  /diagnostics
 ```
 
-### `GET /db/ping`
-```json
-{ "host": "10.244.21.11", "database": "seragil", "ok": true }
+### Módulo Demanda Inducida
+
+```
+GET  /extractions/count?desde=&hasta=        # Preview de registros antes de generar
+POST /extractions                            # Crear extracción (202 Accepted)
+GET  /extractions                            # Listar extracciones
+GET  /extractions/{id}                       # Estado + métricas
+GET  /extractions/{id}/lotes                 # Lotes con fase en tiempo real
+GET  /extractions/{id}/lotes/{n}/download    # ZIP de un lote
+GET  /extractions/{id}/download              # Mega-ZIP (todos los lotes)
+GET  /extractions/{id}/files                 # Árbol de archivos
+GET  /extractions/{id}/files/{doc}/{file}    # PDF individual
+POST /extractions/{id}/cancel                # Cancelar
+DELETE /extractions/{id}                     # Eliminar + borrar disco
 ```
 
-### `POST /extractions`
-```json
-// Request
-{ "desde": "2026-04-01", "hasta": "2026-05-28", "limite": 25 }
+### Módulo FINDRISC
 
-// Response 202
-{ "id": "uuid", "estado": "pending", ... }
+Misma estructura bajo el prefijo `/findrisc/`:
+
+```
+GET  /findrisc/extractions/count?desde=&hasta=
+POST /findrisc/extractions
+GET  /findrisc/extractions
+GET  /findrisc/extractions/{id}
+GET  /findrisc/extractions/{id}/lotes
+GET  /findrisc/extractions/{id}/lotes/{n}/download
+GET  /findrisc/extractions/{id}/download
+GET  /findrisc/extractions/{id}/files
+GET  /findrisc/extractions/{id}/files/{doc}/{file}
+POST /findrisc/extractions/{id}/cancel
+DELETE /findrisc/extractions/{id}
 ```
 
-### `GET /extractions`
-Lista todas las extracciones.
+### Ejemplo: crear extracción FINDRISC
 
-### `GET /extractions/{id}`
-Estado + métricas. Estados: `pending` → `running` → `completed` / `failed`.
+```bash
+curl -X POST http://localhost:8000/findrisc/extractions \
+  -H "Content-Type: application/json" \
+  -d '{"desde": "2026-05-01", "hasta": "2026-05-31"}'
+```
 
-### `GET /extractions/{id}/download`
-Devuelve el `.zip` (solo si está `completed`).
+---
+
+## Procesamiento por lotes
+
+Cada extracción se divide automáticamente en lotes para manejar volúmenes grandes:
+
+```
+POST /extractions
+  └─ Calcula N lotes según el total de registros
+      └─ ThreadPoolExecutor (LOTE_WORKERS=2)
+          └─ Por cada lote:
+              ├─ "Consultando base de datos…"  → query SQL con OFFSET/FETCH
+              ├─ "Generando PDFs (N afiliados)…" → ReportLab multiprocessing
+              └─ "Empaquetando ZIP…" → lote_NNN.zip
+```
+
+La fase actual de cada lote se muestra en tiempo real en la vista web.
 
 ---
 
 ## Conexión a SQL Server real
 
-### Linux/WSL — instalar driver
+### Windows — instalar driver ODBC
+
+Descargar e instalar [ODBC Driver 17 for SQL Server](https://learn.microsoft.com/en-us/sql/connect/odbc/download-odbc-driver-for-sql-server).
+
+```bash
+pip install -e ".[sqlserver]"
+```
+
+### Linux/WSL
 
 ```bash
 sudo apt update && sudo apt install -y curl gnupg unixodbc-dev
-curl https://packages.microsoft.com/keys/microsoft.asc | sudo gpg --dearmor -o /usr/share/keyrings/microsoft-prod.gpg
-curl https://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/prod.list | sudo tee /etc/apt/sources.list.d/mssql-release.list
+curl https://packages.microsoft.com/keys/microsoft.asc | \
+  sudo gpg --dearmor -o /usr/share/keyrings/microsoft-prod.gpg
+curl https://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/prod.list | \
+  sudo tee /etc/apt/sources.list.d/mssql-release.list
 sudo apt update
 sudo ACCEPT_EULA=Y apt install -y msodbcsql17
-
 pip install -e ".[sqlserver]"
 ```
 
 ### Verificar
 
-1. `USE_MOCK=false` en `.env`
-2. Reiniciar server
-3. `curl http://127.0.0.1:8765/db/ping` → esperar `"ok": true`
-
-Si responde `false`:
-- Driver no instalado → instalar `msodbcsql17`
-- Host inalcanzable → necesitás estar en la red corporativa / VPN
-- Credenciales mal → verificar `DB_USER` / `DB_PASSWORD`
-
----
-
-## Tests
-
 ```bash
-pytest -v
+# Debe responder "ok": true
+curl http://localhost:8000/db/ping
 ```
-
-Resultado: **10/10 PASS**.
 
 ---
 
-## Estructura
+## Estructura del proyecto
 
 ```
-/mnt/d/proyecto/
+D:\proyecto\
 ├── pyproject.toml
 ├── .env / .env.example
 ├── README.md
-├── src/efdi/
-│   ├── main.py              # FastAPI app + sirve /
-│   ├── config.py            # settings
-│   ├── api/                 # routes + schemas
-│   ├── domain/              # models + lógica
-│   ├── infrastructure/      # mock, repository, job_store
-│   ├── services/            # orquestador
-│   ├── pdf/generator.py     # ReportLab
-│   └── web/index.html       # vista web
-├── tests/
-└── data/                    # zips generados (gitignored)
+└── src/efdi/
+    ├── main.py                         # FastAPI app — registra routers de ambos módulos
+    ├── config.py                       # Settings desde .env
+    ├── api/
+    │   ├── routes.py                   # Endpoints Demanda Inducida (/extractions/...)
+    │   ├── routes_findrisc.py          # Endpoints FINDRISC (/findrisc/extractions/...)
+    │   └── schemas.py                  # Request/response Pydantic
+    ├── domain/
+    │   ├── models.py                   # Atencion, AfiliadoConAtenciones,
+    │   │                               # RegistroFindrisc, AfiliadoConFindrisc,
+    │   │                               # Extraccion, Lote, ExtraccionTipo
+    │   └── services.py                 # agrupar_por_afiliado / agrupar_por_afiliado_findrisc
+    ├── infrastructure/
+    │   ├── db.py                       # SQLite schema v3 con migraciones
+    │   ├── job_store.py                # Persistencia de extracciones y lotes
+    │   ├── repository.py              # Consulta Demanda Inducida (SQL Server + mock)
+    │   └── repository_findrisc.py     # Consulta FINDRISC (SQL Server + mock)
+    ├── pdf/
+    │   ├── generator.py               # PDF Demanda Inducida — catálogo 124 programas
+    │   ├── generator_findrisc.py      # PDF FINDRISC — puntajes + clasificación de riesgo
+    │   ├── parallel.py                # Worker multiprocessing Demanda Inducida
+    │   ├── parallel_findrisc.py       # Worker multiprocessing FINDRISC
+    │   └── programas_catalogo.py      # Carga programas.txt (124 programas)
+    ├── services/
+    │   ├── extraction.py              # Orquestador Demanda Inducida
+    │   └── extraction_findrisc.py     # Orquestador FINDRISC
+    ├── templates/
+    │   ├── logo.png
+    │   └── programas.txt              # 124 códigos + descripciones de programas DI
+    └── web/
+        └── index.html                 # SPA — pestañas por módulo, progreso en tiempo real
 ```
 
 ---
 
 ## Solución de problemas
 
-**`address already in use`** → otro proceso usa el puerto. Cambiar a otro:
+**Puerto en uso:**
 ```bash
 uvicorn efdi.main:app --port 8888
 ```
 
-**`/db/ping` devuelve `ok: false`** → mirar logs del server:
+**`/db/ping` devuelve `ok: false`:**
 - `pyodbc no instalado` → `pip install -e ".[sqlserver]"`
-- `IM002 Data source name not found` → falta `msodbcsql17`
-- `08001 connection failed` → red/firewall/credenciales
+- `IM002 Data source name not found` → instalar ODBC Driver 17
+- `08001 connection failed` → verificar red/VPN/firewall/credenciales
 
-**La vista web no carga** → confirmar endpoint:
+**La vista web no carga:**
 ```bash
-curl -I http://127.0.0.1:8765/
-# debe responder HTTP 200 con text/html
+curl -I http://localhost:8000/
+# Debe responder HTTP 200 text/html
 ```
 
----
-
-## Roadmap
-
-- [ ] Persistencia de jobs (SQLite/Redis) — hoy se pierde al reiniciar
-- [ ] Auth básica
-- [ ] Dockerfile + compose
-- [ ] Logs estructurados con `structlog`
-- [ ] Métricas Prometheus
+**Migración de base de datos:** Al actualizar desde versiones anteriores, la BD SQLite se migra automáticamente al arrancar. El schema actual es v3 (añade `lotes.fase` y `extracciones.tipo`).
