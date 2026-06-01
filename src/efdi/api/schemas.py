@@ -4,7 +4,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, model_validator
 
-from efdi.domain.models import EstadoExtraccion, ModoPdf
+from efdi.domain.models import EstadoExtraccion, ExtraccionTipo, ModoPdf
 
 
 class CrearExtraccionReq(BaseModel):
@@ -40,7 +40,9 @@ class ExtraccionResp(BaseModel):
     limite: int
     tamano_lote: int
     total_lotes: int
+    tipo: ExtraccionTipo
     modo_pdf: ModoPdf
+    nombre: str | None = None
     estado: EstadoExtraccion
     total_atenciones: int
     total_afiliados: int
@@ -48,6 +50,10 @@ class ExtraccionResp(BaseModel):
     creado_en: datetime
     completado_en: datetime | None = None
     mensaje_error: str | None = None
+
+
+class RenombrarJobReq(BaseModel):
+    nombre: str = Field(default="", max_length=100, strip_whitespace=True)
 
 
 class HealthResp(BaseModel):

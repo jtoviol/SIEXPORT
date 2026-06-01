@@ -30,6 +30,7 @@ def _row_to_extraccion(row) -> Extraccion:
         total_lotes=row["total_lotes"],
         tipo=tipo,
         modo_pdf=ModoPdf(row["modo_pdf"]),
+        nombre=row["nombre"] if "nombre" in cols else None,
         estado=EstadoExtraccion(row["estado"]),
         total_atenciones=row["total_atenciones"],
         total_afiliados=row["total_afiliados"],
@@ -85,9 +86,10 @@ class JobStore:
                 """
                 INSERT INTO extracciones (
                     id, desde, hasta, limite, tamano_lote, total_lotes,
-                    tipo, modo_pdf, estado, total_atenciones, total_afiliados, total_pdfs,
+                    tipo, modo_pdf, nombre, estado,
+                    total_atenciones, total_afiliados, total_pdfs,
                     creado_en, completado_en, mensaje_error, zip_path
-                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 ON CONFLICT(id) DO UPDATE SET
                     total_lotes=excluded.total_lotes,
                     tipo=excluded.tipo,
@@ -104,6 +106,7 @@ class JobStore:
                     job.limite, job.tamano_lote, job.total_lotes,
                     tipo_val,
                     job.modo_pdf.value if hasattr(job.modo_pdf, "value") else str(job.modo_pdf),
+                    job.nombre,
                     estado_a_guardar,
                     job.total_atenciones, job.total_afiliados, job.total_pdfs,
                     job.creado_en.isoformat(),
@@ -133,6 +136,14 @@ class JobStore:
                 (tipo.value,),
             ).fetchall()
             return [_row_to_extraccion(r) for r in rows]
+
+    def rename(self, job_id: UUID, nombre: str | None) -> bool:
+        with db.transaction() as conn:
+            cur = conn.execute(
+                "UPDATE extracciones SET nombre = ? WHERE id = ?",
+                (nombre or None, str(job_id)),
+            )
+            return cur.rowcount > 0
 
     def delete(self, job_id: UUID) -> bool:
         with db.transaction() as conn:

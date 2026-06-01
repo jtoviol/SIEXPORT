@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>SIEXPORT — Sistema Inteligente de Exportación de Facturación</title>
+  <link rel="icon" type="image/jpeg" href="/static/siexport_logo.jpeg" />
   <script src="https://unpkg.com/@lottiefiles/dotlottie-wc@0.9.14/dist/dotlottie-wc.js" type="module"></script>
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
@@ -220,8 +221,24 @@
       Control Prenatal
     </button>
   </nav>
-  <!-- Health badge -->
-  <div class="shrink-0" id="health-badge"></div>
+  <!-- Health badge + Logout -->
+  <div class="shrink-0 flex items-center gap-2">
+    <div id="health-badge"></div>
+    <form method="POST" action="/auth/logout">
+      <button type="submit"
+              title="Cerrar sesión"
+              class="h-8 px-3 rounded-lg border border-slate-200 bg-white hover:bg-red-50
+                     hover:border-red-200 hover:text-red-600 text-slate-500
+                     text-xs font-medium flex items-center gap-1.5 transition-colors">
+        <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24"
+             stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round"
+                d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
+        </svg>
+        <span class="hidden sm:inline">Salir</span>
+      </button>
+    </form>
+  </div>
 </header>
 
 <!-- ═══ SPLIT LAYOUT ═══ -->
@@ -380,7 +397,7 @@
           <path d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z"/>
         </svg>
         <div class="flex-1 min-w-0">
-          <p id="exp-name" class="text-sm font-semibold text-slate-800 tracking-tight truncate"></p>
+          <p id="exp-name" class="text-sm font-semibold text-slate-800 tracking-tight break-words"></p>
           <p id="exp-meta" class="text-xs text-slate-400 mt-0.5"></p>
         </div>
         <a id="exp-dl" href="#" download
@@ -607,6 +624,78 @@ const STATUS = {
 };
 
 // ═══════════════════════════════════════════════════════════════════
+// NOMBRES PERSONALIZADOS (localStorage)
+// ═══════════════════════════════════════════════════════════════════
+function _jobNames() {
+  try { return JSON.parse(localStorage.getItem("siexport_job_names") || "{}"); }
+  catch { return {}; }
+}
+function getJobName(id)         { return _jobNames()[id] || null; }
+function setJobName(id, name)   {
+  const n = _jobNames();
+  if (name) n[id] = name; else delete n[id];
+  localStorage.setItem("siexport_job_names", JSON.stringify(n));
+}
+
+function renderExpName(id, nombre) {
+  // nombre viene de la DB; localStorage solo como caché optimista
+  const name = (nombre !== undefined ? nombre : null) ?? getJobName(id);
+  const isFindrisc = _selApiBase.includes("findrisc");
+  const modBadge = isFindrisc
+    ? `<span class="ml-2 text-xs font-semibold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700">FINDRISC</span>`
+    : `<span class="ml-2 text-xs font-semibold px-1.5 py-0.5 rounded-full bg-brand-100 text-brand-700">Demanda Inducida</span>`;
+  const label = name
+    ? `<span class="text-slate-800">${name}</span>`
+    : `<span class="font-mono text-slate-500 text-xs">job_${id.slice(0, 8)}&hellip;</span>`;
+  const pencil = `<svg class="inline-block ml-1.5 h-3 w-3 text-slate-300 hover:text-slate-500 transition-colors shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>`;
+  const el = $("exp-name");
+  el.innerHTML = label + pencil + modBadge;
+  el.title = "Doble clic para renombrar";
+  el.className = "text-sm font-semibold tracking-tight break-words cursor-text select-none flex items-center gap-0 flex-wrap";
+  el.ondblclick = () => startRenameJob(id, name);
+}
+
+function startRenameJob(id, currentName) {
+  const el = $("exp-name");
+  el.ondblclick = null;
+  const current = currentName || "";
+  el.innerHTML = `
+    <input id="rename-input" type="text"
+           value="${current.replace(/"/g, "&quot;")}"
+           placeholder="Nombre del job…"
+           class="text-sm font-semibold text-slate-800 bg-transparent border-b-2
+                  border-brand-500 outline-none px-0 w-52 max-w-xs" />`;
+  const input = $("rename-input");
+  input.focus();
+  input.select();
+  const commit = () => {
+    const name = input.value.trim();
+    // Actualización optimista — UI y localStorage inmediato
+    setJobName(id, name);
+    renderExpName(id, name);
+    // Persistir en la BD
+    fetch(`${_selApiBase}/${id}/nombre`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nombre: name }),
+    })
+      .then(r => { if (!r.ok) throw new Error(r.statusText); return r.json(); })
+      .then(job => {
+        // Actualizar sidebar con el nombre recién confirmado por el servidor
+        loadJobs();
+      })
+      .catch(() => {
+        toast("No se pudo guardar en la BD", "El nombre quedó guardado localmente", "info");
+      });
+  };
+  input.addEventListener("blur",    commit, { once: true });
+  input.addEventListener("keydown", e => {
+    if (e.key === "Enter")  { e.preventDefault(); input.blur(); }
+    if (e.key === "Escape") { e.preventDefault(); input.removeEventListener("blur", commit); renderExpName(id, currentName); }
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════
 // UTILS
 // ═══════════════════════════════════════════════════════════════════
 function fmtRel(iso) {
@@ -784,8 +873,9 @@ function jobHtml(e) {
   const sub = ok ? `${e.total_afiliados} afil &middot; ${e.total_pdfs} PDFs`
             : ko ? `<span class="text-red-400 truncate">${e.mensaje_error || "Error"}</span>`
             : s.label;
-  const shortId = e.id.slice(0, 8);
-  const tipLabel = ok ? `${shortId} · ${e.total_pdfs} PDFs` : `${shortId} · ${s.label}`;
+  const shortId    = e.id.slice(0, 8);
+  const customName = e.nombre || null;
+  const tipLabel   = ok ? `${customName || shortId} · ${e.total_pdfs} PDFs` : `${customName || shortId} · ${s.label}`;
   const spinClass = s.spin ? " spin" : "";
   const icon = `
     <div class="shrink-0 h-8 w-8 rounded-lg ${s.iconBg} flex items-center justify-center">
@@ -813,10 +903,18 @@ function jobHtml(e) {
         <div class="jrow flex items-center gap-2.5">
           ${icon}
           <div class="s-label flex-1 min-w-0 pr-6">
-            <div class="flex items-center justify-between gap-1">
-              <span class="text-sm font-semibold text-slate-800 tracking-tight truncate">${shortId}<span class="text-slate-400 font-normal">&hellip;</span></span>
-              <span class="text-xs text-slate-400 shrink-0">${fmtRel(e.creado_en)}</span>
-            </div>
+            ${customName ? `
+              <div class="text-sm font-semibold text-slate-800 tracking-tight leading-snug break-words job-custom-name">${customName}</div>
+              <div class="flex items-center justify-between gap-1 mt-0.5">
+                <span class="text-xs font-mono text-slate-400">${shortId}&hellip;</span>
+                <span class="text-xs text-slate-400 shrink-0">${fmtRel(e.creado_en)}</span>
+              </div>
+            ` : `
+              <div class="flex items-center justify-between gap-1">
+                <span class="text-sm font-semibold text-slate-800 tracking-tight truncate">${shortId}<span class="text-slate-400 font-normal">&hellip;</span></span>
+                <span class="text-xs text-slate-400 shrink-0">${fmtRel(e.creado_en)}</span>
+              </div>
+            `}
             <div class="job-meta mt-0.5 text-xs text-slate-400 truncate">${sub}</div>
           </div>
         </div>
@@ -945,10 +1043,7 @@ async function selJob(id) {
   try { job = await apiGet(`${_selApiBase}/${id}`); } catch {}
 
   if (job) {
-    const modLabel = _selApiBase.includes("findrisc")
-      ? `<span class="ml-2 text-xs font-semibold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700">FINDRISC</span>`
-      : `<span class="ml-2 text-xs font-semibold px-1.5 py-0.5 rounded-full bg-brand-100 text-brand-700">Demanda Inducida</span>`;
-    $("exp-name").innerHTML = `job_${id}` + modLabel;
+    renderExpName(id, job.nombre ?? null);
     $("exp-dl").href = `${_selApiBase}/${id}/download`;
 
     const disabled = job.estado !== "completed";

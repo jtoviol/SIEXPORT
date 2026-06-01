@@ -7,7 +7,7 @@ from threading import Lock
 
 from efdi.config import settings
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_version (version INTEGER PRIMARY KEY);
@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS extracciones (
     total_lotes INTEGER NOT NULL DEFAULT 0,
     tipo TEXT NOT NULL DEFAULT 'demanda_inducida',
     modo_pdf TEXT NOT NULL,
+    nombre TEXT,
     estado TEXT NOT NULL,
     total_atenciones INTEGER NOT NULL DEFAULT 0,
     total_afiliados INTEGER NOT NULL DEFAULT 0,
@@ -71,6 +72,11 @@ class Database:
         if current_version < 3:
             try:
                 conn.execute("ALTER TABLE extracciones ADD COLUMN tipo TEXT NOT NULL DEFAULT 'demanda_inducida'")
+            except Exception:
+                pass
+        if current_version < 4:
+            try:
+                conn.execute("ALTER TABLE extracciones ADD COLUMN nombre TEXT")
             except Exception:
                 pass
 

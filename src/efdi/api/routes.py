@@ -15,6 +15,7 @@ from efdi.api.schemas import (
     DiagnosticsResp,
     ExtraccionResp,
     HealthResp,
+    RenombrarJobReq,
 )
 from efdi.config import settings
 from efdi.domain.models import Atencion, EstadoExtraccion, Extraccion, Lote
@@ -366,6 +367,21 @@ async def cancelar_extraccion(job_id: UUID) -> dict[str, object]:
         "cancelado": True,
         "mensaje": "La cancelación se aplicará al terminar el lote actual",
     }
+
+
+@router.patch(
+    "/extractions/{job_id}/nombre",
+    response_model=ExtraccionResp,
+    tags=["extracciones"],
+    summary="Renombrar una extracción",
+)
+async def renombrar_extraccion(job_id: UUID, req: RenombrarJobReq) -> ExtraccionResp:
+    job = store.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Extracción no encontrada")
+    store.rename(job_id, req.nombre or None)
+    job = store.get(job_id)
+    return ExtraccionResp(**job.model_dump())
 
 
 @router.delete(

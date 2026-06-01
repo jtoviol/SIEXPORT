@@ -8,7 +8,7 @@ from uuid import UUID, uuid4
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, status
 from fastapi.responses import FileResponse
 
-from efdi.api.schemas import CrearExtraccionReq, ExtraccionResp
+from efdi.api.schemas import CrearExtraccionReq, ExtraccionResp, RenombrarJobReq
 from efdi.config import settings
 from efdi.domain.models import EstadoExtraccion, Extraccion, ExtraccionTipo, Lote, ModoPdf
 from efdi.infrastructure.job_store import store
@@ -158,6 +158,20 @@ async def descargar_lote_findrisc(job_id: UUID, numero: int) -> FileResponse:
         filename=f"findrisc_lote_{numero:03d}_{job_id}.zip",
         media_type="application/zip",
     )
+
+
+@router.patch(
+    "/extractions/{job_id}/nombre",
+    response_model=ExtraccionResp,
+    summary="Renombrar una extracción FINDRISC",
+)
+async def renombrar_extraccion_findrisc(job_id: UUID, req: RenombrarJobReq) -> ExtraccionResp:
+    job = store.get(job_id)
+    if job is None or job.tipo != ExtraccionTipo.FINDRISC:
+        raise HTTPException(status_code=404, detail="Extracción FINDRISC no encontrada")
+    store.rename(job_id, req.nombre or None)
+    job = store.get(job_id)
+    return ExtraccionResp(**job.model_dump())
 
 
 @router.post(

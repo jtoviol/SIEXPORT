@@ -250,6 +250,7 @@ class Extraccion(BaseModel):
     total_lotes: int = 0
     tipo: ExtraccionTipo = ExtraccionTipo.DEMANDA_INDUCIDA
     modo_pdf: ModoPdf = ModoPdf.UNO_POR_ATENCION
+    nombre: str | None = None
     estado: EstadoExtraccion = EstadoExtraccion.PENDING
     total_atenciones: int = 0
     total_afiliados: int = 0
