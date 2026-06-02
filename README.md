@@ -155,7 +155,7 @@ DB_DRIVER=ODBC Driver 17 for SQL Server
 
 DATA_DIR=./data             # Directorio de salida de ZIPs y PDFs
 API_HOST=0.0.0.0
-API_PORT=8000
+API_PORT=8765
 LOG_LEVEL=INFO
 
 LOTE_WORKERS=2              # Lotes procesados en paralelo
@@ -169,39 +169,38 @@ PDF_PARALLEL_THRESHOLD=100  # Mínimo de afiliados para activar Pool
 
 ## Cómo correr
 
-### Desarrollo (auto-reload)
+### Desarrollo (con auto-reload)
 
 ```bash
-python -m efdi.main
-
-# O con uvicorn directo
-uvicorn efdi.main:app --reload --host 0.0.0.0 --port 8000
+python3 -m efdi.main
 ```
 
-### Producción (multi-worker)
+O con uvicorn directo:
 
 ```bash
-uvicorn efdi.main:app --host 0.0.0.0 --port 8000 --workers 4
+uvicorn efdi.main:app --reload --host 127.0.0.1 --port 8765
 ```
 
-> Ajustá `--workers` según los cores de la máquina (regla práctica: `2 * num_cores + 1`).
-> Los workers de uvicorn son para servir HTTP en paralelo; son independientes de `LOTE_WORKERS` y `PDF_WORKERS` del `.env`, que controlan el procesamiento de cada extracción.
+### Producción
+
+```bash
+uvicorn efdi.main:app --host 0.0.0.0 --port 8765 --workers 4
+```
 
 ### URLs
 
 | URL | Qué tiene |
 |---|---|
-| `http://localhost:8000/` | **Vista web** |
-| `http://localhost:8000/docs` | Swagger interactivo (todos los módulos) |
-| `http://localhost:8000/health` | Estado de la API y modo |
-| `http://localhost:8000/db/ping` | Test de conectividad SQL Server |
-| `http://localhost:8000/diagnostics` | Diagnóstico completo (DB, disco, métricas) |
+| `http://127.0.0.1:8765/` | **Vista web** |
+| `http://127.0.0.1:8765/docs` | Swagger |
+| `http://127.0.0.1:8765/health` | Status |
+| `http://127.0.0.1:8765/db/ping` | Test SQL Server |
 
 ---
 
 ## Cómo usar (vista web)
 
-1. Abrir `http://localhost:8000/`
+1. Abrir `http://127.0.0.1:8765/`
 2. Seleccionar el módulo en las pestañas superiores: **Demanda Inducida** o **FINDRISC**
 3. Hacer clic en **Nueva extracción** → elegir rango de fechas → Generar
 4. La vista muestra en tiempo real el progreso de cada lote con su fase actual
@@ -258,7 +257,7 @@ DELETE /findrisc/extractions/{id}
 ### Ejemplo: crear extracción FINDRISC
 
 ```bash
-curl -X POST http://localhost:8000/findrisc/extractions \
+curl -X POST http://127.0.0.1:8765/findrisc/extractions \
   -H "Content-Type: application/json" \
   -d '{"desde": "2026-05-01", "hasta": "2026-05-31"}'
 ```
@@ -310,7 +309,7 @@ pip install -e ".[sqlserver]"
 
 ```bash
 # Debe responder "ok": true
-curl http://localhost:8000/db/ping
+curl http://127.0.0.1:8765/db/ping
 ```
 
 ---
@@ -373,7 +372,7 @@ uvicorn efdi.main:app --port 8888
 
 **La vista web no carga:**
 ```bash
-curl -I http://localhost:8000/
+curl -I http://127.0.0.1:8765/
 # Debe responder HTTP 200 text/html
 ```
 

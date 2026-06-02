@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     templates_dir: Path = Field(default=Path("./src/efdi/templates"))
 
     api_host: str = "0.0.0.0"
-    api_port: int = 8000
+    api_port: int = 8765
     log_level: str = "INFO"
 
     # Paralelización de PDFs: 0 = desactivado (secuencial), N = workers fijos, -1 = auto
