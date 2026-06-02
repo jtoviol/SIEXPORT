@@ -50,6 +50,9 @@ def _procesar_lote(job: Extraccion, lote: Lote, pool: "mp.pool.Pool | None" = No
     store.save_lote(lote)
 
     try:
+        # Fase 1 — consulta a la DB
+        lote.fase = "Consultando base de datos…"
+        store.save_lote(lote)
         repo = get_repository()
         atenciones = repo.obtener_atenciones(
             desde=job.desde,
@@ -60,33 +63,37 @@ def _procesar_lote(job: Extraccion, lote: Lote, pool: "mp.pool.Pool | None" = No
         lote.total_atenciones = len(atenciones)
 
         if not atenciones:
-            # Lote vacío (rango sin datos en ese offset) — se marca completed con 0
+            lote.fase = ""
             lote.estado = EstadoExtraccion.COMPLETED
             lote.completado_en = datetime.now()
             store.save_lote(lote)
             store.save_atenciones(job.id, atenciones)
             return lote
 
-        # Si es el primer lote, guarda muestra para vista de detalle
         if lote.numero == 1:
             store.save_atenciones(job.id, atenciones)
 
         afiliados = agrupar_por_afiliado(atenciones)
         lote.total_afiliados = len(afiliados)
 
-        # Directorio del lote
+        # Fase 2 — generación de PDFs
+        lote.fase = f"Generando PDFs ({len(afiliados)} afiliados)…"
+        store.save_lote(lote)
+
         lote_dir = settings.data_dir / f"job_{job.id}" / f"lote_{lote.numero:03d}"
         lote_dir.mkdir(parents=True, exist_ok=True)
 
-        # 1 PDF por afiliado, multipágina (una página por atención del afiliado)
         tareas: list[tuple[AfiliadoConAtenciones, Path]] = []
         for afiliado in afiliados:
-            # Carpeta por afiliado, PDF nombrado con doc + fecha
             pdf_path = lote_dir / afiliado.doc_key / f"{afiliado.pdf_key}.pdf"
             tareas.append((afiliado, pdf_path))
 
         total_pdfs = _generar_pdfs_por_afiliado(tareas, pool=pool)
         lote.total_pdfs = total_pdfs
+
+        # Fase 3 — empaquetado ZIP
+        lote.fase = "Empaquetando ZIP…"
+        store.save_lote(lote)
         log.info(
             "lote.pdfs_done",
             extra={

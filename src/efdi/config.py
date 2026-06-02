@@ -36,6 +36,11 @@ class Settings(BaseSettings):
     # Lotes en paralelo: cuántos lotes se procesan simultáneamente (1 = secuencial)
     lote_workers: int = 2
 
+    # Autenticación básica
+    auth_user: str = Field(default="admin")
+    auth_password: str = Field(default="Admin123123")
+    auth_secret: str = Field(default="")   # Si vacío, se genera al arrancar (sesiones no persisten al reiniciar)
+
     @property
     def db_dsn(self) -> str:
         return (

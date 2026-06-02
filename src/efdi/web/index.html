@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>SIEXPORT — Sistema Inteligente de Exportación de Facturación</title>
+  <title>SIEDFASER — Sistema Inteligente de Exportación de Datos para Facturación de Seragil</title>
+  <link rel="icon" type="image/png" href="/static/siedfaser_logo.png" />
   <script src="https://unpkg.com/@lottiefiles/dotlottie-wc@0.9.14/dist/dotlottie-wc.js" type="module"></script>
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
@@ -188,22 +189,21 @@
              background: linear-gradient(145deg, #e4eef8 0%, #eef3f9 35%, #f1f5f9 65%, #e8f0f7 100%)">
 
 <!-- ═══ HEADER ═══ -->
-<header class="h-20 shrink-0 bg-white border-b border-slate-200 flex items-center px-4 gap-3 z-20"
+<header class="h-24 shrink-0 bg-white border-b border-slate-200 flex items-center px-4 gap-3 z-20"
         style="box-shadow:0 1px 4px rgba(0,0,0,.05)">
   <!-- Logo -->
   <div class="flex items-center gap-3 shrink-0">
-    <img src="/static/siexport_logo.jpeg" alt="SIEXPORT" class="h-16 w-auto object-contain" />
-    <div class="flex flex-col leading-tight">
-      <span class="text-xl font-black tracking-wide">
-        <span style="color:#22a84a">SI</span><span style="color:#1a2f6e">EXPORT</span>
-      </span>
-      <span class="text-xs font-medium" style="color:#1a2f6e">
-        Sistema inteligente de exportación de
-        <span style="color:#22a84a" class="font-semibold">datos</span>
-        para
-        <span style="color:#22a84a" class="font-semibold">facturación</span>
-      </span>
-    </div>
+    <img src="/static/siedfaser_logo.png"
+         alt="SIEDFASER · Sistema Inteligente de Exportación de Datos para Facturación de Seragil"
+         style="height:3rem;width:auto" class="object-contain" />
+    <span class="hidden md:block text-[12px] font-medium leading-snug" style="color:#64748b">
+      Sistema inteligente de exportación de
+      <span style="color:#22a84a" class="font-semibold">datos</span><br/>
+      para
+      <span style="color:#1a2f6e" class="font-semibold">facturación</span>
+      de
+      <span style="color:#22a84a" class="font-semibold">Seragil</span>
+    </span>
   </div>
   <!-- Tabs centrados (solo desktop) -->
   <nav class="flex-1 hidden sm:flex items-center justify-center gap-1">
@@ -211,17 +211,33 @@
             class="tab-btn active px-3.5 py-1.5 text-sm font-medium outline-none whitespace-nowrap rounded-full transition-all">
       Demanda Inducida
     </button>
-    <button disabled title="Proximo modulo"
-            class="px-3.5 py-1.5 text-sm text-slate-300 cursor-not-allowed whitespace-nowrap select-none rounded-full">
-      Vacunacion
+    <button data-tab="findrisc" onclick="switchTab('findrisc')"
+            class="tab-btn px-3.5 py-1.5 text-sm font-medium outline-none whitespace-nowrap rounded-full transition-all">
+      FINDRISC
     </button>
     <button disabled title="Proximo modulo"
             class="px-3.5 py-1.5 text-sm text-slate-300 cursor-not-allowed whitespace-nowrap select-none rounded-full">
       Control Prenatal
     </button>
   </nav>
-  <!-- Health badge -->
-  <div class="shrink-0" id="health-badge"></div>
+  <!-- Health badge + Logout -->
+  <div class="shrink-0 flex items-center gap-2">
+    <div id="health-badge"></div>
+    <form method="POST" action="/auth/logout">
+      <button type="submit"
+              title="Cerrar sesión"
+              class="h-8 px-3 rounded-lg border border-slate-200 bg-white hover:bg-red-50
+                     hover:border-red-200 hover:text-red-600 text-slate-500
+                     text-xs font-medium flex items-center gap-1.5 transition-colors">
+        <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24"
+             stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round"
+                d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
+        </svg>
+        <span class="hidden sm:inline">Salir</span>
+      </button>
+    </form>
+  </div>
 </header>
 
 <!-- ═══ SPLIT LAYOUT ═══ -->
@@ -352,15 +368,19 @@
   <main id="rp" class="flex-1 flex flex-col bg-white sm:rounded-xl overflow-hidden sm:border sm:border-white/80"
         style="box-shadow: 0 2px 12px rgba(35,70,116,.1), 0 0 0 1px rgba(35,70,116,.06)">
 
-    <!-- Empty state -->
-    <div id="rp-empty" class="flex-1 flex flex-col items-center justify-center gap-4 select-none">
-      <svg class="h-16 w-16 text-slate-200" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="0.75">
+    <!-- Empty state — logo watermark gigante de fondo + icono carpeta encima -->
+    <div id="rp-empty" class="relative flex-1 flex flex-col items-center justify-center gap-4 select-none overflow-hidden">
+      <img src="/static/siedfaser_logo.png" alt=""
+           aria-hidden="true"
+           class="absolute inset-0 m-auto w-[95%] max-w-[900px] h-auto object-contain pointer-events-none"
+           style="opacity:.07; filter:grayscale(.2)" />
+      <svg class="relative h-16 w-16 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="0.75">
         <path stroke-linecap="round" stroke-linejoin="round"
               d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
       </svg>
-      <div class="text-center">
-        <p class="text-sm font-medium text-slate-300">Selecciona un job</p>
-        <p class="text-xs text-slate-200 mt-0.5">para explorar sus archivos</p>
+      <div class="relative text-center">
+        <p class="text-sm font-medium text-slate-400">Selecciona un job</p>
+        <p class="text-xs text-slate-300 mt-0.5">para explorar sus archivos</p>
       </div>
     </div>
 
@@ -380,7 +400,7 @@
           <path d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z"/>
         </svg>
         <div class="flex-1 min-w-0">
-          <p id="exp-name" class="text-sm font-semibold text-slate-800 tracking-tight truncate"></p>
+          <p id="exp-name" class="text-sm font-semibold text-slate-800 tracking-tight break-words"></p>
           <p id="exp-meta" class="text-xs text-slate-400 mt-0.5"></p>
         </div>
         <a id="exp-dl" href="#" download
@@ -530,13 +550,13 @@
       </svg>
       <span class="font-medium">Demanda</span>
     </button>
-    <button disabled
-            class="mob-tab flex-1 flex flex-col items-center gap-0.5 py-2.5 cursor-not-allowed opacity-40 select-none">
+    <button data-mob-tab="findrisc" onclick="switchTab('findrisc')"
+            class="mob-tab flex-1 flex flex-col items-center gap-0.5 py-2.5 transition-colors">
       <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
         <path stroke-linecap="round" stroke-linejoin="round"
-              d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+              d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
       </svg>
-      <span>Vacunacion</span>
+      <span>FINDRISC</span>
     </button>
     <button disabled
             class="mob-tab flex-1 flex flex-col items-center gap-0.5 py-2.5 cursor-not-allowed opacity-40 select-none">
@@ -561,6 +581,12 @@
 // ═══════════════════════════════════════════════════════════════════
 const API = "";
 const $ = id => document.getElementById(id);
+
+function getModuleApi() {
+  return activeTab === "findrisc" ? "/findrisc/extractions" : "/extractions";
+}
+// API base capturada al seleccionar un job — persiste en callbacks deferred
+let _selApiBase = "/extractions";
 
 const DOC_COLORS = {
   CC: { pill: "bg-cyan-500 text-white",   soft: "bg-cyan-50 text-cyan-700"   },
@@ -599,6 +625,78 @@ const STATUS = {
     iconPath: `<path stroke-linecap="round" stroke-linejoin="round" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z"/>`,
   },
 };
+
+// ═══════════════════════════════════════════════════════════════════
+// NOMBRES PERSONALIZADOS (localStorage)
+// ═══════════════════════════════════════════════════════════════════
+function _jobNames() {
+  try { return JSON.parse(localStorage.getItem("siexport_job_names") || "{}"); }
+  catch { return {}; }
+}
+function getJobName(id)         { return _jobNames()[id] || null; }
+function setJobName(id, name)   {
+  const n = _jobNames();
+  if (name) n[id] = name; else delete n[id];
+  localStorage.setItem("siexport_job_names", JSON.stringify(n));
+}
+
+function renderExpName(id, nombre) {
+  // nombre viene de la DB; localStorage solo como caché optimista
+  const name = (nombre !== undefined ? nombre : null) ?? getJobName(id);
+  const isFindrisc = _selApiBase.includes("findrisc");
+  const modBadge = isFindrisc
+    ? `<span class="ml-2 text-xs font-semibold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700">FINDRISC</span>`
+    : `<span class="ml-2 text-xs font-semibold px-1.5 py-0.5 rounded-full bg-brand-100 text-brand-700">Demanda Inducida</span>`;
+  const label = name
+    ? `<span class="text-slate-800">${name}</span>`
+    : `<span class="font-mono text-slate-500 text-xs">job_${id.slice(0, 8)}&hellip;</span>`;
+  const pencil = `<svg class="inline-block ml-1.5 h-3 w-3 text-slate-300 hover:text-slate-500 transition-colors shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>`;
+  const el = $("exp-name");
+  el.innerHTML = label + pencil + modBadge;
+  el.title = "Doble clic para renombrar";
+  el.className = "text-sm font-semibold tracking-tight break-words cursor-text select-none flex items-center gap-0 flex-wrap";
+  el.ondblclick = () => startRenameJob(id, name);
+}
+
+function startRenameJob(id, currentName) {
+  const el = $("exp-name");
+  el.ondblclick = null;
+  const current = currentName || "";
+  el.innerHTML = `
+    <input id="rename-input" type="text"
+           value="${current.replace(/"/g, "&quot;")}"
+           placeholder="Nombre del job…"
+           class="text-sm font-semibold text-slate-800 bg-transparent border-b-2
+                  border-brand-500 outline-none px-0 w-52 max-w-xs" />`;
+  const input = $("rename-input");
+  input.focus();
+  input.select();
+  const commit = () => {
+    const name = input.value.trim();
+    // Actualización optimista — UI y localStorage inmediato
+    setJobName(id, name);
+    renderExpName(id, name);
+    // Persistir en la BD
+    fetch(`${_selApiBase}/${id}/nombre`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nombre: name }),
+    })
+      .then(r => { if (!r.ok) throw new Error(r.statusText); return r.json(); })
+      .then(job => {
+        // Actualizar sidebar con el nombre recién confirmado por el servidor
+        loadJobs();
+      })
+      .catch(() => {
+        toast("No se pudo guardar en la BD", "El nombre quedó guardado localmente", "info");
+      });
+  };
+  input.addEventListener("blur",    commit, { once: true });
+  input.addEventListener("keydown", e => {
+    if (e.key === "Enter")  { e.preventDefault(); input.blur(); }
+    if (e.key === "Escape") { e.preventDefault(); input.removeEventListener("blur", commit); renderExpName(id, currentName); }
+  });
+}
 
 // ═══════════════════════════════════════════════════════════════════
 // UTILS
@@ -755,10 +853,40 @@ function switchTab(tabId) {
   document.querySelectorAll(".mob-tab").forEach(btn =>
     btn.classList.toggle("active", btn.dataset.mobTab === tabId)
   );
-  // Reset right panel when switching modules
+
+  // Reset state for new module
   selId = null;
+  prevSt = {};
+  clearTimeout(_poll);
+  clearTimeout(_progressTimer);
+  clearTimeout(_previewTimer);
+  _selApiBase = getModuleApi();
+
+  // Reset formulario izquierdo (fechas, limite, modo Auto/Manual, preview, errores)
+  $("fext").reset();
+  $("limite").value = 25;
+  setModoLimite("auto");
+  setAutoPreview(null);
+  $("ferr").classList.add("hidden");
+  if (formOpen) toggleForm();
+
+  // Reset filtros del arbol + seleccion + panel derecho
+  treeData = null;
+  activeChips.clear();
+  $("filter-text").value = "";
+  $("filter-bar").classList.add("hidden");
+  $("exp-tree").innerHTML = "";
+  $("exp-name").textContent = "";
+  $("exp-meta").textContent = "";
+  $("exp-dl").removeAttribute("href");
+  document.querySelectorAll(".job-item.selected").forEach(el =>
+    el.classList.remove("selected")
+  );
+  $("rp").classList.remove("mopen");
   $("rp-empty").classList.remove("hidden");
   $("rp-content").classList.add("hidden");
+
+  loadJobs();
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -773,8 +901,9 @@ function jobHtml(e) {
   const sub = ok ? `${e.total_afiliados} afil &middot; ${e.total_pdfs} PDFs`
             : ko ? `<span class="text-red-400 truncate">${e.mensaje_error || "Error"}</span>`
             : s.label;
-  const shortId = e.id.slice(0, 8);
-  const tipLabel = ok ? `${shortId} · ${e.total_pdfs} PDFs` : `${shortId} · ${s.label}`;
+  const shortId    = e.id.slice(0, 8);
+  const customName = e.nombre || null;
+  const tipLabel   = ok ? `${customName || shortId} · ${e.total_pdfs} PDFs` : `${customName || shortId} · ${s.label}`;
   const spinClass = s.spin ? " spin" : "";
   const icon = `
     <div class="shrink-0 h-8 w-8 rounded-lg ${s.iconBg} flex items-center justify-center">
@@ -802,10 +931,18 @@ function jobHtml(e) {
         <div class="jrow flex items-center gap-2.5">
           ${icon}
           <div class="s-label flex-1 min-w-0 pr-6">
-            <div class="flex items-center justify-between gap-1">
-              <span class="text-sm font-semibold text-slate-800 tracking-tight truncate">${shortId}<span class="text-slate-400 font-normal">&hellip;</span></span>
-              <span class="text-xs text-slate-400 shrink-0">${fmtRel(e.creado_en)}</span>
-            </div>
+            ${customName ? `
+              <div class="text-sm font-semibold text-slate-800 tracking-tight leading-snug break-words job-custom-name">${customName}</div>
+              <div class="flex items-center justify-between gap-1 mt-0.5">
+                <span class="text-xs font-mono text-slate-400">${shortId}&hellip;</span>
+                <span class="text-xs text-slate-400 shrink-0">${fmtRel(e.creado_en)}</span>
+              </div>
+            ` : `
+              <div class="flex items-center justify-between gap-1">
+                <span class="text-sm font-semibold text-slate-800 tracking-tight truncate">${shortId}<span class="text-slate-400 font-normal">&hellip;</span></span>
+                <span class="text-xs text-slate-400 shrink-0">${fmtRel(e.creado_en)}</span>
+              </div>
+            `}
             <div class="job-meta mt-0.5 text-xs text-slate-400 truncate">${sub}</div>
           </div>
         </div>
@@ -845,7 +982,7 @@ async function confirmDelete() {
   cancelDelete();
   const short = id.slice(0, 8);
   try {
-    const r = await fetch(`/extractions/${id}`, { method: "DELETE" });
+    const r = await fetch(`${_selApiBase}/${id}`, { method: "DELETE" });
     if (!r.ok) {
       const body = await r.json().catch(() => ({}));
       throw new Error(body.detail || r.statusText);
@@ -866,7 +1003,7 @@ async function confirmDelete() {
 
 async function loadJobs() {
   try {
-    const data = await apiGet("/extractions");
+    const data = await apiGet(getModuleApi());
     const empty = $("jempty"), list = $("jlist");
     if (!data.length) {
       list.innerHTML = ""; empty.classList.remove("hidden");
@@ -921,6 +1058,7 @@ function markSel(id) {
 // ═══════════════════════════════════════════════════════════════════
 async function selJob(id) {
   selId = id;
+  _selApiBase = getModuleApi();
   markSel(id);
   $("rp").classList.add("mopen");
   $("rp-empty").classList.add("hidden");
@@ -930,11 +1068,11 @@ async function selJob(id) {
   activeChips.clear();
 
   let job = null;
-  try { job = await apiGet(`/extractions/${id}`); } catch {}
+  try { job = await apiGet(`${_selApiBase}/${id}`); } catch {}
 
   if (job) {
-    $("exp-name").textContent = `job_${id}`;
-    $("exp-dl").href = `/extractions/${id}/download`;
+    renderExpName(id, job.nombre ?? null);
+    $("exp-dl").href = `${_selApiBase}/${id}/download`;
 
     const disabled = job.estado !== "completed";
     $("exp-dl").classList.toggle("opacity-40", disabled);
@@ -959,12 +1097,13 @@ async function selJob(id) {
 let _progressTimer = null;
 let _lastLoteStates = {};
 
-async function showProgress(job) {
+async function showProgress(job, apiBase) {
+  if (!apiBase) apiBase = _selApiBase;
   $("filter-bar").classList.add("hidden");
   clearTimeout(_progressTimer);
 
   let lotes = [];
-  try { lotes = await apiGet(`/extractions/${job.id}/lotes`); } catch {}
+  try { lotes = await apiGet(`${apiBase}/${job.id}/lotes`); } catch {}
 
   renderProgress(job, lotes);
 
@@ -972,7 +1111,7 @@ async function showProgress(job) {
     _progressTimer = setTimeout(async () => {
       if (selId !== job.id) return;
       try {
-        const j = await apiGet(`/extractions/${job.id}`);
+        const j = await apiGet(`${apiBase}/${job.id}`);
         if (j.estado === "completed") {
           $("exp-meta").textContent = `${j.total_afiliados} afiliados · ${j.total_pdfs} PDFs · ${fmtRel(j.creado_en)}`;
           $("exp-dl").classList.remove("opacity-40", "pointer-events-none");
@@ -982,10 +1121,10 @@ async function showProgress(job) {
           $("exp-meta").textContent = STATUS.failed.label;
           showErr(j.mensaje_error);
         } else {
-          showProgress(j);
+          showProgress(j, apiBase);
         }
       } catch {
-        _progressTimer = setTimeout(() => showProgress(job), 45000);
+        _progressTimer = setTimeout(() => showProgress(job, apiBase), 45000);
       }
     }, 45000);
   }
@@ -1020,7 +1159,7 @@ async function confirmarCancelacion() {
   if (!jobId) return;
   cancelarModal();
   try {
-    const r = await fetch(`/extractions/${jobId}/cancel`, { method: "POST" });
+    const r = await fetch(`${_selApiBase}/${jobId}/cancel`, { method: "POST" });
     if (!r.ok) {
       const body = await r.json().catch(() => ({}));
       throw new Error(body.detail || r.statusText);
@@ -1158,7 +1297,7 @@ function renderProgress(job, lotes) {
               ${loteIcon[l.estado] || loteIcon.pending}
               <div class="shrink-0 w-12 font-mono text-xs font-semibold text-slate-700">#${String(l.numero).padStart(3, "0")}</div>
               <div class="flex-1 min-w-0 text-xs text-slate-600 truncate">
-                ${loteLabel[l.estado] || l.estado}
+                ${l.estado === "running" && l.fase ? l.fase : (loteLabel[l.estado] || l.estado)}
                 ${err}
               </div>
             </div>
@@ -1370,7 +1509,7 @@ function renderJobSummary(job) {
         <div>
           <div class="text-slate-400 uppercase tracking-wider text-[10px] mb-0.5">Resultado</div>
           ${resultadoLine}
-          <div class="text-slate-500 tabular-nums">${job.total_afiliados.toLocaleString()} afiliados · ${job.total_atenciones.toLocaleString()} atenciones</div>
+          <div class="text-slate-500 tabular-nums">${job.total_afiliados.toLocaleString()} afiliados · ${job.total_atenciones.toLocaleString()} ${_selApiBase.includes("findrisc") ? "registros" : "atenciones"}</div>
         </div>
         <div>
           <div class="text-slate-400 uppercase tracking-wider text-[10px] mb-0.5">Tiempos</div>
@@ -1383,7 +1522,6 @@ function renderJobSummary(job) {
 
 async function loadTreeWithSummary(id, job) {
   $("filter-bar").classList.add("hidden");
-  // Mostrar resumen inmediato + cargar tree
   $("exp-tree").innerHTML = renderJobSummary(job) + `
     <div class="flex items-center justify-center h-32 gap-2 text-slate-400 text-sm">
       <svg class="h-4 w-4 spin" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -1392,12 +1530,11 @@ async function loadTreeWithSummary(id, job) {
       Cargando archivos&hellip;
     </div>`;
   try {
-    treeData = await apiGet(`/extractions/${id}/files`);
+    treeData = await apiGet(`${_selApiBase}/${id}/files`);
     activeChips.clear();
     $("filter-text").value = "";
     buildChips(treeData);
     const summary = renderJobSummary(job);
-    // Renderizar tree y prepender summary
     applyFilters();
     const treeContent = $("exp-tree").innerHTML;
     $("exp-tree").innerHTML = summary + `<div>${treeContent}</div>`;
@@ -1418,7 +1555,7 @@ async function loadTree(id) {
       Cargando archivos&hellip;
     </div>`;
   try {
-    treeData = await apiGet(`/extractions/${id}/files`);
+    treeData = await apiGet(`${_selApiBase}/${id}/files`);
     activeChips.clear();
     $("filter-text").value = "";
     buildChips(treeData);
@@ -1510,7 +1647,7 @@ function renderTree(data) {
         </svg>
         <span class="flex-1 text-xs font-mono text-slate-600 truncate">${f.name}</span>
         <span class="text-xs text-slate-400 tabular-nums shrink-0">${fmtSz(f.size)}</span>
-        <a href="/extractions/${data.job_id}/files/${folder.name}/${f.name}"
+        <a href="${_selApiBase}/${data.job_id}/files/${folder.name}/${f.name}"
            download="${f.name}" title="Descargar PDF"
            class="dlbtn shrink-0 h-6 w-6 rounded-md flex items-center justify-center
                   text-slate-400 hover:text-brand-700 hover:bg-slate-200 transition-colors">
@@ -1582,7 +1719,7 @@ function fetchAutoPreview() {
   clearTimeout(_previewTimer);
   _previewTimer = setTimeout(async () => {
     try {
-      const r = await fetch(`/extractions/count?desde=${desde}&hasta=${hasta}`);
+      const r = await fetch(`${getModuleApi()}/count?desde=${desde}&hasta=${hasta}`);
       if (!r.ok) { setAutoPreview("err"); setBtnGenDisabled(false); return; }
       setAutoPreview(await r.json());
     } catch { setAutoPreview("err"); }
@@ -1746,7 +1883,7 @@ $("fext").addEventListener("submit", async ev => {
   }
   setGenLoading(true);
   try {
-    const r = await apiPost("/extractions", body);
+    const r = await apiPost(getModuleApi(), body);
     toast("Extraccion iniciada", `ID ${r.id.slice(0, 8)} — generando ${r.limite.toLocaleString()} registros`, "success");
     toggleForm();
     await loadJobs();
