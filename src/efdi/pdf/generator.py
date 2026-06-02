@@ -337,12 +337,12 @@ def generar_pdf_afiliado(afiliado: AfiliadoConAtenciones, output_path: Path) -> 
         leftMargin=10*mm, rightMargin=10*mm,
         topMargin=8*mm, bottomMargin=8*mm,
         title=f"Demanda inducida — {afiliado.pdf_key}",
-        author="SIEXPORT",
+        author="SIEDFASER",
     )
     elems = _construir_pagina_multi(afiliado)
     elems.append(Spacer(1, 6))
     elems.append(Paragraph(
-        "Documento generado automáticamente por SIEXPORT — Sistema Inteligente de Exportación de Facturación",
+        "Documento generado automáticamente por SIEDFASER — Sistema Inteligente de Exportación de Datos para Facturación de Seragil",
         STYLE_FOOTER,
     ))
     doc.build(elems)

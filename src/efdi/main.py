@@ -23,7 +23,7 @@ logging.basicConfig(
 )
 
 app = FastAPI(
-    title="SIEXPORT — Sistema Inteligente de Exportación de Facturación",
+    title="SIEDFASER — Sistema Inteligente de Exportación de Datos para Facturación de Seragil",
     description=(
         "Sistema de exportación que toma datos desde SQL Server, los agrupa por afiliado "
         "y genera un .zip con un PDF por afiliado."

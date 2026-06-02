@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>SIEXPORT — Sistema Inteligente de Exportación de Facturación</title>
+  <title>SIEDFASER — Sistema Inteligente de Exportación de Datos para Facturación de Seragil</title>
   <link rel="icon" type="image/jpeg" href="/static/siexport_logo.jpeg" />
   <script src="https://unpkg.com/@lottiefiles/dotlottie-wc@0.9.14/dist/dotlottie-wc.js" type="module"></script>
   <script src="https://cdn.tailwindcss.com"></script>
@@ -193,16 +193,18 @@
         style="box-shadow:0 1px 4px rgba(0,0,0,.05)">
   <!-- Logo -->
   <div class="flex items-center gap-3 shrink-0">
-    <img src="/static/siexport_logo.jpeg" alt="SIEXPORT" class="h-16 w-auto object-contain" />
+    <img src="/static/siexport_logo.jpeg" alt="SIEDFASER" class="h-16 w-auto object-contain" />
     <div class="flex flex-col leading-tight">
       <span class="text-xl font-black tracking-wide">
-        <span style="color:#22a84a">SI</span><span style="color:#1a2f6e">EXPORT</span>
+        <span style="color:#22a84a">SIED</span><span style="color:#1a2f6e">FASER</span>
       </span>
       <span class="text-xs font-medium" style="color:#1a2f6e">
         Sistema inteligente de exportación de
         <span style="color:#22a84a" class="font-semibold">datos</span>
         para
         <span style="color:#22a84a" class="font-semibold">facturación</span>
+        de
+        <span style="color:#22a84a" class="font-semibold">Seragil</span>
       </span>
     </div>
   </div>
@@ -850,14 +852,39 @@ function switchTab(tabId) {
   document.querySelectorAll(".mob-tab").forEach(btn =>
     btn.classList.toggle("active", btn.dataset.mobTab === tabId)
   );
+
   // Reset state for new module
   selId = null;
   prevSt = {};
   clearTimeout(_poll);
+  clearTimeout(_progressTimer);
+  clearTimeout(_previewTimer);
   _selApiBase = getModuleApi();
+
+  // Reset formulario izquierdo (fechas, limite, modo Auto/Manual, preview, errores)
+  $("fext").reset();
+  $("limite").value = 25;
+  setModoLimite("auto");
+  setAutoPreview(null);
+  $("ferr").classList.add("hidden");
+  if (formOpen) toggleForm();
+
+  // Reset filtros del arbol + seleccion + panel derecho
+  treeData = null;
+  activeChips.clear();
+  $("filter-text").value = "";
+  $("filter-bar").classList.add("hidden");
+  $("exp-tree").innerHTML = "";
+  $("exp-name").textContent = "";
+  $("exp-meta").textContent = "";
+  $("exp-dl").removeAttribute("href");
+  document.querySelectorAll(".job-item.selected").forEach(el =>
+    el.classList.remove("selected")
+  );
+  $("rp").classList.remove("mopen");
   $("rp-empty").classList.remove("hidden");
   $("rp-content").classList.add("hidden");
-  clearTimeout(_progressTimer);
+
   loadJobs();
 }
 

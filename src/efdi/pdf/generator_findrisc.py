@@ -444,12 +444,12 @@ def generar_pdf_findrisc(afiliado: AfiliadoConFindrisc, output_path: Path) -> Pa
         leftMargin=10*mm, rightMargin=10*mm,
         topMargin=8*mm, bottomMargin=8*mm,
         title=f"FINDRISC — {afiliado.pdf_key}",
-        author="SIEXPORT",
+        author="SIEDFASER",
     )
     elems = _construir_pagina_findrisc(afiliado)
     elems.append(Spacer(1, 6))
     elems.append(Paragraph(
-        "Documento generado automáticamente por SIEXPORT — Evaluación de Riesgo FINDRISC",
+        "Documento generado automáticamente por SIEDFASER — Evaluación de Riesgo FINDRISC",
         STYLE_FOOTER,
     ))
     doc.build(elems)

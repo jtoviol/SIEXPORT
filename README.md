@@ -1,4 +1,4 @@
-# SIEXPORT — Sistema Inteligente de Exportación de Facturación
+# SIEDFASER — Sistema Inteligente de Exportación de Datos para Facturación de Seragil
 
 Herramienta web que extrae registros desde SQL Server (BD `seragil`), los agrupa por afiliado y genera un `.zip` con un PDF por paciente. Soporta múltiples módulos de extracción, cada uno con su propia consulta, modelo de datos y diseño de PDF.
 
