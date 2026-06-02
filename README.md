@@ -49,7 +49,16 @@ Soporta múltiples módulos de extracción — cada módulo tiene su consulta, s
 
 ### Demanda Inducida
 
-Extrae registros de `AVS_REGISTRO_SERAGIL` cruzados con `AVS_PROGRAMA_ASOCIADO_DEMIND`. Genera un PDF por afiliado por día con todas sus atenciones y el catálogo de 124 programas marcado.
+Extrae registros de `AVS_REGISTRO_SERAGIL` cruzados con `AVS_PROGRAMA_ASOCIADO_DEMIND`. Genera un PDF por afiliado por día (formato "SOPORTE DEMANDA INDUCIDA") con:
+
+- **Header limpio** consistente con FINDRISC (logo Mutualser + título centrado en azul institucional).
+- **Datos del afiliado**: documento, nombre, sexo, edad, contacto, departamento/municipio.
+- **Tabla de atenciones del día** con todos los programas, IPS, encuestador y los tres flags (Not. / Urg. / C.Ext.) marcados según lo que trae la BD.
+- **Catálogo de 124 programas DI** con los del afiliado resaltados en verde.
+
+> **Flags Not./Urg./C.Ext.** se leen vía `_to_bool(...)` que normaliza correctamente `'SI'/'NO'`/bit/null. Antes había un bug que marcaba como ✓ cualquier valor no nulo (incluyendo `'NO'`) — corregido.
+
+> **Wrap en celdas**: si un nombre largo de programa o IPS no entra en su columna, se parte en varias líneas dentro de la misma celda en vez de derramar al espacio adyacente.
 
 ```
 lote_001.zip
@@ -63,29 +72,30 @@ lote_001.zip
 **Filtro fuente:** `FLG_REGIND_DEMIND = 'SI'`
 **API:** `/extractions/...`
 
-### FINDRISC — Evaluación de Riesgo de Diabetes Tipo 2
+### FINDRISC — Encuesta de Riesgo de Diabetes Tipo 2
 
-Extrae registros de `SRG_FORMATO_FINDRISC`. Genera un PDF por afiliado con datos demográficos, mediciones antropométricas, respuestas al cuestionario FINDRISC, desglose de puntajes por criterio y clasificación de riesgo con color indicativo.
+Extrae registros de `SRG_FORMATO_FINDRISC` y genera un PDF por afiliado replicando el formato oficial impreso de Mutualser ("SOPORTE ENCUESTAS FINDRISC"). El PDF contiene:
+
+- **Header**: logo Mutualser + título centrado, sin colores institucionales agresivos.
+- **Datos generales del afiliado**: nombre, sexo, edad, municipio, IPS, documento, teléfonos, correo.
+- **8 preguntas FINDRISC**:
+  - Preguntas 1–3 (Edad, IMC, Perímetro): muestran el valor literal de la BD.
+  - Preguntas 4–8 (Actividad física, Verduras, Medicamentos, Glucosa, Antecedente diabetes): marcan en verde la opción que coincide con el valor de la BD.
+- **Recuadro de Puntaje total**: muestra el `VLR_PUNTAJE_OBTENIDO` que ya viene calculado de la BD.
+
+> **Política de fidelidad de datos:** el PDF FINDRISC no inventa, no calcula y no clasifica nada. Cada campo se imprime literal como viene del SELECT (`1,72`, `0`, `NO`, etc.). La clasificación de riesgo (BAJO / MODERADO / etc.) **NO se incluye** porque la BD no la trae.
 
 ```
 lote_001.zip
 ├── CC_12345678/
-│   └── CC_12345678_2026-05-15.pdf   ← puntaje total + nivel de riesgo
+│   └── CC_12345678_2026-05-15.pdf
 └── …
 ```
 
 **Filtro fuente:** `FLG_FORMATO_COLDRISC = 'SI'`
 **API:** `/findrisc/extractions/...`
 
-**Clasificación de riesgo FINDRISC:**
-
-| Puntaje | Nivel | Riesgo estimado DM2 |
-|:-:|:--|:-:|
-| **0 – 6**   | BAJO | ~1% |
-| **7 – 11**  | LIGERAMENTE ELEVADO | ~4% |
-| **12 – 14** | MODERADO | ~17% |
-| **15 – 20** | ALTO | ~33% |
-| **≥ 21**    | MUY ALTO | ~50% |
+**Columnas que devuelve el SELECT:** 20 campos del reporte (Nombre, Sexo, Edad, Municipio, IPS, Tipo y Nº de identificación, Teléfonos 1 y 2, Correo, Peso, Talla, IMC, Perímetro, Actividad física, Frecuencia de verduras, Medicamento hipertensión, Glucosa alta, Antecedente diabetes, Puntaje total) + 4 columnas internas para agrupar (`SEQ_SERAGIL`, `COD_TIPO_IDENTIFICACION`, `FEC_REGISTRO_INFORMACION`, `NUM_REGISTRO`).
 
 ---
 
@@ -159,13 +169,23 @@ PDF_PARALLEL_THRESHOLD=100  # Mínimo de afiliados para activar Pool
 
 ## Cómo correr
 
+### Desarrollo (auto-reload)
+
 ```bash
-# Desarrollo (auto-reload)
 python -m efdi.main
 
 # O con uvicorn directo
 uvicorn efdi.main:app --reload --host 0.0.0.0 --port 8000
 ```
+
+### Producción (multi-worker)
+
+```bash
+uvicorn efdi.main:app --host 0.0.0.0 --port 8000 --workers 4
+```
+
+> Ajustá `--workers` según los cores de la máquina (regla práctica: `2 * num_cores + 1`).
+> Los workers de uvicorn son para servir HTTP en paralelo; son independientes de `LOTE_WORKERS` y `PDF_WORKERS` del `.env`, que controlan el procesamiento de cada extracción.
 
 ### URLs
 
@@ -321,7 +341,7 @@ D:\proyecto\
     │   └── repository_findrisc.py      # Consulta FINDRISC (SQL Server + mock)
     ├── pdf/
     │   ├── generator.py                # PDF Demanda Inducida — catálogo 124 programas
-    │   ├── generator_findrisc.py       # PDF FINDRISC — puntajes + clasificación de riesgo
+    │   ├── generator_findrisc.py       # PDF FINDRISC — formato SOPORTE ENCUESTAS, fiel a la BD
     │   ├── parallel.py                 # Worker multiprocessing Demanda Inducida
     │   ├── parallel_findrisc.py        # Worker multiprocessing FINDRISC
     │   └── programas_catalogo.py       # Carga programas.txt (124 programas)

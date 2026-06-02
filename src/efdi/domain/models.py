@@ -126,80 +126,41 @@ class ExtraccionTipo(str, Enum):
 
 
 class RegistroFindrisc(BaseModel):
-    """Una fila del SELECT FINDRISC — evaluación de riesgo de diabetes tipo 2."""
+    """Una fila del reporte FINDRISC — 20 campos del reporte + metadata interna."""
 
     model_config = ConfigDict(use_enum_values=True, str_strip_whitespace=True)
 
+    # ── Metadata interna (no va al reporte; usada para agrupar/nombrar archivos) ──
     seq_seragil: int
-    consecutivo: int
-
-    # Identificación
     tipo_documento: TipoDocumento
-    num_documento: str
-    primer_nombre: str
-    segundo_nombre: str | None = None
-    primer_apellido: str
-    segundo_apellido: str | None = None
-    fecha_nacimiento: date | None = None
-    edad: int = Field(default=0, ge=0, le=120)
-    genero: str | None = None
-
-    # Fechas del formulario
-    fecha_realizacion: date | None = None
     fecha_registro: date
 
-    # Contacto y ubicación
-    direccion: str | None = None
-    telefono_1: str | None = None
-    correo: str | None = None
-    departamento: str | None = None
+    # ── 20 columnas del reporte ───────────────────────────────────────────────
+    nombre_completo: str
+    sexo: str | None = None
+    edad: int = Field(default=0, ge=0, le=120)
     municipio: str | None = None
-    curso_vida: str | None = None
-    regimen: str | None = None
-
-    # Proveedor / encuestador
     ips: str | None = None
-    regional: str | None = None
-    encuestador_nombre: str | None = None
-    cargo_encuestador: str | None = None
-
-    # Mediciones antropométricas
-    peso: float | None = None
-    talla: float | None = None
-    imc: float | None = None
-    perimetro_cintura: float | None = None
-
-    # Cuestionario FINDRISC
+    tipo_identificacion_desc: str | None = None       # "CEDULA DE CIUDADANIA"
+    num_documento: str
+    telefono_1: str | None = None
+    telefono_2: str | None = None
+    correo: str | None = None
+    # Valores antropométricos como string literal de la BD (sin parseo)
+    peso: str | None = None
+    talla: str | None = None
+    imc: str | None = None
+    perimetro_cintura: str | None = None
     actividad_fisica: bool = False
-    frecuencia_verduras: str | None = None        # "TODOS LOS DIAS" / "NO TODOS LOS DIAS"
+    frecuencia_verduras: str | None = None            # "TODOS LOS DIAS" / "NO TODOS LOS DIAS"
     medicamentos_hipertension: bool = False
     glucosa_alta: bool = False
-    antecedente_diabetes: str | None = None       # texto decodificado del CASE
-    aplica_prueba: bool = False
-
-    # Puntajes individuales y total
-    puntaje_edad: int = 0
-    puntaje_imc: int = 0
-    puntaje_perimetro: int = 0
-    puntaje_actividad_fisica: int = 0
-    puntaje_verduras: int = 0
-    puntaje_medicamentos: int = 0
-    puntaje_glucosa: int = 0
-    puntaje_diabetes: int = 0
+    antecedente_diabetes: str | None = None           # texto decodificado
     puntaje_total: int = 0
 
     @property
     def doc_key(self) -> str:
         return f"{self.tipo_documento}_{self.num_documento}"
-
-    @property
-    def nombre_completo(self) -> str:
-        return " ".join(
-            p for p in [
-                self.primer_nombre, self.segundo_nombre or "",
-                self.primer_apellido, self.segundo_apellido or "",
-            ] if p
-        ).strip()
 
 
 class AfiliadoConFindrisc(BaseModel):

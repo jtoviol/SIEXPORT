@@ -160,6 +160,23 @@ def _normalizar_modo_ingreso(s: str | None) -> ModoIngreso | None:
         return None
 
 
+def _to_bool(v: object) -> bool:
+    """Normaliza flags de SQL Server. Trata 'SI'/'S'/'1'/'TRUE' como True
+    y 'NO'/'N'/'0'/'FALSE'/None/'' como False.
+
+    bool() de Python da True para cualquier string no vacío — por eso 'NO'
+    salía como True. Esta función lee el contenido real del campo."""
+    if v is None:
+        return False
+    if isinstance(v, bool):
+        return v
+    if isinstance(v, int):
+        return v != 0
+    if isinstance(v, str):
+        return v.strip().upper() in ("SI", "S", "1", "TRUE", "YES", "Y")
+    return False
+
+
 def _fechas_dt(desde: date, hasta: date):
     """Devuelve (inicio, fin) como datetime igual que SERAGIL: 00:00:00 y 23:59:59."""
     from datetime import datetime as _dt
@@ -254,9 +271,9 @@ class SqlServerRepository:
                 cargo_encuestador=(r.get("DES_CARGO_USUARIO") or "").strip() or None,
                 rias_grupo_riesgo=(r.get("DES_RIAS_GRUPO_RIESGO") or "").strip() or None,
                 otra_rias=(r.get("DES_OTRA_RIAS_GRUPO_RIESGO") or "").strip() or None,
-                notificacion_obligatoria=bool(r.get("FLG_NOTIFICACION_OBLIGATORIA")),
-                recuperacion_urgencias=bool(r.get("FLG_RECUPERACION_URGENCIAS")),
-                recuperacion_consulta_externa=bool(r.get("FLG_RECUPERACION_CONSULTA_EXTERNA")),
+                notificacion_obligatoria=_to_bool(r.get("FLG_NOTIFICACION_OBLIGATORIA")),
+                recuperacion_urgencias=_to_bool(r.get("FLG_RECUPERACION_URGENCIAS")),
+                recuperacion_consulta_externa=_to_bool(r.get("FLG_RECUPERACION_CONSULTA_EXTERNA")),
             ))
         log.info("sqlserver.fetched", extra={"rows": len(atenciones)})
         return atenciones

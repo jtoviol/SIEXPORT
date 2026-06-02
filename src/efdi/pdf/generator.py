@@ -24,13 +24,13 @@ from reportlab.platypus import (
 from efdi.domain.models import AfiliadoConAtenciones, Atencion
 from efdi.pdf.programas_catalogo import cargar_catalogo
 
-# Paleta
-COLOR_PRIMARY = colors.HexColor("#1A4480")
+# Paleta (unificada con FINDRISC)
+COLOR_PRIMARY = colors.HexColor("#234674")     # azul institucional
 COLOR_SECONDARY = colors.HexColor("#5A8FCC")
 COLOR_LABEL_BG = colors.HexColor("#F0F4FA")
 COLOR_BORDER = colors.HexColor("#B0BEC9")
 COLOR_TEXT = colors.HexColor("#1A1A1A")
-COLOR_MARK_BG = colors.HexColor("#DCFCE7")  # verde claro para casilla marcada
+COLOR_MARK_BG = colors.HexColor("#DCFCE7")     # verde claro para casilla marcada
 COLOR_MARK_BORDER = colors.HexColor("#16A34A")
 
 LOGO_PATH = Path(__file__).parent.parent / "templates" / "logo.png"
@@ -39,8 +39,8 @@ LOGO_PATH = Path(__file__).parent.parent / "templates" / "logo.png"
 _styles = getSampleStyleSheet()
 STYLE_TITLE = ParagraphStyle(
     "Title", parent=_styles["Title"],
-    fontName="Helvetica-Bold", fontSize=13, textColor=COLOR_PRIMARY,
-    spaceAfter=2, alignment=TA_CENTER, leading=15,
+    fontName="Helvetica-Bold", fontSize=14, textColor=COLOR_PRIMARY,
+    spaceAfter=2, alignment=TA_CENTER, leading=16,
 )
 STYLE_SUBTITLE = ParagraphStyle(
     "Subtitle", parent=_styles["Normal"],
@@ -108,39 +108,32 @@ def _label_value_table(rows: list[tuple[str, str]], col_widths: tuple[float, ...
 
 
 def _header_table(afiliado: AfiliadoConAtenciones, atencion: Atencion, page_n: int, page_total: int) -> Table:
-    """Cabecera con logo a la izquierda + título centro + contador derecha."""
+    """Header limpio: logo Mutualser a la izquierda + título centrado en azul.
+    Sin fondo de color, sin cuadro derecho. Línea fina azul como separador."""
     logo_cell = ""
     if LOGO_PATH.exists():
         try:
-            logo_cell = Image(str(LOGO_PATH), width=2.2*cm, height=1.3*cm, kind="proportional")
+            logo_cell = Image(str(LOGO_PATH), width=2.4*cm, height=1.4*cm, kind="proportional")
         except Exception:
             logo_cell = ""
 
-    titulo_html = (
-        f"<para alignment='center'>"
-        f"<font name='Helvetica-Bold' size='12' color='#1A4480'>REGISTRO DE DEMANDA INDUCIDA</font><br/>"
-        f"<font name='Helvetica' size='7' color='#5A8FCC'>"
-        f"{afiliado.tipo_documento} {afiliado.num_documento} · {afiliado.nombre_completo}"
-        f"</font></para>"
-    )
-    contador_html = (
-        f"<para alignment='right'>"
-        f"<font name='Helvetica-Bold' size='9' color='#1A4480'>Atención {page_n} de {page_total}</font><br/>"
-        f"<font name='Helvetica' size='6.5' color='#94A3B8'>"
-        f"Consecutivo {atencion.consecutivo} · SEQ {atencion.seq_seragil}"
-        f"</font></para>"
-    )
+    titulo = Paragraph("SOPORTE DEMANDA INDUCIDA", STYLE_TITLE)
 
-    data = [[logo_cell, Paragraph(titulo_html, _styles["Normal"]), Paragraph(contador_html, _styles["Normal"])]]
-    t = Table(data, colWidths=[2.6*cm, 19*cm, 4.5*cm])
+    # ancho total disponible en landscape letter (792pt) - márgenes (10mm c/u)
+    total_w = landscape(letter)[0] - 20 * mm
+    side_w = 2.8 * cm
+
+    data = [[logo_cell, titulo, ""]]
+    t = Table(data, colWidths=[side_w, total_w - 2 * side_w, side_w])
     t.setStyle(TableStyle([
-        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("ALIGN", (0, 0), (0, 0), "LEFT"),
-        ("LEFTPADDING", (0, 0), (-1, -1), 0),
+        ("VALIGN",       (0, 0), (-1, -1), "MIDDLE"),
+        ("ALIGN",        (0, 0), (0, 0),   "LEFT"),
+        ("ALIGN",        (1, 0), (1, 0),   "CENTER"),
+        ("LEFTPADDING",  (0, 0), (-1, -1), 0),
         ("RIGHTPADDING", (0, 0), (-1, -1), 0),
-        ("TOPPADDING", (0, 0), (-1, -1), 2),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
-        ("LINEBELOW", (0, 0), (-1, -1), 0.75, COLOR_PRIMARY),
+        ("TOPPADDING",   (0, 0), (-1, -1), 2),
+        ("BOTTOMPADDING",(0, 0), (-1, -1), 6),
+        ("LINEBELOW",    (0, 0), (-1, -1), 1, COLOR_PRIMARY),
     ]))
     return t
 
@@ -238,18 +231,35 @@ def _programas_table(codigos_marcados: list[str]) -> Table:
 
 
 def _atenciones_del_dia_table(atenciones: list[Atencion]) -> Table:
-    """Tabla resumen con una fila por atención del día."""
+    """Tabla resumen con una fila por atención del día.
+
+    Las columnas con texto largo (Programa, IPS, Encuestador, Cargo) se envuelven
+    en Paragraph para que hagan wrap dentro de su propia celda en vez de
+    derramar al espacio adyacente.
+    """
+    # Estilo para texto que necesita wrap dentro de celda
+    cell_style = ParagraphStyle(
+        "Cell", parent=_styles["Normal"],
+        fontName="Helvetica", fontSize=7, textColor=COLOR_TEXT,
+        leading=8.5, wordWrap="CJK",   # CJK fuerza wrap por carácter si la palabra no cabe
+    )
+
+    def cell(text: str | None) -> Paragraph:
+        return Paragraph((text or "—").replace("&", "&amp;").replace("<", "&lt;"), cell_style)
+
+    def mark(v: bool) -> str:
+        return "✓" if v else "—"
+
     encabezado = ["Cód", "Programa", "Modo ingreso", "IPS remite", "Encuestador", "Cargo", "Not.", "Urg.", "C.Ext."]
-    filas = [encabezado]
+    filas: list[list] = [encabezado]
     for a in atenciones:
-        def mark(v: bool) -> str: return "✓" if v else "—"
         filas.append([
             a.cod_programa,
-            a.des_programa,
-            str(a.modo_ingreso or "—"),
-            a.ips_remite or "—",
-            a.encuestador_nombre or "—",
-            a.cargo_encuestador or "—",
+            cell(a.des_programa),
+            cell(str(a.modo_ingreso) if a.modo_ingreso else None),
+            cell(a.ips_remite),
+            cell(a.encuestador_nombre),
+            cell(a.cargo_encuestador),
             mark(a.notificacion_obligatoria),
             mark(a.recuperacion_urgencias),
             mark(a.recuperacion_consulta_externa),
@@ -257,19 +267,21 @@ def _atenciones_del_dia_table(atenciones: list[Atencion]) -> Table:
     col_widths = [1.2*cm, 7*cm, 2.5*cm, 4.5*cm, 4.5*cm, 3.5*cm, 1*cm, 1*cm, 1.2*cm]
     t = Table(filas, colWidths=col_widths, repeatRows=1)
     style_cmds = [
-        ("FONT",        (0, 0), (-1, 0),  "Helvetica-Bold", 7),
-        ("FONT",        (0, 1), (-1, -1), "Helvetica", 7),
-        ("BACKGROUND",  (0, 0), (-1, 0),  COLOR_PRIMARY),
-        ("TEXTCOLOR",   (0, 0), (-1, 0),  colors.white),
-        ("TEXTCOLOR",   (0, 1), (-1, -1), COLOR_TEXT),
-        ("BOX",         (0, 0), (-1, -1), 0.5, COLOR_BORDER),
-        ("INNERGRID",   (0, 0), (-1, -1), 0.25, COLOR_BORDER),
-        ("ALIGN",       (6, 0), (-1, -1), "CENTER"),
-        ("VALIGN",      (0, 0), (-1, -1), "MIDDLE"),
-        ("TOPPADDING",  (0, 0), (-1, -1), 2.5),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 2.5),
-        ("LEFTPADDING", (0, 0), (-1, -1), 3),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 3),
+        ("FONT",          (0, 0), (-1, 0),  "Helvetica-Bold", 7),
+        ("FONT",          (0, 1), (0, -1),  "Helvetica-Bold", 7),  # Cód en bold
+        ("FONT",          (6, 1), (-1, -1), "Helvetica-Bold", 9),  # marcas grandes
+        ("BACKGROUND",    (0, 0), (-1, 0),  COLOR_PRIMARY),
+        ("TEXTCOLOR",     (0, 0), (-1, 0),  colors.white),
+        ("TEXTCOLOR",     (0, 1), (-1, -1), COLOR_TEXT),
+        ("BOX",           (0, 0), (-1, -1), 0.5, COLOR_BORDER),
+        ("INNERGRID",     (0, 0), (-1, -1), 0.25, COLOR_BORDER),
+        ("ALIGN",         (6, 0), (-1, -1), "CENTER"),
+        ("ALIGN",         (0, 0), (0, -1),  "CENTER"),
+        ("VALIGN",        (0, 0), (-1, -1), "TOP"),   # TOP para wrap consistente
+        ("TOPPADDING",    (0, 0), (-1, -1), 3),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+        ("LEFTPADDING",   (0, 0), (-1, -1), 3),
+        ("RIGHTPADDING",  (0, 0), (-1, -1), 3),
     ]
     # Fondo alternado en filas de datos
     for i in range(1, len(filas)):
