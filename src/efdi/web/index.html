@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>SIEDFASER — Sistema Inteligente de Exportación de Datos para Facturación de Seragil</title>
-  <link rel="icon" type="image/jpeg" href="/static/siexport_logo.jpeg" />
+  <link rel="icon" type="image/png" href="/static/siedfaser_logo.png" />
   <script src="https://unpkg.com/@lottiefiles/dotlottie-wc@0.9.14/dist/dotlottie-wc.js" type="module"></script>
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
@@ -189,24 +189,21 @@
              background: linear-gradient(145deg, #e4eef8 0%, #eef3f9 35%, #f1f5f9 65%, #e8f0f7 100%)">
 
 <!-- ═══ HEADER ═══ -->
-<header class="h-20 shrink-0 bg-white border-b border-slate-200 flex items-center px-4 gap-3 z-20"
+<header class="h-24 shrink-0 bg-white border-b border-slate-200 flex items-center px-4 gap-3 z-20"
         style="box-shadow:0 1px 4px rgba(0,0,0,.05)">
   <!-- Logo -->
   <div class="flex items-center gap-3 shrink-0">
-    <img src="/static/siexport_logo.jpeg" alt="SIEDFASER" class="h-16 w-auto object-contain" />
-    <div class="flex flex-col leading-tight">
-      <span class="text-xl font-black tracking-wide">
-        <span style="color:#22a84a">SIED</span><span style="color:#1a2f6e">FASER</span>
-      </span>
-      <span class="text-xs font-medium" style="color:#1a2f6e">
-        Sistema inteligente de exportación de
-        <span style="color:#22a84a" class="font-semibold">datos</span>
-        para
-        <span style="color:#22a84a" class="font-semibold">facturación</span>
-        de
-        <span style="color:#22a84a" class="font-semibold">Seragil</span>
-      </span>
-    </div>
+    <img src="/static/siedfaser_logo.png"
+         alt="SIEDFASER · Sistema Inteligente de Exportación de Datos para Facturación de Seragil"
+         style="height:3rem;width:auto" class="object-contain" />
+    <span class="hidden md:block text-[12px] font-medium leading-snug" style="color:#64748b">
+      Sistema inteligente de exportación de
+      <span style="color:#22a84a" class="font-semibold">datos</span><br/>
+      para
+      <span style="color:#1a2f6e" class="font-semibold">facturación</span>
+      de
+      <span style="color:#22a84a" class="font-semibold">Seragil</span>
+    </span>
   </div>
   <!-- Tabs centrados (solo desktop) -->
   <nav class="flex-1 hidden sm:flex items-center justify-center gap-1">
@@ -371,15 +368,19 @@
   <main id="rp" class="flex-1 flex flex-col bg-white sm:rounded-xl overflow-hidden sm:border sm:border-white/80"
         style="box-shadow: 0 2px 12px rgba(35,70,116,.1), 0 0 0 1px rgba(35,70,116,.06)">
 
-    <!-- Empty state -->
-    <div id="rp-empty" class="flex-1 flex flex-col items-center justify-center gap-4 select-none">
-      <svg class="h-16 w-16 text-slate-200" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="0.75">
+    <!-- Empty state — logo watermark gigante de fondo + icono carpeta encima -->
+    <div id="rp-empty" class="relative flex-1 flex flex-col items-center justify-center gap-4 select-none overflow-hidden">
+      <img src="/static/siedfaser_logo.png" alt=""
+           aria-hidden="true"
+           class="absolute inset-0 m-auto w-[95%] max-w-[900px] h-auto object-contain pointer-events-none"
+           style="opacity:.07; filter:grayscale(.2)" />
+      <svg class="relative h-16 w-16 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="0.75">
         <path stroke-linecap="round" stroke-linejoin="round"
               d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
       </svg>
-      <div class="text-center">
-        <p class="text-sm font-medium text-slate-300">Selecciona un job</p>
-        <p class="text-xs text-slate-200 mt-0.5">para explorar sus archivos</p>
+      <div class="relative text-center">
+        <p class="text-sm font-medium text-slate-400">Selecciona un job</p>
+        <p class="text-xs text-slate-300 mt-0.5">para explorar sus archivos</p>
       </div>
     </div>
 

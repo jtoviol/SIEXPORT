@@ -1,6 +1,47 @@
-# SIEDFASER — Sistema Inteligente de Exportación de Datos para Facturación de Seragil
+<div align="center">
 
-Herramienta web que extrae registros desde SQL Server (BD `seragil`), los agrupa por afiliado y genera un `.zip` con un PDF por paciente. Soporta múltiples módulos de extracción, cada uno con su propia consulta, modelo de datos y diseño de PDF.
+<img src="src/efdi/web/siedfaser_logo.png" alt="SIEDFASER" width="380" />
+
+# SIEDFASER
+
+### Sistema Inteligente de Exportación de Datos para Facturación de Seragil
+
+<br/>
+
+[![Python](https://img.shields.io/badge/Python-3.10%2B-1a2f6e?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.115%2B-22a84a?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
+[![SQL Server](https://img.shields.io/badge/SQL%20Server-ODBC%2017-234674?style=for-the-badge&logo=microsoftsqlserver&logoColor=white)](https://learn.microsoft.com/sql/connect/odbc/)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind%20CSS-CDN-22a84a?style=for-the-badge&logo=tailwindcss&logoColor=white)](https://tailwindcss.com)
+[![ReportLab](https://img.shields.io/badge/PDF-ReportLab-1a2f6e?style=for-the-badge)](https://www.reportlab.com)
+
+[![Status](https://img.shields.io/badge/status-production-22a84a?style=flat-square)](#)
+[![Multi-module](https://img.shields.io/badge/m%C3%B3dulos-2-1a2f6e?style=flat-square)](#módulos-disponibles)
+[![Persistence](https://img.shields.io/badge/persistencia-SQLite%20WAL-234674?style=flat-square)](#stack)
+[![Concurrency](https://img.shields.io/badge/concurrencia-Pool%20%2B%20Threads-22a84a?style=flat-square)](#procesamiento-por-lotes)
+
+<br/>
+
+</div>
+
+---
+
+## Resumen
+
+**SIEDFASER** es una plataforma web para extracción y empaquetado masivo de datos clínicos de la base **Seragil** (SQL Server) con destino a facturación. Cada extracción agrupa los registros por afiliado y entrega un `.zip` con un PDF por paciente, listo para radicar como soporte de cuenta médica.
+
+Soporta múltiples módulos de extracción — cada módulo tiene su consulta, su modelo de dominio y su plantilla de PDF.
+
+---
+
+## Identidad visual
+
+| Token | Hex | Uso |
+|---|---|---|
+| ![#22a84a](https://placehold.co/14x14/22a84a/22a84a.png) **Verde Seragil** | `#22a84a` | Acentos, énfasis, marca |
+| ![#1a2f6e](https://placehold.co/14x14/1a2f6e/1a2f6e.png) **Azul corporativo** | `#1a2f6e` | Texto principal, headers |
+| ![#234674](https://placehold.co/14x14/234674/234674.png) **Azul institucional** | `#234674` | Botones primarios, navbar |
+| ![#f1f5f9](https://placehold.co/14x14/f1f5f9/f1f5f9.png) **Slate 100** | `#f1f5f9` | Fondos suaves |
+| ![#64748b](https://placehold.co/14x14/64748b/64748b.png) **Slate 500** | `#64748b` | Texto secundario |
 
 ---
 
@@ -19,12 +60,10 @@ lote_001.zip
 └── …
 ```
 
-**Filtro fuente:** `FLG_REGIND_DEMIND = 'SI'`  
+**Filtro fuente:** `FLG_REGIND_DEMIND = 'SI'`
 **API:** `/extractions/...`
 
----
-
-### FINDRISC *(Evaluación de Riesgo de Diabetes Tipo 2)*
+### FINDRISC — Evaluación de Riesgo de Diabetes Tipo 2
 
 Extrae registros de `SRG_FORMATO_FINDRISC`. Genera un PDF por afiliado con datos demográficos, mediciones antropométricas, respuestas al cuestionario FINDRISC, desglose de puntajes por criterio y clasificación de riesgo con color indicativo.
 
@@ -35,18 +74,18 @@ lote_001.zip
 └── …
 ```
 
-**Filtro fuente:** `FLG_FORMATO_COLDRISC = 'SI'`  
+**Filtro fuente:** `FLG_FORMATO_COLDRISC = 'SI'`
 **API:** `/findrisc/extractions/...`
 
 **Clasificación de riesgo FINDRISC:**
 
 | Puntaje | Nivel | Riesgo estimado DM2 |
-|---------|-------|---------------------|
-| 0 – 6   | BAJO | ~1% |
-| 7 – 11  | LIGERAMENTE ELEVADO | ~4% |
-| 12 – 14 | MODERADO | ~17% |
-| 15 – 20 | ALTO | ~33% |
-| ≥ 21    | MUY ALTO | ~50% |
+|:-:|:--|:-:|
+| **0 – 6**   | BAJO | ~1% |
+| **7 – 11**  | LIGERAMENTE ELEVADO | ~4% |
+| **12 – 14** | MODERADO | ~17% |
+| **15 – 20** | ALTO | ~33% |
+| **≥ 21**    | MUY ALTO | ~50% |
 
 ---
 
@@ -54,11 +93,12 @@ lote_001.zip
 
 | Capa | Tecnología |
 |---|---|
-| Backend | **FastAPI + Pydantic v2** |
-| PDF | **ReportLab** |
-| DB | **pyodbc** — SQL Server via ODBC Driver 17 |
-| Persistencia jobs | **SQLite** (WAL mode) — sobrevive reinicios |
-| Frontend | **HTML + Tailwind CDN + Vanilla JS** — SPA sin build step |
+| **Backend** | FastAPI + Pydantic v2 |
+| **PDF** | ReportLab (multiprocessing Pool) |
+| **DB** | pyodbc — SQL Server via ODBC Driver 17 |
+| **Persistencia jobs** | SQLite WAL — sobrevive reinicios |
+| **Frontend** | HTML + Tailwind CDN + Vanilla JS — SPA sin build step |
+| **Auth** | HMAC + cookie de sesión |
 
 ---
 
@@ -113,7 +153,7 @@ PDF_WORKERS=-1              # -1=auto (todos los cores) | 0=secuencial
 PDF_PARALLEL_THRESHOLD=100  # Mínimo de afiliados para activar Pool
 ```
 
-> `.env` está en `.gitignore`. Nunca lo commitees.
+> `.env` está en `.gitignore`. **Nunca lo commitees.**
 
 ---
 
@@ -164,17 +204,17 @@ GET  /diagnostics
 ### Módulo Demanda Inducida
 
 ```
-GET  /extractions/count?desde=&hasta=        # Preview de registros antes de generar
-POST /extractions                            # Crear extracción (202 Accepted)
-GET  /extractions                            # Listar extracciones
-GET  /extractions/{id}                       # Estado + métricas
-GET  /extractions/{id}/lotes                 # Lotes con fase en tiempo real
-GET  /extractions/{id}/lotes/{n}/download    # ZIP de un lote
-GET  /extractions/{id}/download              # Mega-ZIP (todos los lotes)
-GET  /extractions/{id}/files                 # Árbol de archivos
-GET  /extractions/{id}/files/{doc}/{file}    # PDF individual
-POST /extractions/{id}/cancel                # Cancelar
-DELETE /extractions/{id}                     # Eliminar + borrar disco
+GET    /extractions/count?desde=&hasta=        Preview de registros antes de generar
+POST   /extractions                            Crear extracción (202 Accepted)
+GET    /extractions                            Listar extracciones
+GET    /extractions/{id}                       Estado + métricas
+GET    /extractions/{id}/lotes                 Lotes con fase en tiempo real
+GET    /extractions/{id}/lotes/{n}/download    ZIP de un lote
+GET    /extractions/{id}/download              Mega-ZIP (todos los lotes)
+GET    /extractions/{id}/files                 Árbol de archivos
+GET    /extractions/{id}/files/{doc}/{file}    PDF individual
+POST   /extractions/{id}/cancel                Cancelar
+DELETE /extractions/{id}                       Eliminar + borrar disco
 ```
 
 ### Módulo FINDRISC
@@ -182,16 +222,16 @@ DELETE /extractions/{id}                     # Eliminar + borrar disco
 Misma estructura bajo el prefijo `/findrisc/`:
 
 ```
-GET  /findrisc/extractions/count?desde=&hasta=
-POST /findrisc/extractions
-GET  /findrisc/extractions
-GET  /findrisc/extractions/{id}
-GET  /findrisc/extractions/{id}/lotes
-GET  /findrisc/extractions/{id}/lotes/{n}/download
-GET  /findrisc/extractions/{id}/download
-GET  /findrisc/extractions/{id}/files
-GET  /findrisc/extractions/{id}/files/{doc}/{file}
-POST /findrisc/extractions/{id}/cancel
+GET    /findrisc/extractions/count?desde=&hasta=
+POST   /findrisc/extractions
+GET    /findrisc/extractions
+GET    /findrisc/extractions/{id}
+GET    /findrisc/extractions/{id}/lotes
+GET    /findrisc/extractions/{id}/lotes/{n}/download
+GET    /findrisc/extractions/{id}/download
+GET    /findrisc/extractions/{id}/files
+GET    /findrisc/extractions/{id}/files/{doc}/{file}
+POST   /findrisc/extractions/{id}/cancel
 DELETE /findrisc/extractions/{id}
 ```
 
@@ -277,22 +317,24 @@ D:\proyecto\
     ├── infrastructure/
     │   ├── db.py                       # SQLite schema v3 con migraciones
     │   ├── job_store.py                # Persistencia de extracciones y lotes
-    │   ├── repository.py              # Consulta Demanda Inducida (SQL Server + mock)
-    │   └── repository_findrisc.py     # Consulta FINDRISC (SQL Server + mock)
+    │   ├── repository.py               # Consulta Demanda Inducida (SQL Server + mock)
+    │   └── repository_findrisc.py      # Consulta FINDRISC (SQL Server + mock)
     ├── pdf/
-    │   ├── generator.py               # PDF Demanda Inducida — catálogo 124 programas
-    │   ├── generator_findrisc.py      # PDF FINDRISC — puntajes + clasificación de riesgo
-    │   ├── parallel.py                # Worker multiprocessing Demanda Inducida
-    │   ├── parallel_findrisc.py       # Worker multiprocessing FINDRISC
-    │   └── programas_catalogo.py      # Carga programas.txt (124 programas)
+    │   ├── generator.py                # PDF Demanda Inducida — catálogo 124 programas
+    │   ├── generator_findrisc.py       # PDF FINDRISC — puntajes + clasificación de riesgo
+    │   ├── parallel.py                 # Worker multiprocessing Demanda Inducida
+    │   ├── parallel_findrisc.py        # Worker multiprocessing FINDRISC
+    │   └── programas_catalogo.py       # Carga programas.txt (124 programas)
     ├── services/
-    │   ├── extraction.py              # Orquestador Demanda Inducida
-    │   └── extraction_findrisc.py     # Orquestador FINDRISC
+    │   ├── extraction.py               # Orquestador Demanda Inducida
+    │   └── extraction_findrisc.py      # Orquestador FINDRISC
     ├── templates/
     │   ├── logo.png
-    │   └── programas.txt              # 124 códigos + descripciones de programas DI
+    │   └── programas.txt               # 124 códigos + descripciones de programas DI
     └── web/
-        └── index.html                 # SPA — pestañas por módulo, progreso en tiempo real
+        ├── index.html                  # SPA — pestañas por módulo, progreso en tiempo real
+        ├── login.html                  # Pantalla de acceso (HMAC + cookie)
+        └── siedfaser_logo.png          # Logo oficial
 ```
 
 ---
@@ -316,3 +358,12 @@ curl -I http://localhost:8000/
 ```
 
 **Migración de base de datos:** Al actualizar desde versiones anteriores, la BD SQLite se migra automáticamente al arrancar. El schema actual es v3 (añade `lotes.fase` y `extracciones.tipo`).
+
+---
+
+<div align="center">
+
+**SIEDFASER** — desarrollado para Seragil
+Sistema Inteligente de Exportación de Datos para Facturación
+
+</div>
