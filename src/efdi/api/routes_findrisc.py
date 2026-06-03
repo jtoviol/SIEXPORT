@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse
 
 from efdi.api.schemas import CrearExtraccionReq, ExtraccionResp, RenombrarJobReq
 from efdi.config import settings
-from efdi.domain.models import EstadoExtraccion, Extraccion, ExtraccionTipo, Lote, ModoPdf
+from efdi.domain.models import EstadoExtraccion, Extraccion, ExtraccionTipo, Lote, ModoPdf, estado_label
 from efdi.infrastructure.job_store import store
 from efdi.infrastructure.repository_findrisc import get_findrisc_repository, SqlServerFindriscRepository
 from efdi.services.extraction_findrisc import ejecutar_extraccion_findrisc
@@ -183,7 +183,7 @@ async def cancelar_extraccion_findrisc(job_id: UUID) -> dict:
     if job is None or job.tipo != ExtraccionTipo.FINDRISC:
         raise HTTPException(status_code=404, detail="Extracción FINDRISC no encontrada")
     if job.estado not in (EstadoExtraccion.PENDING, EstadoExtraccion.RUNNING):
-        raise HTTPException(status_code=409, detail=f"No se puede cancelar en estado '{job.estado}'")
+        raise HTTPException(status_code=409, detail=f"No se puede cancelar — la extracción está en estado '{estado_label(job.estado)}'")
     job.estado = EstadoExtraccion.CANCELLED
     job.mensaje_error = "Cancelación solicitada por el usuario"
     store.save(job)
@@ -217,7 +217,7 @@ async def descargar_extraccion_findrisc(job_id: UUID) -> FileResponse:
     if job is None or job.tipo != ExtraccionTipo.FINDRISC:
         raise HTTPException(status_code=404, detail="Extracción FINDRISC no encontrada")
     if job.estado != EstadoExtraccion.COMPLETED:
-        raise HTTPException(status_code=409, detail=f"Extracción en estado '{job.estado}'")
+        raise HTTPException(status_code=409, detail=f"Extracción en estado '{estado_label(job.estado)}'")
 
     if not job.zip_path or not Path(job.zip_path).exists():
         lotes = store.list_lotes(job_id)
@@ -250,7 +250,7 @@ async def listar_archivos_findrisc(job_id: UUID) -> dict:
     if job is None or job.tipo != ExtraccionTipo.FINDRISC:
         raise HTTPException(status_code=404, detail="Extracción FINDRISC no encontrada")
     if job.estado != EstadoExtraccion.COMPLETED:
-        raise HTTPException(status_code=409, detail=f"Extracción en estado '{job.estado}'")
+        raise HTTPException(status_code=409, detail=f"Extracción en estado '{estado_label(job.estado)}'")
 
     job_dir = settings.data_dir / f"job_{job_id}"
     if not job_dir.exists():

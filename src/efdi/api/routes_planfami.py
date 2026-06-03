@@ -1,4 +1,4 @@
-"""Endpoints REST para el módulo Gestión Captación Afiliados."""
+"""Endpoints REST para el módulo Seguimiento Planificación Familiar."""
 import math
 import shutil
 from datetime import date, datetime
@@ -12,10 +12,10 @@ from efdi.api.schemas import CrearExtraccionReq, ExtraccionResp, RenombrarJobReq
 from efdi.config import settings
 from efdi.domain.models import EstadoExtraccion, Extraccion, ExtraccionTipo, Lote, ModoPdf, estado_label
 from efdi.infrastructure.job_store import store
-from efdi.infrastructure.repository_captacion import get_captacion_repository
-from efdi.services.extraction_captacion import ejecutar_extraccion_captacion
+from efdi.infrastructure.repository_planfami import get_planfami_repository
+from efdi.services.extraction_planfami import ejecutar_extraccion_planfami
 
-router = APIRouter(prefix="/gestion-captacion", tags=["gestion-captacion"])
+router = APIRouter(prefix="/planificacion-familiar", tags=["planificacion-familiar"])
 
 
 def _auto_tamano_lote(limite: int) -> int:
@@ -30,15 +30,15 @@ def _auto_tamano_lote(limite: int) -> int:
 
 @router.get(
     "/extractions/count",
-    summary="Conteo previo de registros de Captación para un rango de fechas",
+    summary="Conteo previo de registros de Planificación Familiar",
 )
-async def contar_registros_captacion(
+async def contar_registros_planfami(
     desde: date = Query(...),
     hasta: date = Query(...),
 ) -> dict:
     if hasta < desde:
         raise HTTPException(status_code=400, detail="hasta debe ser >= desde")
-    repo = get_captacion_repository()
+    repo = get_planfami_repository()
     total = repo.get_total(desde, hasta)
     if total <= 0:
         return {"total_en_db": 0, "limite_efectivo": 0, "tamano_lote": 0, "lotes_estimados": 0, "capeado": False}
@@ -58,20 +58,20 @@ async def contar_registros_captacion(
     "/extractions",
     response_model=ExtraccionResp,
     status_code=status.HTTP_202_ACCEPTED,
-    summary="Crear extracción de PDFs de Gestión Captación",
+    summary="Crear extracción de PDFs de Planificación Familiar",
 )
-async def crear_extraccion_captacion(
+async def crear_extraccion_planfami(
     req: CrearExtraccionReq,
     background: BackgroundTasks,
 ) -> ExtraccionResp:
     limite = req.limite
     if limite is None:
-        repo = get_captacion_repository()
+        repo = get_planfami_repository()
         total = repo.get_total(req.desde, req.hasta)
         if total <= 0:
             raise HTTPException(
                 status_code=400,
-                detail="No se pudo obtener el total de registros de captación.",
+                detail="No se pudo obtener el total de registros de Planificación Familiar.",
             )
         limite = min(total, 600_000)
 
@@ -83,57 +83,60 @@ async def crear_extraccion_captacion(
         hasta=req.hasta,
         limite=limite,
         tamano_lote=tamano_lote,
-        tipo=ExtraccionTipo.GESTION_CAPTACION,
+        tipo=ExtraccionTipo.PLANIFICACION_FAMILIAR,
         modo_pdf=ModoPdf.UNO_POR_ATENCION,
         creado_en=datetime.now(),
     )
     store.save(job)
-    background.add_task(ejecutar_extraccion_captacion, job)
+    background.add_task(ejecutar_extraccion_planfami, job)
     return ExtraccionResp(**job.model_dump())
 
 
 @router.get(
     "/extractions",
     response_model=list[ExtraccionResp],
-    summary="Listar extracciones de Gestión Captación",
+    summary="Listar extracciones de Planificación Familiar",
 )
-async def listar_extracciones_captacion() -> list[ExtraccionResp]:
-    return [ExtraccionResp(**j.model_dump()) for j in store.list_by_tipo(ExtraccionTipo.GESTION_CAPTACION)]
+async def listar_extracciones_planfami() -> list[ExtraccionResp]:
+    return [
+        ExtraccionResp(**j.model_dump())
+        for j in store.list_by_tipo(ExtraccionTipo.PLANIFICACION_FAMILIAR)
+    ]
 
 
 @router.get(
     "/extractions/{job_id}",
     response_model=ExtraccionResp,
-    summary="Estado de una extracción de Captación",
+    summary="Estado de una extracción de Planificación Familiar",
 )
-async def obtener_extraccion_captacion(job_id: UUID) -> ExtraccionResp:
+async def obtener_extraccion_planfami(job_id: UUID) -> ExtraccionResp:
     job = store.get(job_id)
-    if job is None or job.tipo != ExtraccionTipo.GESTION_CAPTACION:
-        raise HTTPException(status_code=404, detail="Extracción de Captación no encontrada")
+    if job is None or job.tipo != ExtraccionTipo.PLANIFICACION_FAMILIAR:
+        raise HTTPException(status_code=404, detail="Extracción no encontrada")
     return ExtraccionResp(**job.model_dump())
 
 
 @router.get(
     "/extractions/{job_id}/lotes",
     response_model=list[Lote],
-    summary="Listar lotes de una extracción de Captación",
+    summary="Listar lotes de una extracción de Planificación Familiar",
 )
-async def listar_lotes_captacion(job_id: UUID) -> list[Lote]:
+async def listar_lotes_planfami(job_id: UUID) -> list[Lote]:
     job = store.get(job_id)
-    if job is None or job.tipo != ExtraccionTipo.GESTION_CAPTACION:
-        raise HTTPException(status_code=404, detail="Extracción de Captación no encontrada")
+    if job is None or job.tipo != ExtraccionTipo.PLANIFICACION_FAMILIAR:
+        raise HTTPException(status_code=404, detail="Extracción no encontrada")
     return store.list_lotes(job_id)
 
 
 @router.get(
     "/extractions/{job_id}/lotes/{numero}",
     response_model=Lote,
-    summary="Estado de un lote de Captación",
+    summary="Estado de un lote",
 )
-async def obtener_lote_captacion(job_id: UUID, numero: int) -> Lote:
+async def obtener_lote_planfami(job_id: UUID, numero: int) -> Lote:
     job = store.get(job_id)
-    if job is None or job.tipo != ExtraccionTipo.GESTION_CAPTACION:
-        raise HTTPException(status_code=404, detail="Extracción de Captación no encontrada")
+    if job is None or job.tipo != ExtraccionTipo.PLANIFICACION_FAMILIAR:
+        raise HTTPException(status_code=404, detail="Extracción no encontrada")
     lote = store.get_lote(job_id, numero)
     if lote is None:
         raise HTTPException(status_code=404, detail=f"Lote {numero} no existe")
@@ -142,10 +145,10 @@ async def obtener_lote_captacion(job_id: UUID, numero: int) -> Lote:
 
 @router.get(
     "/extractions/{job_id}/lotes/{numero}/download",
-    summary="Descargar ZIP de un lote de Captación",
+    summary="Descargar ZIP de un lote",
     response_class=FileResponse,
 )
-async def descargar_lote_captacion(job_id: UUID, numero: int) -> FileResponse:
+async def descargar_lote_planfami(job_id: UUID, numero: int) -> FileResponse:
     lote = store.get_lote(job_id, numero)
     if lote is None:
         raise HTTPException(status_code=404, detail=f"Lote {numero} no existe")
@@ -155,7 +158,7 @@ async def descargar_lote_captacion(job_id: UUID, numero: int) -> FileResponse:
         raise HTTPException(status_code=410, detail="ZIP no disponible")
     return FileResponse(
         path=lote.zip_path,
-        filename=f"captacion_lote_{numero:03d}_{job_id}.zip",
+        filename=f"planfami_lote_{numero:03d}_{job_id}.zip",
         media_type="application/zip",
     )
 
@@ -163,12 +166,12 @@ async def descargar_lote_captacion(job_id: UUID, numero: int) -> FileResponse:
 @router.patch(
     "/extractions/{job_id}/nombre",
     response_model=ExtraccionResp,
-    summary="Renombrar una extracción de Captación",
+    summary="Renombrar una extracción",
 )
-async def renombrar_extraccion_captacion(job_id: UUID, req: RenombrarJobReq) -> ExtraccionResp:
+async def renombrar_extraccion_planfami(job_id: UUID, req: RenombrarJobReq) -> ExtraccionResp:
     job = store.get(job_id)
-    if job is None or job.tipo != ExtraccionTipo.GESTION_CAPTACION:
-        raise HTTPException(status_code=404, detail="Extracción de Captación no encontrada")
+    if job is None or job.tipo != ExtraccionTipo.PLANIFICACION_FAMILIAR:
+        raise HTTPException(status_code=404, detail="Extracción no encontrada")
     store.rename(job_id, req.nombre or None)
     job = store.get(job_id)
     return ExtraccionResp(**job.model_dump())
@@ -176,12 +179,12 @@ async def renombrar_extraccion_captacion(job_id: UUID, req: RenombrarJobReq) -> 
 
 @router.post(
     "/extractions/{job_id}/cancel",
-    summary="Cancelar extracción de Captación en curso",
+    summary="Cancelar extracción en curso",
 )
-async def cancelar_extraccion_captacion(job_id: UUID) -> dict:
+async def cancelar_extraccion_planfami(job_id: UUID) -> dict:
     job = store.get(job_id)
-    if job is None or job.tipo != ExtraccionTipo.GESTION_CAPTACION:
-        raise HTTPException(status_code=404, detail="Extracción de Captación no encontrada")
+    if job is None or job.tipo != ExtraccionTipo.PLANIFICACION_FAMILIAR:
+        raise HTTPException(status_code=404, detail="Extracción no encontrada")
     if job.estado not in (EstadoExtraccion.PENDING, EstadoExtraccion.RUNNING):
         raise HTTPException(status_code=409, detail=f"No se puede cancelar — la extracción está en estado '{estado_label(job.estado)}'")
     job.estado = EstadoExtraccion.CANCELLED
@@ -192,12 +195,12 @@ async def cancelar_extraccion_captacion(job_id: UUID) -> dict:
 
 @router.delete(
     "/extractions/{job_id}",
-    summary="Eliminar extracción de Captación",
+    summary="Eliminar extracción",
 )
-async def eliminar_extraccion_captacion(job_id: UUID) -> dict:
+async def eliminar_extraccion_planfami(job_id: UUID) -> dict:
     job = store.get(job_id)
-    if job is None or job.tipo != ExtraccionTipo.GESTION_CAPTACION:
-        raise HTTPException(status_code=404, detail="Extracción de Captación no encontrada")
+    if job is None or job.tipo != ExtraccionTipo.PLANIFICACION_FAMILIAR:
+        raise HTTPException(status_code=404, detail="Extracción no encontrada")
     job_dir = settings.data_dir / f"job_{job_id}"
     carpetas = 0
     if job_dir.exists():
@@ -209,13 +212,13 @@ async def eliminar_extraccion_captacion(job_id: UUID) -> dict:
 
 @router.get(
     "/extractions/{job_id}/download",
-    summary="Mega-ZIP con todos los lotes de Captación",
+    summary="Mega-ZIP con todos los lotes",
     response_class=FileResponse,
 )
-async def descargar_extraccion_captacion(job_id: UUID) -> FileResponse:
+async def descargar_extraccion_planfami(job_id: UUID) -> FileResponse:
     job = store.get(job_id)
-    if job is None or job.tipo != ExtraccionTipo.GESTION_CAPTACION:
-        raise HTTPException(status_code=404, detail="Extracción de Captación no encontrada")
+    if job is None or job.tipo != ExtraccionTipo.PLANIFICACION_FAMILIAR:
+        raise HTTPException(status_code=404, detail="Extracción no encontrada")
     if job.estado != EstadoExtraccion.COMPLETED:
         raise HTTPException(status_code=409, detail=f"Extracción en estado '{estado_label(job.estado)}'")
 
@@ -236,19 +239,19 @@ async def descargar_extraccion_captacion(job_id: UUID) -> FileResponse:
 
     return FileResponse(
         path=job.zip_path,
-        filename=f"captacion_{job_id}.zip",
+        filename=f"planfami_{job_id}.zip",
         media_type="application/zip",
     )
 
 
 @router.get(
     "/extractions/{job_id}/files",
-    summary="Árbol de archivos de una extracción de Captación",
+    summary="Árbol de archivos de una extracción",
 )
-async def listar_archivos_captacion(job_id: UUID) -> dict:
+async def listar_archivos_planfami(job_id: UUID) -> dict:
     job = store.get(job_id)
-    if job is None or job.tipo != ExtraccionTipo.GESTION_CAPTACION:
-        raise HTTPException(status_code=404, detail="Extracción de Captación no encontrada")
+    if job is None or job.tipo != ExtraccionTipo.PLANIFICACION_FAMILIAR:
+        raise HTTPException(status_code=404, detail="Extracción no encontrada")
     if job.estado != EstadoExtraccion.COMPLETED:
         raise HTTPException(status_code=409, detail=f"Extracción en estado '{estado_label(job.estado)}'")
 
@@ -283,13 +286,13 @@ async def listar_archivos_captacion(job_id: UUID) -> dict:
 
 @router.get(
     "/extractions/{job_id}/files/{afiliado}/{filename}",
-    summary="Descargar PDF individual de Captación",
+    summary="Descargar PDF individual",
     response_class=FileResponse,
 )
-async def descargar_pdf_captacion(job_id: UUID, afiliado: str, filename: str) -> FileResponse:
+async def descargar_pdf_planfami(job_id: UUID, afiliado: str, filename: str) -> FileResponse:
     job = store.get(job_id)
-    if job is None or job.tipo != ExtraccionTipo.GESTION_CAPTACION:
-        raise HTTPException(status_code=404, detail="Extracción de Captación no encontrada")
+    if job is None or job.tipo != ExtraccionTipo.PLANIFICACION_FAMILIAR:
+        raise HTTPException(status_code=404, detail="Extracción no encontrada")
 
     job_dir = settings.data_dir.resolve() / f"job_{job_id}"
     if not job_dir.exists():

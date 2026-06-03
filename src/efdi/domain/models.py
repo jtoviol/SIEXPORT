@@ -120,10 +120,47 @@ class EstadoExtraccion(str, Enum):
     CANCELLED = "cancelled"
 
 
+# Etiquetas en español para mensajes al usuario
+ESTADO_LABEL: dict[str, str] = {
+    "pending":   "Pendiente",
+    "running":   "En curso",
+    "completed": "Completado",
+    "failed":    "Fallido",
+    "cancelled": "Cancelado",
+}
+
+
+def estado_label(estado: "EstadoExtraccion | str") -> str:
+    """Devuelve el texto en español de un EstadoExtraccion."""
+    v = estado.value if hasattr(estado, "value") else str(estado)
+    return ESTADO_LABEL.get(v, v)
+
+
 class ExtraccionTipo(str, Enum):
     DEMANDA_INDUCIDA = "demanda_inducida"
     FINDRISC = "findrisc"
     GESTION_CAPTACION = "gestion_captacion"
+    PLANIFICACION_FAMILIAR = "planificacion_familiar"
+
+
+# ─── Factores Clínicos del módulo Seguimiento Planificación Familiar ────────
+# 13 banderas FIC (Factores de Inclusión Clínica). La SQL las devuelve tal cual
+# vienen de la BD; cualquier valor no vacío se considera "marcado".
+PLANFAMI_FACTORES_CLINICOS: list[tuple[str, str]] = [
+    ("fic_dtc_dm",       "Diabetes Mellitus"),
+    ("fic_dtc_hta",      "Hipertensión Arterial"),
+    ("fic_artritis",     "Artritis"),
+    ("fic_cancer",       "Cáncer"),
+    ("fic_epilepsia",    "Epilepsia"),
+    ("fic_epoc",         "EPOC"),
+    ("fic_hemofilia",    "Hemofilia"),
+    ("fic_huerfanas",    "Enfermedades huérfanas"),
+    ("fic_renal",        "Enfermedad renal"),
+    ("fic_salud_mental", "Salud mental"),
+    ("fic_trasplante",   "Trasplante"),
+    ("fic_victimas",     "Víctimas"),
+    ("fic_vih",          "VIH"),
+]
 
 
 # ─── Programas/banderas del módulo Gestión Captación ────────────────────────
@@ -287,6 +324,113 @@ class AfiliadoConCaptacion(BaseModel):
     @property
     def pdf_key(self) -> str:
         return f"{self.doc_key}_{self.fecha_captacion}"
+
+
+class RegistroPlanFamiliar(BaseModel):
+    """Una fila del reporte Seguimiento Planificación Familiar.
+
+    Política: campos literales de la BD. Solo `fecha_gestion` se parsea para
+    agrupar/nombrar archivos.
+    """
+
+    model_config = ConfigDict(use_enum_values=True, str_strip_whitespace=True)
+
+    # ── Metadata interna ──────────────────────────────────────────────────
+    seq_poblacion_riesgo: int
+    tipo_documento: TipoDocumento
+    fecha_gestion: date            # fec_gestion_seguimiento parseada
+
+    # ── Ubicación ─────────────────────────────────────────────────────────
+    regional: str | None = None
+    municipio: str | None = None
+    departamento: str | None = None
+
+    # ── Período / Población ───────────────────────────────────────────────
+    anio: str | None = None
+    trimestre: str | None = None
+    tipo_poblacion: str | None = None    # ADOLESCENTE / MULTIPARA / COHORTE DE RIESGO / SIN DEFINIR
+
+    # ── Encuestador ───────────────────────────────────────────────────────
+    encuestador: str | None = None
+    fecha_gestion_str: str | None = None    # literal de BD
+
+    # ── Identificación afiliada ───────────────────────────────────────────
+    tipo_identificacion_desc: str | None = None
+    num_documento: str
+    nombre_completo: str
+    fecha_nacimiento: str | None = None     # literal de BD
+    edad: str | None = None                  # literal de BD (puede ser cadena con espacios)
+    telefono: str | None = None
+    regimen: str | None = None
+
+    # ── Planificación actual ──────────────────────────────────────────────
+    flg_planifica: str | None = None
+    motivo_no_planifica: str | None = None
+    flg_desea_utilizar_metodo: str | None = None
+    metodo_anticonceptivo: str | None = None
+    fec_inicio_planfami: str | None = None
+    flg_inicio_preconcepcional: str | None = None
+    metodo_planificacion: str | None = None   # des_metodo_planificacion
+
+    # ── Eventos obstétricos / planificación previa ────────────────────────
+    nro_eventos_obstetricos: str | None = None
+    flg_fuente_evento_obstetrico: str | None = None
+    fec_evento_planificacion: str | None = None
+    cod_producto_ev_planificacion: str | None = None
+    nom_producto_ev_planificacion: str | None = None
+    fec_planificacion_202: str | None = None
+    var_planificacion_202: str | None = None
+    fec_planificacion_temporal: str | None = None
+    cod_fuente_planificacion_temporal: str | None = None
+    des_metodo_planificacion_temporal: str | None = None
+
+    # ── 13 banderas FIC (cualquier valor no vacío = marcado) ──────────────
+    fic_dtc_dm: str | None = None
+    fic_dtc_hta: str | None = None
+    fic_artritis: str | None = None
+    fic_cancer: str | None = None
+    fic_epilepsia: str | None = None
+    fic_epoc: str | None = None
+    fic_hemofilia: str | None = None
+    fic_huerfanas: str | None = None
+    fic_renal: str | None = None
+    fic_salud_mental: str | None = None
+    fic_trasplante: str | None = None
+    fic_victimas: str | None = None
+    fic_vih: str | None = None
+
+    # ── Estado y seguimiento ──────────────────────────────────────────────
+    estado: str | None = None                       # NO INTERVENIDA / PENDIENTE / CERRADA
+    tipo_seguimiento: str | None = None             # TELEFONICO / DOMICILIARIO
+    flg_contactada: str | None = None
+    flg_visita_domiciliaria: str | None = None
+    flg_cierra_seguimiento: str | None = None
+    motivo_nocontacto: str | None = None
+    observaciones: str | None = None
+
+    @property
+    def doc_key(self) -> str:
+        return f"{self.tipo_documento}_{self.num_documento}"
+
+    def factor_marcado(self, attr: str) -> bool:
+        """True si el campo FIC trae cualquier valor no vacío de la BD."""
+        v = getattr(self, attr, None) or ""
+        return bool(v.strip())
+
+
+class AfiliadoConPlanFamiliar(BaseModel):
+    """Un afiliado con sus registros de PlanFami agrupados por fecha de gestión."""
+
+    doc_key: str
+    tipo_documento: TipoDocumento
+    num_documento: str
+    nombre_completo: str
+    fecha_gestion: date
+    registros: list[RegistroPlanFamiliar]
+
+    @property
+    def pdf_key(self) -> str:
+        return f"{self.doc_key}_{self.fecha_gestion}"
 
 
 class ModoPdf(str, Enum):

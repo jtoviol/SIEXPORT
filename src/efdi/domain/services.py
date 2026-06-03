@@ -5,9 +5,11 @@ from efdi.domain.models import (
     AfiliadoConAtenciones,
     AfiliadoConCaptacion,
     AfiliadoConFindrisc,
+    AfiliadoConPlanFamiliar,
     Atencion,
     RegistroCaptacion,
     RegistroFindrisc,
+    RegistroPlanFamiliar,
 )
 
 
@@ -90,3 +92,32 @@ def agrupar_por_afiliado_captacion(registros: list[RegistroCaptacion]) -> list[A
             )
         )
     return sorted(resultado, key=lambda x: (x.doc_key, x.fecha_captacion))
+
+
+def agrupar_por_afiliado_planfami(
+    registros: list[RegistroPlanFamiliar],
+) -> list[AfiliadoConPlanFamiliar]:
+    """Agrupa registros de Planificación Familiar por (documento, fecha_gestion).
+
+    Si una persona tiene N filas con la misma fec_gestion_seguimiento → caen en el
+    mismo PDF. Si tiene fechas distintas → un PDF por cada fecha.
+    """
+    grupos: dict[str, list[RegistroPlanFamiliar]] = defaultdict(list)
+    for r in registros:
+        clave = f"{r.doc_key}_{r.fecha_gestion}"
+        grupos[clave].append(r)
+
+    resultado: list[AfiliadoConPlanFamiliar] = []
+    for _, grupo in grupos.items():
+        primero = grupo[0]
+        resultado.append(
+            AfiliadoConPlanFamiliar(
+                doc_key=primero.doc_key,
+                tipo_documento=primero.tipo_documento,
+                num_documento=primero.num_documento,
+                nombre_completo=primero.nombre_completo,
+                fecha_gestion=primero.fecha_gestion,
+                registros=grupo,
+            )
+        )
+    return sorted(resultado, key=lambda x: (x.doc_key, x.fecha_gestion))

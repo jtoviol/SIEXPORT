@@ -18,7 +18,7 @@ from efdi.api.schemas import (
     RenombrarJobReq,
 )
 from efdi.config import settings
-from efdi.domain.models import Atencion, EstadoExtraccion, Extraccion, Lote
+from efdi.domain.models import Atencion, EstadoExtraccion, Extraccion, ExtraccionTipo, Lote, estado_label
 from efdi.infrastructure.db import db
 from efdi.infrastructure.job_store import store
 from efdi.infrastructure.repository import SqlServerRepository, get_repository
@@ -245,7 +245,10 @@ async def crear_extraccion(
     summary="Listar extracciones",
 )
 async def listar_extracciones() -> list[ExtraccionResp]:
-    return [ExtraccionResp(**j.model_dump()) for j in store.list_all()]
+    return [
+        ExtraccionResp(**j.model_dump())
+        for j in store.list_by_tipo(ExtraccionTipo.DEMANDA_INDUCIDA)
+    ]
 
 
 @router.get(
@@ -316,7 +319,7 @@ async def descargar_lote(job_id: UUID, numero: int) -> FileResponse:
     if lote.estado != EstadoExtraccion.COMPLETED:
         raise HTTPException(
             status_code=409,
-            detail=f"Lote {numero} en estado '{lote.estado.value if hasattr(lote.estado, 'value') else lote.estado}' — aún no descargable",
+            detail=f"Lote {numero} en estado '{estado_label(lote.estado)}' — aún no descargable",
         )
     if not lote.zip_path or not Path(lote.zip_path).exists():
         raise HTTPException(status_code=410, detail="Zip del lote no disponible")
@@ -357,7 +360,7 @@ async def cancelar_extraccion(job_id: UUID) -> dict[str, object]:
     if job.estado not in (EstadoExtraccion.PENDING, EstadoExtraccion.RUNNING):
         raise HTTPException(
             status_code=409,
-            detail=f"No se puede cancelar — la extracción está en estado '{job.estado.value if hasattr(job.estado, 'value') else job.estado}'",
+            detail=f"No se puede cancelar — la extracción está en estado '{estado_label(job.estado)}'",
         )
     job.estado = EstadoExtraccion.CANCELLED
     job.mensaje_error = "Cancelación solicitada por el usuario"
@@ -454,7 +457,7 @@ async def descargar_extraccion(job_id: UUID) -> FileResponse:
     if job.estado != EstadoExtraccion.COMPLETED:
         raise HTTPException(
             status_code=409,
-            detail=f"Extracción en estado '{job.estado.value if hasattr(job.estado, 'value') else job.estado}' — aún no descargable",
+            detail=f"Extracción en estado '{estado_label(job.estado)}' — aún no descargable",
         )
     # Si no hay zip global pero hay lotes, lo construimos on-demand combinando los lotes
     if not job.zip_path or not Path(job.zip_path).exists():
@@ -488,7 +491,7 @@ async def listar_archivos(job_id: UUID) -> dict:
     if job is None:
         raise HTTPException(status_code=404, detail="Extracción no encontrada")
     if job.estado != EstadoExtraccion.COMPLETED:
-        raise HTTPException(status_code=409, detail=f"Extracción en estado '{job.estado}'")
+        raise HTTPException(status_code=409, detail=f"Extracción en estado '{estado_label(job.estado)}'")
 
     job_dir = settings.data_dir / f"job_{job_id}"
     if not job_dir.exists():
