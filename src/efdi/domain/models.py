@@ -123,6 +123,32 @@ class EstadoExtraccion(str, Enum):
 class ExtraccionTipo(str, Enum):
     DEMANDA_INDUCIDA = "demanda_inducida"
     FINDRISC = "findrisc"
+    GESTION_CAPTACION = "gestion_captacion"
+
+
+# ─── Programas/banderas del módulo Gestión Captación ────────────────────────
+# Orden canónico para el grid del PDF. La SQL devuelve cada uno con "SI" o vacío.
+CAPTACION_PROGRAMAS: list[tuple[str, str]] = [
+    ("flg_gestantes",     "Gestantes"),
+    ("flg_hta",           "HTA"),
+    ("flg_mujer_sana",    "Mujer sana"),
+    ("flg_ser_joven",     "Ser joven"),
+    ("flg_salud_mental",  "Salud mental"),
+    ("flg_victimas",      "Víctimas"),
+    ("flg_epoc",          "EPOC"),
+    ("flg_amarte",        "Amarte"),
+    ("flg_renal",         "Renal"),
+    ("flg_vih",           "VIH"),
+    ("flg_hemofilia",     "Hemofilia"),
+    ("flg_salud_sexual",  "Salud sexual"),
+    ("flg_cancer",        "Cáncer"),
+    ("flg_tuberculosis",  "Tuberculosis"),
+    ("flg_lepra",         "Lepra"),
+    ("flg_epilepsia",     "Epilepsia"),
+    ("flg_huerfanas",     "Enfermedades huérfanas"),
+    ("flg_desnutricion",  "Desnutrición"),
+    ("flg_obesidad",      "Obesidad"),
+]
 
 
 class RegistroFindrisc(BaseModel):
@@ -176,6 +202,91 @@ class AfiliadoConFindrisc(BaseModel):
     @property
     def pdf_key(self) -> str:
         return f"{self.doc_key}_{self.fecha_registro}"
+
+
+class RegistroCaptacion(BaseModel):
+    """Una fila del reporte Gestión Captación Afiliados.
+
+    Política: todos los campos se almacenan tal cual vienen de la BD (string literal),
+    salvo la fecha de captación que se parsea para poder agrupar/nombrar archivos.
+    """
+
+    model_config = ConfigDict(use_enum_values=True, str_strip_whitespace=True)
+
+    # ── Metadata interna (no va al reporte; usada para agrupar/nombrar archivos) ──
+    seq_captacion_afiliado: int
+    tipo_documento: TipoDocumento
+    fecha_captacion: date
+
+    # ── Identificación ──────────────────────────────────────────────────────
+    tipo_identificacion_desc: str | None = None
+    num_documento: str
+    nombre_completo: str
+    genero: str | None = None
+    fec_nacimiento: str | None = None                  # literal de BD ("YYYY-MM-DD" o "")
+    edad: str | None = None                             # literal de BD ("23 AÑOS", "6 MESES", "15 DIAS")
+
+    # ── Captación ──────────────────────────────────────────────────────────
+    funcionario: str | None = None
+    fecha_captacion_str: str | None = None              # literal de BD para mostrar tal cual
+    estado: str | None = None
+    fuente_captacion: str | None = None
+
+    # ── Ubicación / Contacto ───────────────────────────────────────────────
+    regional: str | None = None
+    departamento: str | None = None
+    municipio: str | None = None
+    direccion: str | None = None
+    telefono_celular: str | None = None
+    telefono_fijo: str | None = None
+    telefono_familiar: str | None = None
+    correo: str | None = None
+    prestador_servicios: str | None = None
+
+    # ── 19 banderas de programas (vienen como "SI" o cadena vacía) ─────────
+    flg_gestantes: str | None = None
+    flg_hta: str | None = None
+    flg_mujer_sana: str | None = None
+    flg_ser_joven: str | None = None
+    flg_salud_mental: str | None = None
+    flg_victimas: str | None = None
+    flg_epoc: str | None = None
+    flg_amarte: str | None = None
+    flg_renal: str | None = None
+    flg_vih: str | None = None
+    flg_hemofilia: str | None = None
+    flg_salud_sexual: str | None = None
+    flg_cancer: str | None = None
+    flg_tuberculosis: str | None = None
+    flg_lepra: str | None = None
+    flg_epilepsia: str | None = None
+    flg_huerfanas: str | None = None
+    flg_desnutricion: str | None = None
+    flg_obesidad: str | None = None
+
+    @property
+    def doc_key(self) -> str:
+        return f"{self.tipo_documento}_{self.num_documento}"
+
+    def flag_marcado(self, attr: str) -> bool:
+        """True solo si la BD trae exactamente 'SI' (case-insensitive, trim)."""
+        v = getattr(self, attr, None) or ""
+        return v.strip().upper() == "SI"
+
+
+class AfiliadoConCaptacion(BaseModel):
+    """Un afiliado con sus registros de Captación agrupados por fecha."""
+
+    doc_key: str
+    tipo_documento: TipoDocumento
+    num_documento: str
+    nombre_completo: str
+    fecha_captacion: date
+    registros: list[RegistroCaptacion]
+
+    @property
+    def pdf_key(self) -> str:
+        return f"{self.doc_key}_{self.fecha_captacion}"
 
 
 class ModoPdf(str, Enum):

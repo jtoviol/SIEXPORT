@@ -1,7 +1,14 @@
 """Lógica de dominio — agrupación de atenciones/registros por afiliado."""
 from collections import defaultdict
 
-from efdi.domain.models import AfiliadoConAtenciones, AfiliadoConFindrisc, Atencion, RegistroFindrisc
+from efdi.domain.models import (
+    AfiliadoConAtenciones,
+    AfiliadoConCaptacion,
+    AfiliadoConFindrisc,
+    Atencion,
+    RegistroCaptacion,
+    RegistroFindrisc,
+)
 
 
 def agrupar_por_afiliado(atenciones: list[Atencion]) -> list[AfiliadoConAtenciones]:
@@ -56,3 +63,30 @@ def agrupar_por_afiliado_findrisc(registros: list[RegistroFindrisc]) -> list[Afi
             )
         )
     return sorted(resultado, key=lambda x: (x.doc_key, x.fecha_registro))
+
+
+def agrupar_por_afiliado_captacion(registros: list[RegistroCaptacion]) -> list[AfiliadoConCaptacion]:
+    """Agrupa registros de Captación por (documento, fecha_captacion) — 1 PDF por afiliado por fecha.
+
+    Si una persona tiene N filas con la misma fecha_captacion → caen en el mismo PDF.
+    Si tiene fechas distintas → un PDF por cada fecha.
+    """
+    grupos: dict[str, list[RegistroCaptacion]] = defaultdict(list)
+    for r in registros:
+        clave = f"{r.doc_key}_{r.fecha_captacion}"
+        grupos[clave].append(r)
+
+    resultado: list[AfiliadoConCaptacion] = []
+    for _, grupo in grupos.items():
+        primero = grupo[0]
+        resultado.append(
+            AfiliadoConCaptacion(
+                doc_key=primero.doc_key,
+                tipo_documento=primero.tipo_documento,
+                num_documento=primero.num_documento,
+                nombre_completo=primero.nombre_completo,
+                fecha_captacion=primero.fecha_captacion,
+                registros=grupo,
+            )
+        )
+    return sorted(resultado, key=lambda x: (x.doc_key, x.fecha_captacion))

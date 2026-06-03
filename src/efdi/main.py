@@ -14,6 +14,7 @@ from fastapi.staticfiles import StaticFiles
 
 from efdi import __version__
 from efdi.api.routes import router
+from efdi.api.routes_captacion import router as router_captacion
 from efdi.api.routes_findrisc import router as router_findrisc
 from efdi.config import settings
 
@@ -137,6 +138,7 @@ async def do_logout() -> RedirectResponse:
 # ── App routes ─────────────────────────────────────────────────────────────────
 app.include_router(router)
 app.include_router(router_findrisc)
+app.include_router(router_captacion)
 
 app.mount("/static", StaticFiles(directory=WEB_DIR), name="static")
 
