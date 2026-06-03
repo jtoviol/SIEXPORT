@@ -4,7 +4,7 @@ Mismo lenguaje visual que los demás módulos:
 - Header limpio: logo Mutualser a la izquierda + título centrado en azul.
 - Secciones: DATOS DEL AFILIADO / UBICACIÓN Y PERÍODO / CAPTACIÓN /
   PLANIFICACIÓN / EVENTOS OBSTÉTRICOS / FACTORES CLÍNICOS (grid 13) /
-  SEGUIMIENTO / OBSERVACIONES.
+  SEGUIMIENTO.
 
 Política: contenido literal de la BD.
 """
@@ -66,11 +66,6 @@ STYLE_FACTOR = ParagraphStyle(
     "Factor", parent=_styles["Normal"],
     fontName="Helvetica", fontSize=8, textColor=COLOR_TEXT, leading=10,
     alignment=TA_CENTER,
-)
-STYLE_OBS = ParagraphStyle(
-    "Obs", parent=_styles["Normal"],
-    fontName="Helvetica", fontSize=8, textColor=COLOR_TEXT, leading=11,
-    alignment=TA_LEFT,
 )
 STYLE_FOOTER = ParagraphStyle(
     "Footer", parent=_styles["Normal"],
@@ -274,38 +269,18 @@ def _seguimiento(reg: RegistroPlanFamiliar, width: float) -> Table:
     ], width)
 
 
-def _observaciones(reg: RegistroPlanFamiliar, width: float) -> Table:
-    obs = (reg.observaciones or "").strip() or "—"
-    p = Paragraph(obs, STYLE_OBS)
-    t = Table([[p]], colWidths=[width])
-    t.setStyle(TableStyle([
-        ("BACKGROUND",  (0, 0), (-1, -1), COLOR_QUESTION_BG),
-        ("BOX",         (0, 0), (-1, -1), 0.5, COLOR_BORDER),
-        ("LEFTPADDING", (0, 0), (-1, -1), 8),
-        ("RIGHTPADDING",(0, 0), (-1, -1), 8),
-        ("TOPPADDING",  (0, 0), (-1, -1), 5),
-        ("BOTTOMPADDING",(0, 0), (-1, -1), 5),
-    ]))
-    return t
-
-
 # ─── Composición ─────────────────────────────────────────────────────────────
 
-def _construir_pagina_planfami(afiliado: AfiliadoConPlanFamiliar) -> list:
-    reg = afiliado.registros[0]
-    width = letter[0] - 20 * mm
-
+def _bloque_seguimiento(reg: RegistroPlanFamiliar, width: float,
+                        idx: int, total: int) -> list:
+    """Bloque completo de UN seguimiento: CAPTACIÓN + PLANIFICACIÓN +
+    EVENTOS OBSTÉTRICOS + SEGUIMIENTO. Si hay más de uno, antepone un sub-header
+    \"SEGUIMIENTO #N de M\" para distinguirlos."""
     elems: list = []
-    elems.append(_banner(width))
-    elems.append(Spacer(1, 4))
-
-    elems.append(_section_header("DATOS DEL AFILIADO", width))
-    elems.append(_datos_afiliado(reg, width))
-    elems.append(Spacer(1, 4))
-
-    elems.append(_section_header("UBICACIÓN Y PERÍODO", width))
-    elems.append(_ubicacion_periodo(reg, width))
-    elems.append(Spacer(1, 4))
+    if total > 1:
+        elems.append(Spacer(1, 6))
+        elems.append(_section_header(f"SEGUIMIENTO #{idx} DE {total}", width))
+        elems.append(Spacer(1, 2))
 
     elems.append(_section_header("CAPTACIÓN", width))
     elems.append(_captacion(reg, width))
@@ -319,32 +294,36 @@ def _construir_pagina_planfami(afiliado: AfiliadoConPlanFamiliar) -> list:
     elems.append(_eventos_obstetricos(reg, width))
     elems.append(Spacer(1, 4))
 
+    elems.append(_section_header("SEGUIMIENTO", width))
+    elems.append(_seguimiento(reg, width))
+    return elems
+
+
+def _construir_pagina_planfami(afiliado: AfiliadoConPlanFamiliar) -> list:
+    reg = afiliado.registros[0]       # datos compartidos (afiliado / ubicación / FIC)
+    width = letter[0] - 20 * mm
+    total_seg = len(afiliado.registros)
+
+    elems: list = []
+    elems.append(_banner(width))
+    elems.append(Spacer(1, 4))
+
+    # ── Bloques compartidos (no cambian entre seguimientos del mismo afiliado) ──
+    elems.append(_section_header("DATOS DEL AFILIADO", width))
+    elems.append(_datos_afiliado(reg, width))
+    elems.append(Spacer(1, 4))
+
+    elems.append(_section_header("UBICACIÓN Y PERÍODO", width))
+    elems.append(_ubicacion_periodo(reg, width))
+    elems.append(Spacer(1, 4))
+
     elems.append(_section_header("FACTORES CLÍNICOS", width))
     elems.append(Spacer(1, 2))
     elems.append(_factores_clinicos_grid(reg, width))
-    elems.append(Spacer(1, 4))
 
-    elems.append(_section_header("SEGUIMIENTO", width))
-    elems.append(_seguimiento(reg, width))
-    elems.append(Spacer(1, 4))
-
-    elems.append(_section_header("OBSERVACIONES", width))
-    elems.append(Spacer(1, 2))
-    elems.append(_observaciones(reg, width))
-
-    # Si hay más de un registro en la misma fecha de gestión, listarlos abajo
-    if len(afiliado.registros) > 1:
-        elems.append(Spacer(1, 6))
-        elems.append(Paragraph(
-            f"<font color='#234674'><b>{len(afiliado.registros)} seguimientos en esta misma fecha</b></font>",
-            STYLE_VALUE,
-        ))
-        for i, r in enumerate(afiliado.registros[1:], start=2):
-            extra = (
-                f"<b>#{i}</b> · Estado: {_raw(r.estado)} · Tipo seg.: {_raw(r.tipo_seguimiento)} · "
-                f"Encuestador: {_raw(r.encuestador)}"
-            )
-            elems.append(Paragraph(extra, STYLE_VALUE))
+    # ── Un bloque completo por cada seguimiento ───────────────────────────────
+    for i, r in enumerate(afiliado.registros, start=1):
+        elems.extend(_bloque_seguimiento(r, width, i, total_seg))
 
     return elems
 
