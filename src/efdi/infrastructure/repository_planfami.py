@@ -31,14 +31,17 @@ WITH X AS (
            a.seq_poblacion_riesgo,
            a.cod_tipo_identificacion,
            a.COD_REGIONAL,
-           b.des_tipo_identificacion,
-           a.num_tipo_identificacion_persona,
-           CONVERT(CHAR(10), a.fec_gestion_seguimiento) AS fec_gestion_seguimiento,
-           e.AFL_PRIMER_NOMBRE + ' ' + ISNULL(e.AFL_SEGUNDO_NOMBRE,'') + ' '
-               + e.AFL_PRIMER_APELLIDO + ' ' + ISNULL(e.AFL_SEGUNDO_APELLIDO,'') AS nom_afiliado,
+           a.nro_tipo_identificacion,
+           fec_gestion_seguimiento = CASE
+                       WHEN (l.fec_gestion_seguimiento IS NULL
+                             OR l.fec_gestion_seguimiento = '1900-01-01') THEN ''
+                       ELSE CONVERT(CHAR(10), l.fec_gestion_seguimiento)
+                   END,
+           b.AFL_PRIMER_NOMBRE + ' ' + ISNULL(b.AFL_SEGUNDO_NOMBRE,'') + ' '
+               + b.AFL_PRIMER_APELLIDO + ' ' + ISNULL(b.AFL_SEGUNDO_APELLIDO,'') AS nom_afiliado,
            genero = CASE
-                       WHEN e.COD_GENERO = 'M' THEN 'MASCULINO'
-                       WHEN e.COD_GENERO = 'F' THEN 'FEMENINO'
+                       WHEN b.COD_GENERO = 'M' THEN 'MASCULINO'
+                       WHEN b.COD_GENERO = 'F' THEN 'FEMENINO'
                        ELSE ''
                    END,
            fec_nacimiento = CASE
@@ -46,13 +49,14 @@ WITH X AS (
                        ELSE CONVERT(CHAR(10), b.FEC_NACIMIENTO)
                    END,
            edad = DATEDIFF(year, b.FEC_NACIMIENTO, GETDATE()),
-           ISNULL(d.des_departamento,'')       AS des_departamento,
-           ISNULL(c.DES_REGIONAL,'')           AS des_regional,
-           ISNULL(f.DES_MUNICIPIO,'')          AS des_municipio,
-           ISNULL(h.DES_MOTIVO_NO_PLANIFICA,'') AS des_motivo_no_planifica,
+           ISNULL(d.des_departamento,'')          AS des_departamento,
+           ISNULL(c.DES_REGIONAL,'')              AS des_regional,
+           ISNULL(f.DES_MUNICIPIO,'')             AS des_municipio,
+           ISNULL(e.des_tipo_identificacion,'')   AS des_tipo_identificacion,
+           ISNULL(h.DES_MOTIVO_NO_PLANIFICA,'')   AS des_motivo_no_planifica,
            ISNULL(i.DES_METODO_ANTICONCEPTIVO,'') AS des_metodo_anticonceptivo,
            ISNULL(j.DES_METODO_ANTICONCEPTIVO,'') AS des_metodo_planificacion,
-           ISNULL(k.des_motivo_nocontacto,'')  AS des_motivo_nocontacto,
+           ISNULL(k.des_motivo_nocontacto,'')     AS des_motivo_nocontacto,
            a.cod_periodo_ano,
            a.cod_periodo_trimestre,
            ISNULL(a.flg_inicio_preconcepcional,'') AS flg_inicio_preconcepcional,
@@ -128,12 +132,8 @@ WITH X AS (
     LEFT JOIN AVS_DEPARTAMENTO AS d ON b.COD_DEPARTAMENTO = d.COD_DEPARTAMENTO
     LEFT JOIN SRG_DETALLE_RIESGO_REPRODUCTIVO AS l
         ON a.seq_poblacion_riesgo = l.seq_poblacion_riesgo
-    LEFT JOIN AVS_TIPO_IDENTIFICACION_USUARIO AS e_t
-        ON a.cod_tipo_identificacion = e_t.COD_TIPO_IDENTIFICACION
-    LEFT JOIN AVS_TIPO_IDENTIFICACION_USUARIO AS b_t
-        ON b_t.COD_TIPO_IDENTIFICACION = a.cod_tipo_identificacion
-    LEFT JOIN AVS_TIPO_IDENTIFICACION_USUARIO AS aux
-        ON aux.COD_TIPO_IDENTIFICACION = a.cod_tipo_identificacion
+    LEFT JOIN AVS_TIPO_IDENTIFICACION_USUARIO AS e
+        ON a.cod_tipo_identificacion = e.COD_TIPO_IDENTIFICACION
     LEFT JOIN AVS_MUNICIPIO AS f ON b.COD_MUNICIPIO = f.COD_MUNICIPIO
     LEFT JOIN AVS_USUARIO_SISTEMA AS g ON l.SEQ_USUARIO_SISTEMA = g.SEQ_USUARIO_SISTEMA
     LEFT JOIN SRG_MOTIVO_NO_PLANIFICA AS h
@@ -159,7 +159,7 @@ SELECT X.NUM_REGISTRO,
        X.tipo_poblacion,
        X.nom_encuestador,
        X.fec_gestion_seguimiento,
-       X.num_tipo_identificacion_persona,
+       X.nro_tipo_identificacion,
        X.des_tipo_identificacion,
        X.nom_afiliado,
        X.fec_nacimiento,
@@ -395,7 +395,7 @@ class SqlServerPlanFamiRepository:
                 encuestador=_str(r.get("nom_encuestador")),
                 fecha_gestion_str=_str(r.get("fec_gestion_seguimiento")),
                 tipo_identificacion_desc=_str(r.get("des_tipo_identificacion")),
-                num_documento=str(r.get("num_tipo_identificacion_persona") or "").strip(),
+                num_documento=str(r.get("nro_tipo_identificacion") or "").strip(),
                 nombre_completo=_str(r.get("nom_afiliado")) or "",
                 fecha_nacimiento=_str(r.get("fec_nacimiento")),
                 edad=_str(r.get("edad")),

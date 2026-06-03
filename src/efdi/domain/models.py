@@ -136,6 +136,25 @@ def estado_label(estado: "EstadoExtraccion | str") -> str:
     return ESTADO_LABEL.get(v, v)
 
 
+def safe_filename(nombre: str | None, fallback: str) -> str:
+    """Sanitiza un nombre custom para usarlo como nombre de archivo.
+
+    - Reemplaza caracteres inválidos para filesystem (/, \\, :, *, ?, ", <, >, |) por _.
+    - Colapsa espacios y guiones bajos múltiples.
+    - Limita a 80 caracteres.
+    - Si el nombre queda vacío o no se pasó, devuelve `fallback`.
+    """
+    import re
+    if not nombre or not str(nombre).strip():
+        return fallback
+    s = str(nombre).strip()
+    s = re.sub(r'[\\/:*?"<>|\r\n\t]+', "_", s)
+    s = re.sub(r"\s+", "_", s)
+    s = re.sub(r"_+", "_", s).strip("._-")
+    s = s[:80].rstrip("._-")
+    return s or fallback
+
+
 class ExtraccionTipo(str, Enum):
     DEMANDA_INDUCIDA = "demanda_inducida"
     FINDRISC = "findrisc"

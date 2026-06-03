@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse
 
 from efdi.api.schemas import CrearExtraccionReq, ExtraccionResp, RenombrarJobReq
 from efdi.config import settings
-from efdi.domain.models import EstadoExtraccion, Extraccion, ExtraccionTipo, Lote, ModoPdf, estado_label
+from efdi.domain.models import EstadoExtraccion, Extraccion, ExtraccionTipo, Lote, ModoPdf, estado_label, safe_filename
 from efdi.infrastructure.job_store import store
 from efdi.infrastructure.repository_captacion import get_captacion_repository
 from efdi.services.extraction_captacion import ejecutar_extraccion_captacion
@@ -153,9 +153,13 @@ async def descargar_lote_captacion(job_id: UUID, numero: int) -> FileResponse:
         raise HTTPException(status_code=409, detail=f"Lote {numero} aún no descargable")
     if not lote.zip_path or not Path(lote.zip_path).exists():
         raise HTTPException(status_code=410, detail="ZIP no disponible")
+    job = store.get(job_id)
+    base = safe_filename(job.nombre if job else None, f"captacion_lote_{numero:03d}_{job_id}")
+    if job and job.nombre:
+        base = f"{base}_lote_{numero:03d}"
     return FileResponse(
         path=lote.zip_path,
-        filename=f"captacion_lote_{numero:03d}_{job_id}.zip",
+        filename=f"{base}.zip",
         media_type="application/zip",
     )
 
@@ -236,7 +240,7 @@ async def descargar_extraccion_captacion(job_id: UUID) -> FileResponse:
 
     return FileResponse(
         path=job.zip_path,
-        filename=f"captacion_{job_id}.zip",
+        filename=f"{safe_filename(job.nombre, f'captacion_{job_id}')}.zip",
         media_type="application/zip",
     )
 

@@ -18,7 +18,7 @@ from efdi.api.schemas import (
     RenombrarJobReq,
 )
 from efdi.config import settings
-from efdi.domain.models import Atencion, EstadoExtraccion, Extraccion, ExtraccionTipo, Lote, estado_label
+from efdi.domain.models import Atencion, EstadoExtraccion, Extraccion, ExtraccionTipo, Lote, estado_label, safe_filename
 from efdi.infrastructure.db import db
 from efdi.infrastructure.job_store import store
 from efdi.infrastructure.repository import SqlServerRepository, get_repository
@@ -323,9 +323,13 @@ async def descargar_lote(job_id: UUID, numero: int) -> FileResponse:
         )
     if not lote.zip_path or not Path(lote.zip_path).exists():
         raise HTTPException(status_code=410, detail="Zip del lote no disponible")
+    job = store.get(job_id)
+    base = safe_filename(job.nombre if job else None, f"lote_{numero:03d}_{job_id}")
+    if job and job.nombre:
+        base = f"{base}_lote_{numero:03d}"
     return FileResponse(
         path=lote.zip_path,
-        filename=f"lote_{numero:03d}_{job_id}.zip",
+        filename=f"{base}.zip",
         media_type="application/zip",
     )
 
@@ -476,7 +480,7 @@ async def descargar_extraccion(job_id: UUID) -> FileResponse:
         store.save(job)
     return FileResponse(
         path=job.zip_path,
-        filename=f"extraccion_{job_id}.zip",
+        filename=f"{safe_filename(job.nombre, f'extraccion_{job_id}')}.zip",
         media_type="application/zip",
     )
 
