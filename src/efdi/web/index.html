@@ -181,6 +181,17 @@
     .mob-tab { transition: color .15s; color: #94a3b8; }
     .mob-tab.active { color: #234674; }
     .mob-tab span { font-size: 10px; line-height: 1.2; }
+    /* Quick stats chips (franja B) */
+    .qs-chip {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 2px 8px; border-radius: 999px;
+      background: #fff; border: 1px solid #e2e8f0;
+      color: #475569; font-weight: 500;
+    }
+    .qs-chip.qs-warn { background: #fffbeb; border-color: #fde68a; color: #b45309; }
+    .qs-chip.qs-danger { background: #fef2f2; border-color: #fecaca; color: #dc2626; }
+    .qs-chip.qs-ok { background: #ecfdf5; border-color: #bbf7d0; color: #047857; }
+    #quick-stats::-webkit-scrollbar { display: none; }
   </style>
 </head>
 
@@ -207,17 +218,25 @@
   </div>
   <!-- Tabs centrados (solo desktop) -->
   <nav class="flex-1 hidden sm:flex items-center justify-center gap-1">
-    <button data-tab="demanda-inducida" onclick="switchTab('demanda-inducida')"
+    <button data-tab="dashboard" onclick="switchTab('dashboard')"
             class="tab-btn active px-3.5 py-1.5 text-sm font-medium outline-none whitespace-nowrap rounded-full transition-all">
+      Inicio
+    </button>
+    <button data-tab="demanda-inducida" onclick="switchTab('demanda-inducida')"
+            class="tab-btn px-3.5 py-1.5 text-sm font-medium outline-none whitespace-nowrap rounded-full transition-all">
       Demanda Inducida
     </button>
     <button data-tab="findrisc" onclick="switchTab('findrisc')"
             class="tab-btn px-3.5 py-1.5 text-sm font-medium outline-none whitespace-nowrap rounded-full transition-all">
       FINDRISC
     </button>
-    <button disabled title="Proximo modulo"
-            class="px-3.5 py-1.5 text-sm text-slate-300 cursor-not-allowed whitespace-nowrap select-none rounded-full">
-      Control Prenatal
+    <button data-tab="gestion-captacion" onclick="switchTab('gestion-captacion')"
+            class="tab-btn px-3.5 py-1.5 text-sm font-medium outline-none whitespace-nowrap rounded-full transition-all">
+      Gestión Captación
+    </button>
+    <button data-tab="planificacion-familiar" onclick="switchTab('planificacion-familiar')"
+            class="tab-btn px-3.5 py-1.5 text-sm font-medium outline-none whitespace-nowrap rounded-full transition-all">
+      Planificación Familiar
     </button>
   </nav>
   <!-- Health badge + Logout -->
@@ -240,8 +259,146 @@
   </div>
 </header>
 
-<!-- ═══ SPLIT LAYOUT ═══ -->
-<div class="flex-1 flex overflow-hidden relative sm:p-2 sm:gap-2">
+<!-- ═══ FRANJA B — Quick stats (siempre visible salvo en Dashboard) ═══ -->
+<div id="quick-stats"
+     class="hidden shrink-0 px-4 py-1.5 border-b border-slate-200 bg-slate-50/80
+            flex items-center gap-3 text-[11px] overflow-x-auto whitespace-nowrap"
+     style="scrollbar-width:none">
+  <span id="qs-en-curso" class="qs-chip"></span>
+  <span id="qs-fallidas" class="qs-chip"></span>
+  <span id="qs-pdfs-hoy" class="qs-chip"></span>
+  <span id="qs-pdfs-mes" class="qs-chip"></span>
+  <span id="qs-modo"     class="qs-chip ml-auto"></span>
+</div>
+
+<!-- ═══ VISTA DASHBOARD ═══ -->
+<div id="dashboard-view" class="flex-1 overflow-y-auto bg-slate-50/40 px-4 sm:px-6 py-5">
+  <!-- KPIs grandes -->
+  <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+    <div class="bg-white rounded-xl border border-slate-200 p-4 flex flex-col gap-1">
+      <div class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">PDFs hoy</div>
+      <div id="db-pdfs-hoy" class="text-2xl font-bold text-brand-700 tabular-nums">—</div>
+    </div>
+    <div class="bg-white rounded-xl border border-slate-200 p-4 flex flex-col gap-1">
+      <div class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">PDFs últimos 7 días</div>
+      <div id="db-pdfs-semana" class="text-2xl font-bold text-brand-700 tabular-nums">—</div>
+    </div>
+    <div class="bg-white rounded-xl border border-slate-200 p-4 flex flex-col gap-1">
+      <div class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">PDFs último mes</div>
+      <div id="db-pdfs-mes" class="text-2xl font-bold text-brand-700 tabular-nums">—</div>
+    </div>
+    <div class="bg-white rounded-xl border border-slate-200 p-4 flex flex-col gap-1">
+      <div class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Afiliados último mes</div>
+      <div id="db-afiliados-mes" class="text-2xl font-bold text-emerald-700 tabular-nums">—</div>
+    </div>
+  </div>
+
+  <!-- Cards por módulo -->
+  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+    <div data-mod="demanda_inducida" class="db-mod-card bg-white rounded-xl border border-slate-200 p-4 cursor-pointer hover:border-brand-400 hover:shadow transition-all">
+      <div class="flex items-center justify-between mb-2">
+        <div class="font-semibold text-slate-800 text-sm">Demanda Inducida</div>
+        <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-brand-100 text-brand-700">DI</span>
+      </div>
+      <div class="grid grid-cols-3 gap-2 text-center">
+        <div>
+          <div class="text-[9px] uppercase text-slate-400">En curso</div>
+          <div class="text-base font-bold text-amber-600 tabular-nums db-mod-curso">—</div>
+        </div>
+        <div>
+          <div class="text-[9px] uppercase text-slate-400">Completados</div>
+          <div class="text-base font-bold text-emerald-600 tabular-nums db-mod-ok">—</div>
+        </div>
+        <div>
+          <div class="text-[9px] uppercase text-slate-400">Fallidos</div>
+          <div class="text-base font-bold text-red-500 tabular-nums db-mod-fail">—</div>
+        </div>
+      </div>
+      <div class="text-[10px] text-slate-400 mt-2 db-mod-ultimo">—</div>
+    </div>
+    <div data-mod="findrisc" class="db-mod-card bg-white rounded-xl border border-slate-200 p-4 cursor-pointer hover:border-emerald-400 hover:shadow transition-all">
+      <div class="flex items-center justify-between mb-2">
+        <div class="font-semibold text-slate-800 text-sm">FINDRISC</div>
+        <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700">FR</span>
+      </div>
+      <div class="grid grid-cols-3 gap-2 text-center">
+        <div>
+          <div class="text-[9px] uppercase text-slate-400">En curso</div>
+          <div class="text-base font-bold text-amber-600 tabular-nums db-mod-curso">—</div>
+        </div>
+        <div>
+          <div class="text-[9px] uppercase text-slate-400">Completados</div>
+          <div class="text-base font-bold text-emerald-600 tabular-nums db-mod-ok">—</div>
+        </div>
+        <div>
+          <div class="text-[9px] uppercase text-slate-400">Fallidos</div>
+          <div class="text-base font-bold text-red-500 tabular-nums db-mod-fail">—</div>
+        </div>
+      </div>
+      <div class="text-[10px] text-slate-400 mt-2 db-mod-ultimo">—</div>
+    </div>
+    <div data-mod="gestion_captacion" class="db-mod-card bg-white rounded-xl border border-slate-200 p-4 cursor-pointer hover:border-amber-400 hover:shadow transition-all">
+      <div class="flex items-center justify-between mb-2">
+        <div class="font-semibold text-slate-800 text-sm">Gestión Captación</div>
+        <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">GC</span>
+      </div>
+      <div class="grid grid-cols-3 gap-2 text-center">
+        <div>
+          <div class="text-[9px] uppercase text-slate-400">En curso</div>
+          <div class="text-base font-bold text-amber-600 tabular-nums db-mod-curso">—</div>
+        </div>
+        <div>
+          <div class="text-[9px] uppercase text-slate-400">Completados</div>
+          <div class="text-base font-bold text-emerald-600 tabular-nums db-mod-ok">—</div>
+        </div>
+        <div>
+          <div class="text-[9px] uppercase text-slate-400">Fallidos</div>
+          <div class="text-base font-bold text-red-500 tabular-nums db-mod-fail">—</div>
+        </div>
+      </div>
+      <div class="text-[10px] text-slate-400 mt-2 db-mod-ultimo">—</div>
+    </div>
+    <div data-mod="planificacion_familiar" class="db-mod-card bg-white rounded-xl border border-slate-200 p-4 cursor-pointer hover:border-rose-400 hover:shadow transition-all">
+      <div class="flex items-center justify-between mb-2">
+        <div class="font-semibold text-slate-800 text-sm">Planificación Familiar</div>
+        <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-rose-100 text-rose-700">PF</span>
+      </div>
+      <div class="grid grid-cols-3 gap-2 text-center">
+        <div>
+          <div class="text-[9px] uppercase text-slate-400">En curso</div>
+          <div class="text-base font-bold text-amber-600 tabular-nums db-mod-curso">—</div>
+        </div>
+        <div>
+          <div class="text-[9px] uppercase text-slate-400">Completados</div>
+          <div class="text-base font-bold text-emerald-600 tabular-nums db-mod-ok">—</div>
+        </div>
+        <div>
+          <div class="text-[9px] uppercase text-slate-400">Fallidos</div>
+          <div class="text-base font-bold text-red-500 tabular-nums db-mod-fail">—</div>
+        </div>
+      </div>
+      <div class="text-[10px] text-slate-400 mt-2 db-mod-ultimo">—</div>
+    </div>
+  </div>
+
+  <!-- Actividad reciente -->
+  <div class="bg-white rounded-xl border border-slate-200 overflow-hidden">
+    <div class="px-4 py-2.5 border-b border-slate-100 flex items-center justify-between">
+      <h3 class="text-xs font-semibold text-slate-700 uppercase tracking-wider">Actividad reciente</h3>
+      <button onclick="loadDashboard()" title="Refrescar"
+              class="h-6 w-6 rounded hover:bg-slate-100 flex items-center justify-center text-slate-400 transition-colors">
+        <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round"
+                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+        </svg>
+      </button>
+    </div>
+    <ul id="db-recientes" class="divide-y divide-slate-100"></ul>
+  </div>
+</div>
+
+<!-- ═══ SPLIT LAYOUT (módulos) ═══ -->
+<div id="modules-view" class="hidden flex-1 flex overflow-hidden relative sm:p-2 sm:gap-2">
 
   <!-- Sidebar toggle button (sits on the border) -->
   <button id="sidebar-toggle" onclick="toggleSidebar()"
@@ -259,7 +416,7 @@
   <aside id="sidebar" class="shrink-0 flex flex-col bg-white sm:rounded-xl sm:border sm:border-white/80"
          style="box-shadow: 0 2px 12px rgba(35,70,116,.1), 0 0 0 1px rgba(35,70,116,.06)">
 
-    <div class="px-3 pt-3 pb-2 shrink-0">
+    <div class="px-3 pt-3 pb-2 shrink-0 space-y-1.5">
       <button id="btn-toggle" onclick="toggleForm()"
               class="w-full flex items-center justify-center gap-1.5 h-9 rounded-lg
                      bg-brand-700 hover:bg-brand-800 text-white text-sm font-medium transition-colors">
@@ -268,6 +425,17 @@
           <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
         </svg>
         <span id="lbl-btn" class="s-label">Nueva extraccion</span>
+      </button>
+      <!-- Solo visible en pestaña Demanda Inducida -->
+      <button id="btn-facturas" type="button" onclick="openFacturasModal()"
+              class="hidden w-full items-center justify-center gap-1.5 h-8 rounded-lg
+                     bg-white border border-slate-300 hover:bg-slate-50 text-slate-700
+                     text-xs font-medium transition-colors">
+        <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round"
+                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+        </svg>
+        <span class="s-label">Conteo por facturas</span>
       </button>
     </div>
 
@@ -317,6 +485,34 @@
                      class="w-full h-8 px-2 rounded-md border border-slate-300 text-xs bg-white
                             outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500"/>
               <p id="lote-preview" class="text-[10px] text-slate-400 mt-1"></p>
+            </div>
+          </div>
+          <!-- Filtro por factura (solo Demanda Inducida — toggle via switchTab) -->
+          <div id="factura-section" class="hidden di-only border-t border-slate-200 pt-2.5">
+            <label class="text-xs font-medium text-slate-500 block mb-1.5">
+              Filtro por factura
+              <span class="text-[10px] text-slate-400 font-normal">(opcional · cruza con AVS_REGISTROS_AP)</span>
+            </label>
+            <div class="space-y-1.5">
+              <div class="flex items-center gap-1.5">
+                <span class="text-[10px] font-semibold uppercase tracking-wide text-slate-600 w-12 shrink-0">Sub</span>
+                <span class="font-mono text-[10px] text-slate-400 shrink-0">CAB/FAB</span>
+                <input id="fac-form-sub" type="text" maxlength="20" placeholder="ej: 11502" autocomplete="off"
+                       oninput="onFacturaFormInput()"
+                       class="flex-1 min-w-0 h-7 px-2 rounded-md border border-slate-300 text-xs font-mono bg-white
+                              outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500"/>
+              </div>
+              <div class="flex items-center gap-1.5">
+                <span class="text-[10px] font-semibold uppercase tracking-wide text-slate-600 w-12 shrink-0">Cont</span>
+                <span class="font-mono text-[10px] text-slate-400 shrink-0">CAB/FAB</span>
+                <input id="fac-form-cont" type="text" maxlength="20" placeholder="ej: 11503" autocomplete="off"
+                       oninput="onFacturaFormInput()"
+                       class="flex-1 min-w-0 h-7 px-2 rounded-md border border-slate-300 text-xs font-mono bg-white
+                              outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500"/>
+              </div>
+              <p class="text-[10px] text-slate-500 leading-snug">
+                Al cargar un régimen las fechas saltan al mes anterior. Con los 2 cargados se crean 2 jobs separados.
+              </p>
             </div>
           </div>
           <p id="ferr" class="text-xs text-red-500 hidden"></p>
@@ -538,12 +734,106 @@
   </div>
 </div>
 
+<!-- ═══ MODAL: CONTEO POR FACTURAS (Demanda Inducida) ═══ -->
+<div id="facturas-overlay"
+     class="hidden fixed inset-0 bg-black/40 backdrop-blur-sm z-[60] flex items-center justify-center p-4"
+     onclick="closeFacturasModal()">
+  <div id="facturas-modal"
+       class="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden"
+       style="transform:scale(.94) translateY(8px);opacity:0;transition:transform .22s cubic-bezier(.34,1.56,.64,1),opacity .18s ease"
+       onclick="event.stopPropagation()">
+    <div class="h-1 w-full bg-gradient-to-r from-brand-500 to-brand-700"></div>
+    <div class="p-6">
+      <div class="flex items-start gap-4 mb-4">
+        <div class="h-10 w-10 rounded-xl bg-brand-50 flex items-center justify-center shrink-0">
+          <svg class="h-5 w-5 text-brand-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+          </svg>
+        </div>
+        <div>
+          <h3 class="font-semibold text-slate-900 text-base leading-tight">Conteo por facturas</h3>
+          <p class="text-xs text-slate-500 mt-0.5">Preview de cuántos registros traen los códigos CAB/FAB del mes</p>
+        </div>
+      </div>
+
+      <p class="text-xs text-slate-500 mb-3 leading-snug">
+        Pega el número de la factura. Buscamos automáticamente el par
+        <span class="font-mono text-slate-700">CAB</span> +
+        <span class="font-mono text-slate-700">FAB</span> con ese número.
+      </p>
+
+      <!-- SUBSIDIADO -->
+      <div class="mb-3">
+        <div class="flex items-center justify-between mb-1">
+          <label class="text-xs font-semibold text-slate-700 uppercase tracking-wide">Subsidiado</label>
+          <span class="text-[10px] text-slate-400">opcional si solo cargas contributivo</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="font-mono text-xs text-slate-400 select-none">CAB/FAB</span>
+          <input id="fac-sub" type="text" maxlength="20" placeholder="ej: 11502"
+                 oninput="updateFacturasPreview()" onkeydown="onFacturasKey(event)"
+                 class="flex-1 h-9 px-3 rounded-md border border-slate-300 text-sm font-mono bg-white
+                        outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500"/>
+        </div>
+        <p id="fac-sub-preview" class="text-[10px] text-slate-400 mt-1 font-mono"></p>
+      </div>
+
+      <!-- CONTRIBUTIVO -->
+      <div class="mb-3">
+        <div class="flex items-center justify-between mb-1">
+          <label class="text-xs font-semibold text-slate-700 uppercase tracking-wide">Contributivo</label>
+          <span class="text-[10px] text-slate-400">opcional si solo cargas subsidiado</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="font-mono text-xs text-slate-400 select-none">CAB/FAB</span>
+          <input id="fac-cont" type="text" maxlength="20" placeholder="ej: 11503"
+                 oninput="updateFacturasPreview()" onkeydown="onFacturasKey(event)"
+                 class="flex-1 h-9 px-3 rounded-md border border-slate-300 text-sm font-mono bg-white
+                        outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500"/>
+        </div>
+        <p id="fac-cont-preview" class="text-[10px] text-slate-400 mt-1 font-mono"></p>
+      </div>
+
+      <!-- Error / resultado -->
+      <p id="fac-err" class="hidden text-xs text-red-500 mb-3"></p>
+      <div id="fac-result" class="hidden rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs space-y-2 mb-3"></div>
+
+      <!-- Botones -->
+      <div class="flex gap-3 mt-4">
+        <button onclick="closeFacturasModal()"
+                class="flex-1 h-10 rounded-xl border border-slate-200 text-sm font-medium
+                       text-slate-600 hover:bg-slate-50 active:bg-slate-100 transition-colors">
+          Cerrar
+        </button>
+        <button id="fac-verify-btn" onclick="submitFacturas()"
+                class="flex-1 h-10 rounded-xl bg-brand-700 hover:bg-brand-800 active:bg-brand-900
+                       text-white text-sm font-semibold transition-colors
+                       inline-flex items-center justify-center gap-1.5 disabled:opacity-50">
+          <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+          <span id="fac-verify-lbl">Verificar</span>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- ═══ MOBILE BOTTOM NAV ═══ -->
 <nav class="sm:hidden shrink-0 bg-white border-t border-slate-100 z-20"
      style="padding-bottom: env(safe-area-inset-bottom, 0px)">
   <div class="flex">
-    <button data-mob-tab="demanda-inducida" onclick="switchTab('demanda-inducida')"
+    <button data-mob-tab="dashboard" onclick="switchTab('dashboard')"
             class="mob-tab active flex-1 flex flex-col items-center gap-0.5 py-2.5 transition-colors">
+      <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+        <path stroke-linecap="round" stroke-linejoin="round"
+              d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
+      </svg>
+      <span class="font-medium">Inicio</span>
+    </button>
+    <button data-mob-tab="demanda-inducida" onclick="switchTab('demanda-inducida')"
+            class="mob-tab flex-1 flex flex-col items-center gap-0.5 py-2.5 transition-colors">
       <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
         <path stroke-linecap="round" stroke-linejoin="round"
               d="M9 12h6m-6 4h6M9 8h6m-3 12H7a2 2 0 01-2-2V6a2 2 0 012-2h7l5 5v9a2 2 0 01-2 2h-2"/>
@@ -558,13 +848,21 @@
       </svg>
       <span>FINDRISC</span>
     </button>
-    <button disabled
-            class="mob-tab flex-1 flex flex-col items-center gap-0.5 py-2.5 cursor-not-allowed opacity-40 select-none">
+    <button data-mob-tab="gestion-captacion" onclick="switchTab('gestion-captacion')"
+            class="mob-tab flex-1 flex flex-col items-center gap-0.5 py-2.5 transition-colors">
+      <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+        <path stroke-linecap="round" stroke-linejoin="round"
+              d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/>
+      </svg>
+      <span>Captación</span>
+    </button>
+    <button data-mob-tab="planificacion-familiar" onclick="switchTab('planificacion-familiar')"
+            class="mob-tab flex-1 flex flex-col items-center gap-0.5 py-2.5 transition-colors">
       <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
         <path stroke-linecap="round" stroke-linejoin="round"
               d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/>
       </svg>
-      <span>C. Prenatal</span>
+      <span>PlanFami</span>
     </button>
   </div>
 </nav>
@@ -583,7 +881,10 @@ const API = "";
 const $ = id => document.getElementById(id);
 
 function getModuleApi() {
-  return activeTab === "findrisc" ? "/findrisc/extractions" : "/extractions";
+  if (activeTab === "findrisc")               return "/findrisc/extractions";
+  if (activeTab === "gestion-captacion")      return "/gestion-captacion/extractions";
+  if (activeTab === "planificacion-familiar") return "/planificacion-familiar/extractions";
+  return "/extractions";
 }
 // API base capturada al seleccionar un job — persiste en callbacks deferred
 let _selApiBase = "/extractions";
@@ -644,7 +945,13 @@ function renderExpName(id, nombre) {
   // nombre viene de la DB; localStorage solo como caché optimista
   const name = (nombre !== undefined ? nombre : null) ?? getJobName(id);
   const isFindrisc = _selApiBase.includes("findrisc");
-  const modBadge = isFindrisc
+  const isCaptacion = _selApiBase.includes("gestion-captacion");
+  const isPlanFami = _selApiBase.includes("planificacion-familiar");
+  const modBadge = isPlanFami
+    ? `<span class="ml-2 text-xs font-semibold px-1.5 py-0.5 rounded-full bg-rose-100 text-rose-700">Planificación Familiar</span>`
+    : isCaptacion
+    ? `<span class="ml-2 text-xs font-semibold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">Gestión Captación</span>`
+    : isFindrisc
     ? `<span class="ml-2 text-xs font-semibold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700">FINDRISC</span>`
     : `<span class="ml-2 text-xs font-semibold px-1.5 py-0.5 rounded-full bg-brand-100 text-brand-700">Demanda Inducida</span>`;
   const label = name
@@ -834,7 +1141,127 @@ async function loadHealth() {
 // ═══════════════════════════════════════════════════════════════════
 // TABS
 // ═══════════════════════════════════════════════════════════════════
-let activeTab = "demanda-inducida";
+let activeTab = "dashboard";
+let _dashTimer = null;
+let _qsTimer = null;
+
+// ═══════════════════════════════════════════════════════════════════
+// DASHBOARD
+// ═══════════════════════════════════════════════════════════════════
+async function loadDashboard() {
+  clearTimeout(_dashTimer);
+  try {
+    const r = await fetch("/api/dashboard/summary", { credentials: "same-origin" });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const data = await r.json();
+    renderDashboard(data);
+    renderQuickStats(data);
+  } catch (e) {
+    // silencioso — refrescamos en el próximo tick
+  }
+  // Auto-refresh cada 10s cuando el usuario está mirando el dashboard
+  if (activeTab === "dashboard") {
+    _dashTimer = setTimeout(loadDashboard, 10000);
+  }
+}
+
+function renderDashboard(d) {
+  const fmt = n => (n || 0).toLocaleString();
+  $("db-pdfs-hoy").textContent      = fmt(d.global.pdfs_hoy);
+  $("db-pdfs-semana").textContent   = fmt(d.global.pdfs_semana);
+  $("db-pdfs-mes").textContent      = fmt(d.global.pdfs_mes);
+  $("db-afiliados-mes").textContent = fmt(d.global.afiliados_mes);
+
+  // Cards por módulo
+  document.querySelectorAll(".db-mod-card").forEach(card => {
+    const mod = card.dataset.mod;
+    const m = d.modulos[mod];
+    if (!m) return;
+    card.querySelector(".db-mod-curso").textContent = fmt(m.en_curso);
+    card.querySelector(".db-mod-ok").textContent    = fmt(m.completados);
+    card.querySelector(".db-mod-fail").textContent  = fmt(m.fallidos);
+    card.querySelector(".db-mod-ultimo").textContent =
+      m.ultimo ? "Última: " + fmtRel(m.ultimo) : "Sin actividad";
+    card.onclick = () => switchTab(m.tab);
+  });
+
+  // Actividad reciente
+  const ul = $("db-recientes");
+  if (!d.recientes.length) {
+    ul.innerHTML = `<li class="px-4 py-6 text-center text-sm text-slate-400">Sin actividad reciente</li>`;
+    return;
+  }
+  const stColor = {
+    completed: "text-emerald-700 bg-emerald-50",
+    running:   "text-amber-700 bg-amber-50",
+    pending:   "text-slate-600 bg-slate-100",
+    failed:    "text-red-700 bg-red-50",
+    cancelled: "text-slate-500 bg-slate-100",
+  };
+  const modColor = {
+    demanda_inducida:       "bg-brand-100 text-brand-700",
+    findrisc:               "bg-emerald-100 text-emerald-700",
+    gestion_captacion:      "bg-amber-100 text-amber-700",
+    planificacion_familiar: "bg-rose-100 text-rose-700",
+  };
+  ul.innerHTML = d.recientes.map(r => {
+    const stCls = stColor[r.estado] || "text-slate-600 bg-slate-100";
+    const mCls  = modColor[r.tipo]  || "bg-slate-100 text-slate-700";
+    const titulo = r.nombre || ("job_" + r.id.slice(0, 8));
+    return `
+      <li class="px-4 py-2.5 hover:bg-slate-50 cursor-pointer transition-colors"
+          onclick="dashOpenJob('${r.tab}', '${r.id}')">
+        <div class="flex items-center gap-2.5">
+          <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full ${mCls}">${r.tipo_label}</span>
+          <span class="text-sm font-medium text-slate-800 truncate flex-1">${titulo}</span>
+          <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded ${stCls} uppercase">${r.estado}</span>
+          <span class="text-xs text-slate-400 tabular-nums shrink-0">${r.total_pdfs.toLocaleString()} PDFs</span>
+          <span class="text-xs text-slate-400 shrink-0">${fmtRel(r.creado_en)}</span>
+        </div>
+      </li>`;
+  }).join("");
+}
+
+function dashOpenJob(tab, jobId) {
+  // Cambia de pestaña al módulo y selecciona el job
+  switchTab(tab);
+  setTimeout(() => selJob(jobId), 300);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// FRANJA B — quick stats siempre visible
+// ═══════════════════════════════════════════════════════════════════
+function renderQuickStats(d) {
+  const g = d.global;
+  const en = $("qs-en-curso");
+  const fa = $("qs-fallidas");
+  const ph = $("qs-pdfs-hoy");
+  const pm = $("qs-pdfs-mes");
+  const md = $("qs-modo");
+  en.textContent = `${g.en_curso || 0} en curso`;
+  en.className = "qs-chip" + (g.en_curso > 0 ? " qs-warn" : "");
+  fa.textContent = `${g.fallidas_24h || 0} fallidas 24h`;
+  fa.className = "qs-chip" + (g.fallidas_24h > 0 ? " qs-danger" : "");
+  ph.textContent = `${(g.pdfs_hoy || 0).toLocaleString()} PDFs hoy`;
+  ph.className = "qs-chip";
+  pm.textContent = `${(g.pdfs_mes || 0).toLocaleString()} PDFs mes`;
+  pm.className = "qs-chip";
+  md.textContent = d.modo_datos === "mock" ? "Modo: MOCK" : "Modo: SQL Server";
+  md.className = "qs-chip " + (d.modo_datos === "mock" ? "qs-warn" : "qs-ok");
+}
+
+async function loadQuickStats() {
+  clearTimeout(_qsTimer);
+  try {
+    const r = await fetch("/api/dashboard/summary", { credentials: "same-origin" });
+    if (r.ok) renderQuickStats(await r.json());
+  } catch {}
+  // Refresca cada 15s cuando el usuario NO está en dashboard (en dashboard ya hay otro timer)
+  if (activeTab !== "dashboard") {
+    _qsTimer = setTimeout(loadQuickStats, 15000);
+  }
+}
+
 
 function hasActiveJobs() {
   return Object.values(prevSt).some(s => s === "pending" || s === "running");
@@ -842,7 +1269,8 @@ function hasActiveJobs() {
 
 function switchTab(tabId) {
   if (tabId === activeTab) return;
-  if (hasActiveJobs()) {
+  // Permitimos siempre cambiar a "dashboard"; el bloqueo por jobs activos solo aplica entre módulos
+  if (tabId !== "dashboard" && activeTab !== "dashboard" && hasActiveJobs()) {
     toast("No se puede cambiar de modulo", "Hay una extraccion en curso. Espera a que finalice.", "info");
     return;
   }
@@ -853,6 +1281,43 @@ function switchTab(tabId) {
   document.querySelectorAll(".mob-tab").forEach(btn =>
     btn.classList.toggle("active", btn.dataset.mobTab === tabId)
   );
+
+  // Elementos "solo Demanda Inducida": boton conteo + seccion factura en form
+  const isDI = tabId === "demanda-inducida";
+  const btnFac = $("btn-facturas");
+  if (btnFac) {
+    btnFac.classList.toggle("hidden", !isDI);
+    btnFac.classList.toggle("flex",   isDI);
+  }
+  const facSection = $("factura-section");
+  if (facSection) facSection.classList.toggle("hidden", !isDI);
+  // Reset inputs de factura al cambiar de tab
+  const fSub  = $("fac-form-sub");
+  const fCont = $("fac-form-cont");
+  if (fSub)  fSub.value  = "";
+  if (fCont) fCont.value = "";
+
+  // ── Dashboard: vista exclusiva, ocultar módulos + franja B ──────────────
+  const dbView = $("dashboard-view");
+  const modView = $("modules-view");
+  const qStats = $("quick-stats");
+  if (tabId === "dashboard") {
+    clearTimeout(_poll);
+    clearTimeout(_progressTimer);
+    clearTimeout(_previewTimer);
+    clearTimeout(_qsTimer);
+    dbView.classList.remove("hidden");
+    modView.classList.add("hidden");
+    qStats.classList.add("hidden");
+    loadDashboard();
+    return;
+  }
+  // Estamos volviendo desde dashboard o cambiando entre módulos
+  dbView.classList.add("hidden");
+  modView.classList.remove("hidden");
+  qStats.classList.remove("hidden");
+  clearTimeout(_dashTimer);
+  loadQuickStats();   // arranca el polling de la franja B
 
   // Reset state for new module
   selId = null;
@@ -898,9 +1363,13 @@ function jobHtml(e) {
   const s  = STATUS[e.estado] || STATUS.pending;
   const ok = e.estado === "completed";
   const ko = e.estado === "failed";
-  const sub = ok ? `${e.total_afiliados} afil &middot; ${e.total_pdfs} PDFs`
-            : ko ? `<span class="text-red-400 truncate">${e.mensaje_error || "Error"}</span>`
-            : s.label;
+  const regimenBadge = e.regimen
+    ? `<span class="inline-block px-1.5 rounded-sm bg-emerald-50 text-emerald-700 text-[9px] font-bold uppercase tracking-wide mr-1 align-middle"
+             title="Cruce por factura (${(e.facturas || []).join(', ')})">${e.regimen.slice(0,3)}</span>`
+    : "";
+  const sub = ok ? `${regimenBadge}${e.total_afiliados} afil &middot; ${e.total_pdfs} PDFs`
+            : ko ? `${regimenBadge}<span class="text-red-400 truncate">${e.mensaje_error || "Error"}</span>`
+            : `${regimenBadge}${s.label}`;
   const shortId    = e.id.slice(0, 8);
   const customName = e.nombre || null;
   const tipLabel   = ok ? `${customName || shortId} · ${e.total_pdfs} PDFs` : `${customName || shortId} · ${s.label}`;
@@ -1170,6 +1639,139 @@ async function confirmarCancelacion() {
   } catch (e) {
     toast("Error al cancelar", e.message, "error");
   }
+}
+
+// ─── Conteo por facturas (solo Demanda Inducida) ───
+function openFacturasModal() {
+  $("fac-sub").value = "";
+  $("fac-cont").value = "";
+  $("fac-sub-preview").textContent = "";
+  $("fac-cont-preview").textContent = "";
+  $("fac-err").classList.add("hidden");
+  $("fac-result").classList.add("hidden");
+  $("fac-result").innerHTML = "";
+  $("fac-verify-btn").disabled = false;
+  $("fac-verify-lbl").textContent = "Verificar";
+
+  const overlay = $("facturas-overlay");
+  const modal   = $("facturas-modal");
+  overlay.classList.remove("hidden");
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    modal.style.transform = "scale(1) translateY(0)";
+    modal.style.opacity   = "1";
+  }));
+  setTimeout(() => $("fac-sub")?.focus(), 220);
+}
+
+function closeFacturasModal() {
+  const modal = $("facturas-modal");
+  modal.style.transform = "scale(.94) translateY(8px)";
+  modal.style.opacity   = "0";
+  setTimeout(() => $("facturas-overlay").classList.add("hidden"), 220);
+}
+
+// Acepta tanto "11502" como "CAB11502"/"FAB11502" y devuelve el sufijo numerico
+function _parseFacturaSufijo(raw) {
+  const s = (raw || "").trim().toUpperCase();
+  if (!s) return "";
+  if (s.startsWith("CAB") || s.startsWith("FAB")) return s.slice(3);
+  return s;
+}
+
+function updateFacturasPreview() {
+  const subN  = _parseFacturaSufijo($("fac-sub").value);
+  const contN = _parseFacturaSufijo($("fac-cont").value);
+  $("fac-sub-preview").textContent  = subN  ? `Buscará: CAB${subN} + FAB${subN}` : "";
+  $("fac-cont-preview").textContent = contN ? `Buscará: CAB${contN} + FAB${contN}` : "";
+}
+
+function onFacturasKey(ev) {
+  if (ev.key === "Enter") {
+    ev.preventDefault();
+    submitFacturas();
+  }
+}
+
+async function submitFacturas() {
+  const errEl = $("fac-err");
+  const resEl = $("fac-result");
+  errEl.classList.add("hidden");
+  resEl.classList.add("hidden");
+
+  const subN  = _parseFacturaSufijo($("fac-sub").value);
+  const contN = _parseFacturaSufijo($("fac-cont").value);
+
+  if (!subN && !contN) {
+    errEl.textContent = "Ingresá al menos un número de factura (subsidiado o contributivo).";
+    errEl.classList.remove("hidden");
+    return;
+  }
+
+  const codigos = [];
+  const grupos  = [];
+  if (subN) {
+    codigos.push(`CAB${subN}`, `FAB${subN}`);
+    grupos.push({label: "SUBSIDIADO",   cab: `CAB${subN}`,  fab: `FAB${subN}`});
+  }
+  if (contN) {
+    codigos.push(`CAB${contN}`, `FAB${contN}`);
+    grupos.push({label: "CONTRIBUTIVO", cab: `CAB${contN}`, fab: `FAB${contN}`});
+  }
+
+  const verifyBtn = $("fac-verify-btn");
+  const verifyLbl = $("fac-verify-lbl");
+  verifyBtn.disabled = true;
+  verifyLbl.textContent = "Consultando…";
+
+  try {
+    const qs = codigos.map(c => `codigos=${encodeURIComponent(c)}`).join("&");
+    const r  = await fetch(`/extractions/facturas/count?${qs}`);
+    const body = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      errEl.textContent = body.detail || `Error ${r.status}`;
+      errEl.classList.remove("hidden");
+      return;
+    }
+    renderFacturasResult(body, grupos);
+  } catch (e) {
+    errEl.textContent = "No se pudo consultar el servidor: " + e.message;
+    errEl.classList.remove("hidden");
+  } finally {
+    verifyBtn.disabled = false;
+    verifyLbl.textContent = "Verificar";
+  }
+}
+
+function renderFacturasResult(data, grupos) {
+  const resEl = $("fac-result");
+  const fmt = n => Number(n || 0).toLocaleString("es-CO");
+  let html = "";
+  for (const g of grupos) {
+    const cabItem = (data.por_codigo || {})[g.cab] || {total_filas: 0, documentos_unicos: 0};
+    const fabItem = (data.por_codigo || {})[g.fab] || {total_filas: 0, documentos_unicos: 0};
+    const subtotal = (cabItem.total_filas || 0) + (fabItem.total_filas || 0);
+    const warn = subtotal === 0 ? '<span class="text-amber-600 ml-1">⚠ sin coincidencias</span>' : "";
+    html += `
+      <div class="border-b border-slate-200 last:border-0 pb-2 last:pb-0">
+        <div class="flex items-center justify-between font-semibold text-slate-700">
+          <span>${g.label}${warn}</span>
+          <span class="text-brand-700">${fmt(subtotal)} filas</span>
+        </div>
+        <div class="pl-2 mt-1 text-slate-500 leading-relaxed">
+          <div class="flex justify-between"><span class="font-mono">${g.cab}</span><span>${fmt(cabItem.total_filas)} filas · ${fmt(cabItem.documentos_unicos)} doc únicos</span></div>
+          <div class="flex justify-between"><span class="font-mono">${g.fab}</span><span>${fmt(fabItem.total_filas)} filas · ${fmt(fabItem.documentos_unicos)} doc únicos</span></div>
+        </div>
+      </div>
+    `;
+  }
+  html += `
+    <div class="pt-2 mt-1 border-t border-slate-300 flex justify-between font-semibold text-slate-800">
+      <span>TOTAL</span>
+      <span>${fmt(data.total_filas)} filas · ${fmt(data.documentos_unicos)} documentos únicos</span>
+    </div>
+  `;
+  resEl.innerHTML = html;
+  resEl.classList.remove("hidden");
 }
 
 // Acumulador de eventos por job para feed estilo GitHub Actions
@@ -1509,7 +2111,7 @@ function renderJobSummary(job) {
         <div>
           <div class="text-slate-400 uppercase tracking-wider text-[10px] mb-0.5">Resultado</div>
           ${resultadoLine}
-          <div class="text-slate-500 tabular-nums">${job.total_afiliados.toLocaleString()} afiliados · ${job.total_atenciones.toLocaleString()} ${_selApiBase.includes("findrisc") ? "registros" : "atenciones"}</div>
+          <div class="text-slate-500 tabular-nums">${job.total_afiliados.toLocaleString()} afiliados · ${job.total_atenciones.toLocaleString()} ${_selApiBase.includes("extractions") && !_selApiBase.includes("findrisc") && !_selApiBase.includes("gestion-captacion") ? "atenciones" : "registros"}</div>
         </div>
         <div>
           <div class="text-slate-400 uppercase tracking-wider text-[10px] mb-0.5">Tiempos</div>
@@ -1850,6 +2452,32 @@ function setGenLoading(on) {
 $("desde").addEventListener("change", fetchAutoPreview);
 $("hasta").addEventListener("change", fetchAutoPreview);
 
+// ─── Filtro por factura en form (DI Fase 2) ───
+function _facturaFormSufijo(raw) {
+  const s = (raw || "").trim().toUpperCase();
+  if (!s) return "";
+  if (s.startsWith("CAB") || s.startsWith("FAB")) return s.slice(3);
+  return s;
+}
+
+function onFacturaFormInput() {
+  // Auto-fill fechas al mes anterior cuando aparece el primer caracter de factura
+  const tieneFactura = !!(_facturaFormSufijo($("fac-form-sub").value)
+                        || _facturaFormSufijo($("fac-form-cont").value));
+  if (!tieneFactura) return;
+  const desdeInput = $("desde");
+  const hastaInput = $("hasta");
+  if (desdeInput.value || hastaInput.value) return;  // respetar lo que el usuario ya escribió
+  const hoy = new Date();
+  // Primer día del mes anterior a hoy
+  const primero = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1);
+  // Último día del mes anterior = día 0 del mes actual
+  const ultimo  = new Date(hoy.getFullYear(), hoy.getMonth(), 0);
+  const fmt = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+  desdeInput.value = fmt(primero);
+  hastaInput.value = fmt(ultimo);
+}
+
 $("fext").addEventListener("submit", async ev => {
   ev.preventDefault();
   $("ferr").classList.add("hidden");
@@ -1873,24 +2501,52 @@ $("fext").addEventListener("submit", async ev => {
     $("ferr").textContent = "'Hasta' debe ser mayor o igual a 'Desde'.";
     $("ferr").classList.remove("hidden"); return;
   }
-  const body = {
+
+  // ── Construir lista de jobs a disparar ──
+  // Solo aplica en pestaña DI; en otros módulos, los inputs no existen o están vacíos.
+  const subN  = _facturaFormSufijo($("fac-form-sub")?.value || "");
+  const contN = _facturaFormSufijo($("fac-form-cont")?.value || "");
+  const lanzamientos = [];
+  if (subN)  lanzamientos.push({regimen: "SUBSIDIADO",   numero: subN});
+  if (contN) lanzamientos.push({regimen: "CONTRIBUTIVO", numero: contN});
+  if (lanzamientos.length === 0) lanzamientos.push(null);  // POST sin factura
+
+  const bodyBase = {
     desde: $("desde").value, hasta: $("hasta").value,
     modo_pdf: "uno_por_atencion",
   };
   if (!esAuto) {
-    body.limite = limite;
-    body.tamano_lote = calcularTamanoLote(limite);
+    bodyBase.limite = limite;
+    bodyBase.tamano_lote = calcularTamanoLote(limite);
   }
+
   setGenLoading(true);
+  let primerId = null;
+  let errores = [];
   try {
-    const r = await apiPost(getModuleApi(), body);
-    toast("Extraccion iniciada", `ID ${r.id.slice(0, 8)} — generando ${r.limite.toLocaleString()} registros`, "success");
+    for (const fac of lanzamientos) {
+      const body = {...bodyBase};
+      if (fac) {
+        body.numero_factura = fac.numero;
+        body.regimen        = fac.regimen;
+      }
+      try {
+        const r = await apiPost(getModuleApi(), body);
+        if (!primerId) primerId = r.id;
+        const sufijo = fac ? ` · ${fac.regimen}` : "";
+        toast("Extraccion iniciada",
+              `ID ${r.id.slice(0, 8)}${sufijo} — ${r.limite.toLocaleString()} registros`,
+              "success");
+      } catch (e) {
+        errores.push((fac ? `${fac.regimen}: ` : "") + e.message);
+      }
+    }
+    if (errores.length) {
+      toast("Algunos jobs no se crearon", errores.join(" · "), "error");
+    }
     toggleForm();
     await loadJobs();
-    // Auto-seleccionar el nuevo job → muestra vista de progreso con animaciones
-    await selJob(r.id);
-  } catch (e) {
-    toast("Error", e.message, "error");
+    if (primerId) await selJob(primerId);
   } finally {
     setGenLoading(false);
   }
@@ -1950,6 +2606,8 @@ setInterval(() => {
   loadHealth();
   loadJobs();
   setInterval(loadHealth, 30000);
+  // Boot del dashboard (activeTab="dashboard" por default)
+  loadDashboard();
 })();
 </script>
 </body>

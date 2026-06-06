@@ -25,8 +25,7 @@ WITH X AS (
                ORDER BY B.SEQ_ENCUESTADOR_CARACTERIZACION ASC,
                         J.FEC_REALIZACION DESC
            ) AS NUM_REGISTRO,
-           A.COD_TIPO_IDENTIFICACION,
-           A.NRO_TIPO_IDENTIFICACION, B.SEQ_SERAGIL,
+           A.COD_TIPO_IDENTIFICACION, A.NRO_TIPO_IDENTIFICACION, B.SEQ_SERAGIL,
            A.AFL_PRIMER_NOMBRE, ISNULL(A.AFL_SEGUNDO_NOMBRE,'') AS AFL_SEGUNDO_NOMBRE,
            ISNULL(A.AFL_PRIMER_APELLIDO,'') AS AFL_PRIMER_APELLIDO,
            CONVERT(CHAR(10),J.FEC_REALIZACION) AS FEC_REALIZACION,
@@ -34,7 +33,7 @@ WITH X AS (
            ISNULL(A.AFL_SEGUNDO_APELLIDO,'') AS AFL_SEGUNDO_APELLIDO,
            A.COD_GENERO, A.COD_DEPARTAMENTO, A.COD_MUNICIPIO,
            CONVERT(CHAR(10),B.FEC_NACIMIENTO_PERSONA) AS FEC_NACIMIENTO_PERSONA,
-           B.DES_DIRECCION_ACTUAL, B.DES_TELEFONO_UNO,
+           B.DES_DIRECCION_ACTUAL, B.DES_TELEFONO_UNO, B.DES_TELEFONO_DOS,
            B.DES_CORREO_ELECTRONICO, B.COD_IPS_AQUESE_REMITE, B.SEQ_ENCUESTADOR_CARACTERIZACION,
            ISNULL(E.DES_TIPO_IDENTIFICACION,'') AS DES_TIPO_IDENTIFICACION,
            ISNULL(D.DES_DEPARTAMENTO,'') AS DES_DEPARTAMENTO,
@@ -85,23 +84,41 @@ WITH X AS (
       AND B.FEC_REGISTRO_INFORMACION >= ?
       AND B.FEC_REGISTRO_INFORMACION <= ?
 )
-SELECT X.COD_TIPO_IDENTIFICACION, X.NRO_TIPO_IDENTIFICACION, X.SEQ_SERAGIL, X.NUM_REGISTRO,
-       X.DES_REGIONAL, X.ENCUESTADOR, X.DES_CARGO_USUARIO,
-       X.FEC_REALIZACION, X.FEC_REGISTRO_INFORMACION,
-       X.DES_DEPARTAMENTO, X.DES_MUNICIPIO, X.DES_PRESTADOR_SERVICIOS,
-       X.AFL_PRIMER_NOMBRE, X.AFL_SEGUNDO_NOMBRE, X.AFL_PRIMER_APELLIDO, X.AFL_SEGUNDO_APELLIDO,
-       X.FEC_NACIMIENTO_PERSONA, X.DES_TIPO_IDENTIFICACION,
-       X.DES_DIRECCION_ACTUAL, X.DES_TELEFONO_UNO, X.DES_CORREO_ELECTRONICO,
-       X.DES_CURSO_VIDA_ASOCIADO, X.VLR_EDAD_ACTUAL, X.DES_GENERO,
-       X.VLR_PESO, X.VLR_TALLA, X.VLR_IMC, X.VLR_PERIMETRO_CINTURA,
-       X.FLG_ACTIVIDA_FISICA, X.VLR_FRECUENCIA_VERDURAS,
-       X.FLG_MEDICAMENTOS_HIPERTENSION, X.FLG_GLUCOSA_ALTA, X.FLG_DIABETIS,
-       X.FLG_APLICA_XA_PRUEBA,
-       X.VLR_PUNTAJE_EDAD, X.VLR_PUNTAJE_IMC, X.VLR_PUNTAJE_PERIMETRO_ABDOMINAL,
-       X.VLR_PUNTAJE_ACTIVIDAD_FISICA, X.VLR_PUNTAJE_FRECUENCIA_VERDURAS,
-       X.VLR_PUNTAJE_MEDICAMENTOS, X.VLR_PUNTAJE_GLUCOSA,
-       X.VLR_PUNTAJE_DIABETIS, X.VLR_PUNTAJE_OBTENIDO,
-       X.DES_TIPO_REGIMEN
+SELECT
+    -- Metadata interna (no se muestra en el reporte; necesaria para agrupar y nombrar archivos)
+    X.SEQ_SERAGIL,
+    X.COD_TIPO_IDENTIFICACION,
+    X.FEC_REGISTRO_INFORMACION,
+    X.NUM_REGISTRO,
+
+    -- Columnas del reporte (20)
+    CONCAT(X.AFL_PRIMER_NOMBRE, ' ', X.AFL_SEGUNDO_NOMBRE, ' ',
+           X.AFL_PRIMER_APELLIDO, ' ', X.AFL_SEGUNDO_APELLIDO)              AS [Nombre del Afiliado],
+    X.DES_GENERO                                                            AS Sexo,
+    DATEDIFF(yy, X.FEC_NACIMIENTO_PERSONA, GETDATE())
+      - CASE
+          WHEN MONTH(X.FEC_NACIMIENTO_PERSONA) > MONTH(GETDATE())
+            OR (MONTH(X.FEC_NACIMIENTO_PERSONA) = MONTH(GETDATE())
+                AND DAY(X.FEC_NACIMIENTO_PERSONA) > DAY(GETDATE()))
+          THEN 1 ELSE 0
+        END                                                                  AS [Edad Actual],
+    X.DES_MUNICIPIO                                                          AS Municipio,
+    X.DES_PRESTADOR_SERVICIOS                                                AS [IPS de Atencion Integral al que se remite],
+    X.DES_TIPO_IDENTIFICACION                                                AS [Tipo de identificacion],
+    X.NRO_TIPO_IDENTIFICACION                                                AS [Numero de identificacion],
+    X.DES_TELEFONO_UNO                                                       AS [Telefono 1],
+    X.DES_TELEFONO_DOS                                                       AS [Telefono 2],
+    X.DES_CORREO_ELECTRONICO                                                 AS [Correo electronico],
+    X.VLR_PESO                                                               AS Peso,
+    X.VLR_TALLA                                                              AS Talla,
+    X.VLR_IMC                                                                AS IMC,
+    X.VLR_PERIMETRO_CINTURA                                                  AS [Perimetro de cintura CM],
+    X.FLG_ACTIVIDA_FISICA                                                    AS [Activida fisica],
+    X.VLR_FRECUENCIA_VERDURAS                                                AS [Frecuencia de verdura o frutas?],
+    X.FLG_MEDICAMENTOS_HIPERTENSION                                          AS [Medicamento de la hipertension],
+    X.FLG_GLUCOSA_ALTA                                                       AS [Glucosa alta],
+    X.FLG_DIABETIS                                                           AS [Se le ha diagnosticado diabetes (tipo 1 o 2) a alguno de sus familiares],
+    X.VLR_PUNTAJE_OBTENIDO                                                   AS [Puntaje total]
 FROM X
 ORDER BY X.NUM_REGISTRO
 OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
@@ -186,10 +203,12 @@ class MockFindriscRepository:
     ) -> list[RegistroFindrisc]:
         import random
         from datetime import timedelta
-        rng = random.Random(offset * 7 + limite)
         registros = []
         nombres = ["CARLOS", "MARIA", "JOSE", "ANA", "LUIS", "CARMEN", "PEDRO", "ROSA"]
+        segundos = ["", "ANDRES", "ELENA", "JOSE", "MIGUEL", "ISABEL"]
         apellidos = ["GARCIA", "LOPEZ", "MARTINEZ", "RODRIGUEZ", "GONZALEZ", "PEREZ"]
+        municipios = ["CARTAGENA", "BARRANQUILLA", "MONTERIA", "SINCELEJO", "VALLEDUPAR", "SANTA MARTA"]
+        ips_list = ["IPS NORTE", "IPS CENTRO", "IPS SUR", "CLINICA SAN JOSE", "CENTRO MEDICO LOS ANGELES"]
         for i in range(limite):
             seq = offset + i + 1
             rng2 = random.Random(seq * 13)
@@ -199,45 +218,65 @@ class MockFindriscRepository:
             imc = round(peso / (talla ** 2), 1)
             cintura = round(rng2.uniform(70, 110), 1)
             actividad = rng2.random() > 0.5
-            verduras = rng2.random() > 0.4
+            verduras_ok = rng2.random() > 0.4
             medicamentos = rng2.random() > 0.6
             glucosa = rng2.random() > 0.7
             diab_opts = ["OTROS PARIENTES O NINGUNO", "SI PADRES O HERMANOS", "SI ABUELOS O TIOS O PRIMOS HERMANOS"]
             antecedente = rng2.choice(diab_opts)
+            sexo_str = "Femenino" if rng2.random() > 0.5 else "Masculino"
 
+            # Puntajes calculados (mismas reglas que la versión anterior)
             p_edad = 0 if edad < 45 else (2 if edad < 55 else (3 if edad < 65 else 4))
             p_imc = 0 if imc < 25 else (1 if imc < 30 else 3)
-            p_cintura = 0 if cintura < 80 else (3 if cintura < 90 else 4)
+            # Perímetro depende del sexo
+            if sexo_str == "Masculino":
+                p_cintura = 0 if cintura < 94 else (3 if cintura < 102 else 4)
+            else:
+                p_cintura = 0 if cintura < 80 else (3 if cintura < 88 else 4)
             p_actividad = 0 if actividad else 2
-            p_verduras = 0 if verduras else 1
+            p_verduras = 0 if verduras_ok else 1
             p_med = 0 if not medicamentos else 2
             p_glucosa = 0 if not glucosa else 5
-            p_diab = {"OTROS PARIENTES O NINGUNO": 0, "SI ABUELOS O TIOS O PRIMOS HERMANOS": 3, "SI PADRES O HERMANOS": 5}[antecedente]
+            p_diab = {
+                "OTROS PARIENTES O NINGUNO": 0,
+                "SI ABUELOS O TIOS O PRIMOS HERMANOS": 3,
+                "SI PADRES O HERMANOS": 5,
+            }[antecedente]
             total = p_edad + p_imc + p_cintura + p_actividad + p_verduras + p_med + p_glucosa + p_diab
 
-            fecha_reg = desde + timedelta(days=rng2.randint(0, (hasta - desde).days))
+            fecha_reg = desde + timedelta(days=rng2.randint(0, max((hasta - desde).days, 0)))
+            n1 = rng2.choice(nombres)
+            n2 = rng2.choice(segundos)
+            a1 = rng2.choice(apellidos)
+            a2 = rng2.choice(apellidos)
+            nombre_full = " ".join(p for p in [n1, n2, a1, a2] if p).strip()
+            num_doc = str(1000000 + seq)
+
             registros.append(RegistroFindrisc(
                 seq_seragil=seq,
-                consecutivo=seq,
                 tipo_documento=TipoDocumento.CC,
-                num_documento=str(1000000 + seq),
-                primer_nombre=rng2.choice(nombres),
-                primer_apellido=rng2.choice(apellidos),
-                edad=edad,
-                genero="Femenino" if rng2.random() > 0.5 else "Masculino",
                 fecha_registro=fecha_reg,
-                fecha_realizacion=fecha_reg,
-                peso=peso, talla=talla, imc=imc, perimetro_cintura=cintura,
+                nombre_completo=nombre_full,
+                sexo=sexo_str,
+                edad=edad,
+                municipio=rng2.choice(municipios),
+                ips=rng2.choice(ips_list),
+                tipo_identificacion_desc="CEDULA DE CIUDADANIA",
+                num_documento=num_doc,
+                telefono_1=f"30{rng2.randint(0, 9)}{rng2.randint(1000000, 9999999)}",
+                telefono_2=f"60{rng2.randint(1, 8)}{rng2.randint(1000000, 9999999)}" if rng2.random() > 0.4 else None,
+                correo=f"{n1.lower()}.{a1.lower()}@example.com",
+                # En Mock simulamos strings tal como vendrían de la BD (algunos con coma)
+                peso=f"{peso:.0f}",
+                talla=f"{talla:.2f}".replace(".", ","),
+                imc=f"{imc:.2f}".replace(".", ","),
+                perimetro_cintura=f"{cintura:.0f}",
                 actividad_fisica=actividad,
-                frecuencia_verduras="TODOS LOS DIAS" if verduras else "NO TODOS LOS DIAS",
+                frecuencia_verduras="TODOS LOS DIAS" if verduras_ok else "NO TODOS LOS DIAS",
                 medicamentos_hipertension=medicamentos,
                 glucosa_alta=glucosa,
                 antecedente_diabetes=antecedente,
-                aplica_prueba=total >= 12,
-                puntaje_edad=p_edad, puntaje_imc=p_imc, puntaje_perimetro=p_cintura,
-                puntaje_actividad_fisica=p_actividad, puntaje_verduras=p_verduras,
-                puntaje_medicamentos=p_med, puntaje_glucosa=p_glucosa,
-                puntaje_diabetes=p_diab, puntaje_total=total,
+                puntaje_total=total,
             ))
         return registros
 
@@ -269,50 +308,36 @@ class SqlServerFindriscRepository:
             if not fec_reg:
                 log.warning("findrisc: fila descartada por fecha inválida: %s", r.get("SEQ_SERAGIL"))
                 continue
+            num_doc = str(r.get("Numero de identificacion") or "").strip()
             registros.append(RegistroFindrisc(
+                # metadata interna
                 seq_seragil=int(r["SEQ_SERAGIL"]),
-                consecutivo=int(r.get("NUM_REGISTRO") or 0),
                 tipo_documento=_normalizar_tipo_doc(r.get("COD_TIPO_IDENTIFICACION")),
-                num_documento=str(r.get("NRO_TIPO_IDENTIFICACION") or "").strip(),
-                primer_nombre=(r.get("AFL_PRIMER_NOMBRE") or "").strip(),
-                segundo_nombre=(r.get("AFL_SEGUNDO_NOMBRE") or "").strip() or None,
-                primer_apellido=(r.get("AFL_PRIMER_APELLIDO") or "").strip(),
-                segundo_apellido=(r.get("AFL_SEGUNDO_APELLIDO") or "").strip() or None,
-                fecha_nacimiento=_parse_date(r.get("FEC_NACIMIENTO_PERSONA")),
-                edad=_to_int(r.get("VLR_EDAD_ACTUAL")),
-                genero=(r.get("DES_GENERO") or "").strip() or None,
-                fecha_realizacion=_parse_date(r.get("FEC_REALIZACION")),
                 fecha_registro=fec_reg,
-                direccion=(r.get("DES_DIRECCION_ACTUAL") or "").strip() or None,
-                telefono_1=(r.get("DES_TELEFONO_UNO") or "").strip() or None,
-                correo=(r.get("DES_CORREO_ELECTRONICO") or "").strip() or None,
-                departamento=(r.get("DES_DEPARTAMENTO") or "").strip() or None,
-                municipio=(r.get("DES_MUNICIPIO") or "").strip() or None,
-                curso_vida=(r.get("DES_CURSO_VIDA_ASOCIADO") or "").strip() or None,
-                regimen=(r.get("DES_TIPO_REGIMEN") or "").strip() or None,
-                ips=(r.get("DES_PRESTADOR_SERVICIOS") or "").strip() or None,
-                regional=(r.get("DES_REGIONAL") or "").strip() or None,
-                encuestador_nombre=(r.get("ENCUESTADOR") or "").strip() or None,
-                cargo_encuestador=(r.get("DES_CARGO_USUARIO") or "").strip() or None,
-                peso=_to_float(r.get("VLR_PESO")),
-                talla=_to_float(r.get("VLR_TALLA")),
-                imc=_to_float(r.get("VLR_IMC")),
-                perimetro_cintura=_to_float(r.get("VLR_PERIMETRO_CINTURA")),
-                actividad_fisica=_to_bool(r.get("FLG_ACTIVIDA_FISICA")),
-                frecuencia_verduras=(r.get("VLR_FRECUENCIA_VERDURAS") or "").strip() or None,
-                medicamentos_hipertension=_to_bool(r.get("FLG_MEDICAMENTOS_HIPERTENSION")),
-                glucosa_alta=_to_bool(r.get("FLG_GLUCOSA_ALTA")),
-                antecedente_diabetes=(r.get("FLG_DIABETIS") or "").strip() or None,
-                aplica_prueba=_to_bool(r.get("FLG_APLICA_XA_PRUEBA")),
-                puntaje_edad=_to_int(r.get("VLR_PUNTAJE_EDAD")),
-                puntaje_imc=_to_int(r.get("VLR_PUNTAJE_IMC")),
-                puntaje_perimetro=_to_int(r.get("VLR_PUNTAJE_PERIMETRO_ABDOMINAL")),
-                puntaje_actividad_fisica=_to_int(r.get("VLR_PUNTAJE_ACTIVIDAD_FISICA")),
-                puntaje_verduras=_to_int(r.get("VLR_PUNTAJE_FRECUENCIA_VERDURAS")),
-                puntaje_medicamentos=_to_int(r.get("VLR_PUNTAJE_MEDICAMENTOS")),
-                puntaje_glucosa=_to_int(r.get("VLR_PUNTAJE_GLUCOSA")),
-                puntaje_diabetes=_to_int(r.get("VLR_PUNTAJE_DIABETIS")),
-                puntaje_total=_to_int(r.get("VLR_PUNTAJE_OBTENIDO")),
+                # reporte
+                nombre_completo=(r.get("Nombre del Afiliado") or "").strip(),
+                sexo=(r.get("Sexo") or "").strip() or None,
+                edad=_to_int(r.get("Edad Actual")),
+                municipio=(r.get("Municipio") or "").strip() or None,
+                ips=(r.get("IPS de Atencion Integral al que se remite") or "").strip() or None,
+                tipo_identificacion_desc=(r.get("Tipo de identificacion") or "").strip() or None,
+                num_documento=num_doc,
+                telefono_1=(r.get("Telefono 1") or "").strip() or None,
+                telefono_2=(r.get("Telefono 2") or "").strip() or None,
+                correo=(r.get("Correo electronico") or "").strip() or None,
+                # Valores antropométricos: string literal de la BD (sin parseo)
+                peso=(str(r.get("Peso")).strip() if r.get("Peso") is not None else None) or None,
+                talla=(str(r.get("Talla")).strip() if r.get("Talla") is not None else None) or None,
+                imc=(str(r.get("IMC")).strip() if r.get("IMC") is not None else None) or None,
+                perimetro_cintura=(str(r.get("Perimetro de cintura CM")).strip() if r.get("Perimetro de cintura CM") is not None else None) or None,
+                actividad_fisica=_to_bool(r.get("Activida fisica")),
+                frecuencia_verduras=(r.get("Frecuencia de verdura o frutas?") or "").strip() or None,
+                medicamentos_hipertension=_to_bool(r.get("Medicamento de la hipertension")),
+                glucosa_alta=_to_bool(r.get("Glucosa alta")),
+                antecedente_diabetes=(r.get(
+                    "Se le ha diagnosticado diabetes (tipo 1 o 2) a alguno de sus familiares"
+                ) or "").strip() or None,
+                puntaje_total=_to_int(r.get("Puntaje total")),
             ))
 
         log.info("findrisc.fetched", extra={"rows": len(registros)})

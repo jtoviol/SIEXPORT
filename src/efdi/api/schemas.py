@@ -16,11 +16,39 @@ class CrearExtraccionReq(BaseModel):
         description="None=Auto-calculado según el total de registros",
     )
     modo_pdf: ModoPdf = Field(default=ModoPdf.UNO_POR_ATENCION)
+    # ── Cruce por factura (Fase 2 DI) ──
+    numero_factura: str | None = Field(
+        default=None,
+        description="Sufijo numérico de la factura (ej: '11502'). El backend arma CAB{n}+FAB{n}.",
+    )
+    regimen: str | None = Field(
+        default=None,
+        description="SUBSIDIADO o CONTRIBUTIVO — obligatorio si viene numero_factura",
+    )
 
     @model_validator(mode="after")
     def validar_rango(self) -> "CrearExtraccionReq":
         if self.hasta < self.desde:
             raise ValueError("hasta debe ser ≥ desde")
+        return self
+
+    @model_validator(mode="after")
+    def validar_factura(self) -> "CrearExtraccionReq":
+        if (self.numero_factura is None) != (self.regimen is None):
+            raise ValueError("numero_factura y regimen deben venir juntos o ambos ausentes")
+        if self.regimen is not None:
+            r = self.regimen.strip().upper()
+            if r not in ("SUBSIDIADO", "CONTRIBUTIVO"):
+                raise ValueError("regimen debe ser SUBSIDIADO o CONTRIBUTIVO")
+            self.regimen = r
+        if self.numero_factura is not None:
+            n = self.numero_factura.strip().upper()
+            # Si el usuario pegó "CAB11502" o "FAB11502" → quedarse con el sufijo
+            if n.startswith("CAB") or n.startswith("FAB"):
+                n = n[3:]
+            if not n:
+                raise ValueError("numero_factura no puede ser vacío")
+            self.numero_factura = n
         return self
 
     model_config = {
@@ -43,6 +71,8 @@ class ExtraccionResp(BaseModel):
     tipo: ExtraccionTipo
     modo_pdf: ModoPdf
     nombre: str | None = None
+    regimen: str | None = None
+    facturas: list[str] | None = None
     estado: EstadoExtraccion
     total_atenciones: int
     total_afiliados: int
@@ -54,6 +84,21 @@ class ExtraccionResp(BaseModel):
 
 class RenombrarJobReq(BaseModel):
     nombre: str = Field(default="", max_length=100, strip_whitespace=True)
+
+
+class ConteoFacturaItem(BaseModel):
+    total_filas: int
+    documentos_unicos: int
+
+
+class ConteoFacturasResp(BaseModel):
+    """Resumen de conteo para uno o varios códigos de factura."""
+
+    total_filas: int = Field(description="COUNT(*) global sobre la lista de códigos")
+    documentos_unicos: int = Field(description="COUNT(DISTINCT num_tipo_identificacion) global")
+    por_codigo: dict[str, ConteoFacturaItem] = Field(
+        description="Desglose por código de factura, incluyendo los que dieron cero",
+    )
 
 
 class HealthResp(BaseModel):

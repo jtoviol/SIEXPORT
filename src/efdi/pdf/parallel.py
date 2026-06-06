@@ -12,11 +12,18 @@ from efdi.pdf.generator import generar_pdf_afiliado
 
 
 def _worker(args: tuple) -> str:
-    """Worker que corre en un proceso separado."""
-    obj, path_str = args
+    """Worker que corre en un proceso separado.
+
+    Acepta tuplas de 2 elementos (compat hacia atrás) o 3 (con regimen_override).
+    """
+    if len(args) == 3:
+        obj, path_str, regimen_override = args
+    else:
+        obj, path_str = args
+        regimen_override = None
     out = Path(path_str)
     out.parent.mkdir(parents=True, exist_ok=True)
-    generar_pdf_afiliado(obj, out)
+    generar_pdf_afiliado(obj, out, regimen_override=regimen_override)
     return path_str
 
 

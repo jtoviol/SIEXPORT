@@ -1,4 +1,4 @@
-"""Endpoints REST para el módulo FINDRISC."""
+"""Endpoints REST para el módulo Gestión Captación Afiliados."""
 import math
 import shutil
 from datetime import date, datetime
@@ -12,10 +12,10 @@ from efdi.api.schemas import CrearExtraccionReq, ExtraccionResp, RenombrarJobReq
 from efdi.config import settings
 from efdi.domain.models import EstadoExtraccion, Extraccion, ExtraccionTipo, Lote, ModoPdf, estado_label, safe_filename
 from efdi.infrastructure.job_store import store
-from efdi.infrastructure.repository_findrisc import get_findrisc_repository, SqlServerFindriscRepository
-from efdi.services.extraction_findrisc import ejecutar_extraccion_findrisc
+from efdi.infrastructure.repository_captacion import get_captacion_repository
+from efdi.services.extraction_captacion import ejecutar_extraccion_captacion
 
-router = APIRouter(prefix="/findrisc", tags=["findrisc"])
+router = APIRouter(prefix="/gestion-captacion", tags=["gestion-captacion"])
 
 
 def _auto_tamano_lote(limite: int) -> int:
@@ -30,15 +30,15 @@ def _auto_tamano_lote(limite: int) -> int:
 
 @router.get(
     "/extractions/count",
-    summary="Conteo previo de registros FINDRISC para un rango de fechas",
+    summary="Conteo previo de registros de Captación para un rango de fechas",
 )
-async def contar_registros_findrisc(
+async def contar_registros_captacion(
     desde: date = Query(...),
     hasta: date = Query(...),
 ) -> dict:
     if hasta < desde:
         raise HTTPException(status_code=400, detail="hasta debe ser >= desde")
-    repo = get_findrisc_repository()
+    repo = get_captacion_repository()
     total = repo.get_total(desde, hasta)
     if total <= 0:
         return {"total_en_db": 0, "limite_efectivo": 0, "tamano_lote": 0, "lotes_estimados": 0, "capeado": False}
@@ -58,20 +58,20 @@ async def contar_registros_findrisc(
     "/extractions",
     response_model=ExtraccionResp,
     status_code=status.HTTP_202_ACCEPTED,
-    summary="Crear extracción de PDFs FINDRISC",
+    summary="Crear extracción de PDFs de Gestión Captación",
 )
-async def crear_extraccion_findrisc(
+async def crear_extraccion_captacion(
     req: CrearExtraccionReq,
     background: BackgroundTasks,
 ) -> ExtraccionResp:
     limite = req.limite
     if limite is None:
-        repo = get_findrisc_repository()
+        repo = get_captacion_repository()
         total = repo.get_total(req.desde, req.hasta)
         if total <= 0:
             raise HTTPException(
                 status_code=400,
-                detail="No se pudo obtener el total de registros FINDRISC.",
+                detail="No se pudo obtener el total de registros de captación.",
             )
         limite = min(total, 600_000)
 
@@ -83,57 +83,57 @@ async def crear_extraccion_findrisc(
         hasta=req.hasta,
         limite=limite,
         tamano_lote=tamano_lote,
-        tipo=ExtraccionTipo.FINDRISC,
+        tipo=ExtraccionTipo.GESTION_CAPTACION,
         modo_pdf=ModoPdf.UNO_POR_ATENCION,
         creado_en=datetime.now(),
     )
     store.save(job)
-    background.add_task(ejecutar_extraccion_findrisc, job)
+    background.add_task(ejecutar_extraccion_captacion, job)
     return ExtraccionResp(**job.model_dump())
 
 
 @router.get(
     "/extractions",
     response_model=list[ExtraccionResp],
-    summary="Listar extracciones FINDRISC",
+    summary="Listar extracciones de Gestión Captación",
 )
-async def listar_extracciones_findrisc() -> list[ExtraccionResp]:
-    return [ExtraccionResp(**j.model_dump()) for j in store.list_by_tipo(ExtraccionTipo.FINDRISC)]
+async def listar_extracciones_captacion() -> list[ExtraccionResp]:
+    return [ExtraccionResp(**j.model_dump()) for j in store.list_by_tipo(ExtraccionTipo.GESTION_CAPTACION)]
 
 
 @router.get(
     "/extractions/{job_id}",
     response_model=ExtraccionResp,
-    summary="Estado de una extracción FINDRISC",
+    summary="Estado de una extracción de Captación",
 )
-async def obtener_extraccion_findrisc(job_id: UUID) -> ExtraccionResp:
+async def obtener_extraccion_captacion(job_id: UUID) -> ExtraccionResp:
     job = store.get(job_id)
-    if job is None or job.tipo != ExtraccionTipo.FINDRISC:
-        raise HTTPException(status_code=404, detail="Extracción FINDRISC no encontrada")
+    if job is None or job.tipo != ExtraccionTipo.GESTION_CAPTACION:
+        raise HTTPException(status_code=404, detail="Extracción de Captación no encontrada")
     return ExtraccionResp(**job.model_dump())
 
 
 @router.get(
     "/extractions/{job_id}/lotes",
     response_model=list[Lote],
-    summary="Listar lotes de una extracción FINDRISC",
+    summary="Listar lotes de una extracción de Captación",
 )
-async def listar_lotes_findrisc(job_id: UUID) -> list[Lote]:
+async def listar_lotes_captacion(job_id: UUID) -> list[Lote]:
     job = store.get(job_id)
-    if job is None or job.tipo != ExtraccionTipo.FINDRISC:
-        raise HTTPException(status_code=404, detail="Extracción FINDRISC no encontrada")
+    if job is None or job.tipo != ExtraccionTipo.GESTION_CAPTACION:
+        raise HTTPException(status_code=404, detail="Extracción de Captación no encontrada")
     return store.list_lotes(job_id)
 
 
 @router.get(
     "/extractions/{job_id}/lotes/{numero}",
     response_model=Lote,
-    summary="Estado de un lote FINDRISC",
+    summary="Estado de un lote de Captación",
 )
-async def obtener_lote_findrisc(job_id: UUID, numero: int) -> Lote:
+async def obtener_lote_captacion(job_id: UUID, numero: int) -> Lote:
     job = store.get(job_id)
-    if job is None or job.tipo != ExtraccionTipo.FINDRISC:
-        raise HTTPException(status_code=404, detail="Extracción FINDRISC no encontrada")
+    if job is None or job.tipo != ExtraccionTipo.GESTION_CAPTACION:
+        raise HTTPException(status_code=404, detail="Extracción de Captación no encontrada")
     lote = store.get_lote(job_id, numero)
     if lote is None:
         raise HTTPException(status_code=404, detail=f"Lote {numero} no existe")
@@ -142,10 +142,10 @@ async def obtener_lote_findrisc(job_id: UUID, numero: int) -> Lote:
 
 @router.get(
     "/extractions/{job_id}/lotes/{numero}/download",
-    summary="Descargar ZIP de un lote FINDRISC",
+    summary="Descargar ZIP de un lote de Captación",
     response_class=FileResponse,
 )
-async def descargar_lote_findrisc(job_id: UUID, numero: int) -> FileResponse:
+async def descargar_lote_captacion(job_id: UUID, numero: int) -> FileResponse:
     lote = store.get_lote(job_id, numero)
     if lote is None:
         raise HTTPException(status_code=404, detail=f"Lote {numero} no existe")
@@ -154,7 +154,7 @@ async def descargar_lote_findrisc(job_id: UUID, numero: int) -> FileResponse:
     if not lote.zip_path or not Path(lote.zip_path).exists():
         raise HTTPException(status_code=410, detail="ZIP no disponible")
     job = store.get(job_id)
-    base = safe_filename(job.nombre if job else None, f"findrisc_lote_{numero:03d}_{job_id}")
+    base = safe_filename(job.nombre if job else None, f"captacion_lote_{numero:03d}_{job_id}")
     if job and job.nombre:
         base = f"{base}_lote_{numero:03d}"
     return FileResponse(
@@ -167,12 +167,12 @@ async def descargar_lote_findrisc(job_id: UUID, numero: int) -> FileResponse:
 @router.patch(
     "/extractions/{job_id}/nombre",
     response_model=ExtraccionResp,
-    summary="Renombrar una extracción FINDRISC",
+    summary="Renombrar una extracción de Captación",
 )
-async def renombrar_extraccion_findrisc(job_id: UUID, req: RenombrarJobReq) -> ExtraccionResp:
+async def renombrar_extraccion_captacion(job_id: UUID, req: RenombrarJobReq) -> ExtraccionResp:
     job = store.get(job_id)
-    if job is None or job.tipo != ExtraccionTipo.FINDRISC:
-        raise HTTPException(status_code=404, detail="Extracción FINDRISC no encontrada")
+    if job is None or job.tipo != ExtraccionTipo.GESTION_CAPTACION:
+        raise HTTPException(status_code=404, detail="Extracción de Captación no encontrada")
     store.rename(job_id, req.nombre or None)
     job = store.get(job_id)
     return ExtraccionResp(**job.model_dump())
@@ -180,12 +180,12 @@ async def renombrar_extraccion_findrisc(job_id: UUID, req: RenombrarJobReq) -> E
 
 @router.post(
     "/extractions/{job_id}/cancel",
-    summary="Cancelar extracción FINDRISC en curso",
+    summary="Cancelar extracción de Captación en curso",
 )
-async def cancelar_extraccion_findrisc(job_id: UUID) -> dict:
+async def cancelar_extraccion_captacion(job_id: UUID) -> dict:
     job = store.get(job_id)
-    if job is None or job.tipo != ExtraccionTipo.FINDRISC:
-        raise HTTPException(status_code=404, detail="Extracción FINDRISC no encontrada")
+    if job is None or job.tipo != ExtraccionTipo.GESTION_CAPTACION:
+        raise HTTPException(status_code=404, detail="Extracción de Captación no encontrada")
     if job.estado not in (EstadoExtraccion.PENDING, EstadoExtraccion.RUNNING):
         raise HTTPException(status_code=409, detail=f"No se puede cancelar — la extracción está en estado '{estado_label(job.estado)}'")
     job.estado = EstadoExtraccion.CANCELLED
@@ -196,12 +196,12 @@ async def cancelar_extraccion_findrisc(job_id: UUID) -> dict:
 
 @router.delete(
     "/extractions/{job_id}",
-    summary="Eliminar extracción FINDRISC",
+    summary="Eliminar extracción de Captación",
 )
-async def eliminar_extraccion_findrisc(job_id: UUID) -> dict:
+async def eliminar_extraccion_captacion(job_id: UUID) -> dict:
     job = store.get(job_id)
-    if job is None or job.tipo != ExtraccionTipo.FINDRISC:
-        raise HTTPException(status_code=404, detail="Extracción FINDRISC no encontrada")
+    if job is None or job.tipo != ExtraccionTipo.GESTION_CAPTACION:
+        raise HTTPException(status_code=404, detail="Extracción de Captación no encontrada")
     job_dir = settings.data_dir / f"job_{job_id}"
     carpetas = 0
     if job_dir.exists():
@@ -213,13 +213,13 @@ async def eliminar_extraccion_findrisc(job_id: UUID) -> dict:
 
 @router.get(
     "/extractions/{job_id}/download",
-    summary="Mega-ZIP con todos los lotes FINDRISC",
+    summary="Mega-ZIP con todos los lotes de Captación",
     response_class=FileResponse,
 )
-async def descargar_extraccion_findrisc(job_id: UUID) -> FileResponse:
+async def descargar_extraccion_captacion(job_id: UUID) -> FileResponse:
     job = store.get(job_id)
-    if job is None or job.tipo != ExtraccionTipo.FINDRISC:
-        raise HTTPException(status_code=404, detail="Extracción FINDRISC no encontrada")
+    if job is None or job.tipo != ExtraccionTipo.GESTION_CAPTACION:
+        raise HTTPException(status_code=404, detail="Extracción de Captación no encontrada")
     if job.estado != EstadoExtraccion.COMPLETED:
         raise HTTPException(status_code=409, detail=f"Extracción en estado '{estado_label(job.estado)}'")
 
@@ -240,19 +240,19 @@ async def descargar_extraccion_findrisc(job_id: UUID) -> FileResponse:
 
     return FileResponse(
         path=job.zip_path,
-        filename=f"{safe_filename(job.nombre, f'findrisc_{job_id}')}.zip",
+        filename=f"{safe_filename(job.nombre, f'captacion_{job_id}')}.zip",
         media_type="application/zip",
     )
 
 
 @router.get(
     "/extractions/{job_id}/files",
-    summary="Árbol de archivos de una extracción FINDRISC",
+    summary="Árbol de archivos de una extracción de Captación",
 )
-async def listar_archivos_findrisc(job_id: UUID) -> dict:
+async def listar_archivos_captacion(job_id: UUID) -> dict:
     job = store.get(job_id)
-    if job is None or job.tipo != ExtraccionTipo.FINDRISC:
-        raise HTTPException(status_code=404, detail="Extracción FINDRISC no encontrada")
+    if job is None or job.tipo != ExtraccionTipo.GESTION_CAPTACION:
+        raise HTTPException(status_code=404, detail="Extracción de Captación no encontrada")
     if job.estado != EstadoExtraccion.COMPLETED:
         raise HTTPException(status_code=409, detail=f"Extracción en estado '{estado_label(job.estado)}'")
 
@@ -287,13 +287,13 @@ async def listar_archivos_findrisc(job_id: UUID) -> dict:
 
 @router.get(
     "/extractions/{job_id}/files/{afiliado}/{filename}",
-    summary="Descargar PDF individual FINDRISC",
+    summary="Descargar PDF individual de Captación",
     response_class=FileResponse,
 )
-async def descargar_pdf_findrisc(job_id: UUID, afiliado: str, filename: str) -> FileResponse:
+async def descargar_pdf_captacion(job_id: UUID, afiliado: str, filename: str) -> FileResponse:
     job = store.get(job_id)
-    if job is None or job.tipo != ExtraccionTipo.FINDRISC:
-        raise HTTPException(status_code=404, detail="Extracción FINDRISC no encontrada")
+    if job is None or job.tipo != ExtraccionTipo.GESTION_CAPTACION:
+        raise HTTPException(status_code=404, detail="Extracción de Captación no encontrada")
 
     job_dir = settings.data_dir.resolve() / f"job_{job_id}"
     if not job_dir.exists():
