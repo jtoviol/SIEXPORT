@@ -486,6 +486,14 @@ class Extraccion(BaseModel):
     tipo: ExtraccionTipo = ExtraccionTipo.DEMANDA_INDUCIDA
     modo_pdf: ModoPdf = ModoPdf.UNO_POR_ATENCION
     nombre: str | None = None
+    # ── Filtro por factura (solo Demanda Inducida, Fase 2) ──
+    # Cuando viene poblado, el régimen declarado por el usuario manda sobre AFIC_REGIMEN
+    # de la BD a la hora de imprimir el PDF.
+    regimen: str | None = Field(default=None, description="SUBSIDIADO o CONTRIBUTIVO")
+    facturas: list[str] | None = Field(
+        default=None,
+        description="Lista de códigos CAB/FAB para cruzar con AVS_REGISTROS_AP",
+    )
     estado: EstadoExtraccion = EstadoExtraccion.PENDING
     total_atenciones: int = 0
     total_afiliados: int = 0

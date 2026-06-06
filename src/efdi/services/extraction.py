@@ -23,6 +23,7 @@ log = logging.getLogger(__name__)
 def _generar_pdfs_por_afiliado(
     tareas: list[tuple[AfiliadoConAtenciones, Path]],
     pool: "mp.pool.Pool | None" = None,
+    regimen_override: str | None = None,
 ) -> int:
     """Genera un PDF (multi-página) por afiliado. Devuelve cantidad de PDFs."""
     n = len(tareas)
@@ -30,13 +31,13 @@ def _generar_pdfs_por_afiliado(
         # Secuencial
         for afiliado, path in tareas:
             path.parent.mkdir(parents=True, exist_ok=True)
-            generar_pdf_afiliado(afiliado, path)
+            generar_pdf_afiliado(afiliado, path, regimen_override=regimen_override)
         return n
     # Paralelo
     dirs = {p.parent for _, p in tareas}
     for d in dirs:
         d.mkdir(parents=True, exist_ok=True)
-    payload = [(af, str(p)) for af, p in tareas]
+    payload = [(af, str(p), regimen_override) for af, p in tareas]
     chunksize = max(20, n // (pool._processes * 8))  # type: ignore[attr-defined]
     results = list(pool.imap_unordered(pdf_worker, payload, chunksize=chunksize))
     return len(results)
@@ -59,6 +60,7 @@ def _procesar_lote(job: Extraccion, lote: Lote, pool: "mp.pool.Pool | None" = No
             hasta=job.hasta,
             limite=lote.tamano,
             offset=lote.offset_inicio,
+            facturas=job.facturas,
         )
         lote.total_atenciones = len(atenciones)
 
@@ -88,7 +90,7 @@ def _procesar_lote(job: Extraccion, lote: Lote, pool: "mp.pool.Pool | None" = No
             pdf_path = lote_dir / afiliado.doc_key / f"{afiliado.pdf_key}.pdf"
             tareas.append((afiliado, pdf_path))
 
-        total_pdfs = _generar_pdfs_por_afiliado(tareas, pool=pool)
+        total_pdfs = _generar_pdfs_por_afiliado(tareas, pool=pool, regimen_override=job.regimen)
         lote.total_pdfs = total_pdfs
 
         # Fase 3 — empaquetado ZIP

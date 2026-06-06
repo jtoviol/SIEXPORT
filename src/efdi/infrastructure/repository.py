@@ -14,7 +14,8 @@ class AtencionRepository(Protocol):
     """Contrato del repositorio."""
 
     def obtener_atenciones(
-        self, desde: date, hasta: date, limite: int, offset: int = 0
+        self, desde: date, hasta: date, limite: int, offset: int = 0,
+        facturas: list[str] | None = None,
     ) -> list[Atencion]: ...
 
 
@@ -22,12 +23,40 @@ class MockRepository:
     """Datos falsos deterministas."""
 
     def obtener_atenciones(
-        self, desde: date, hasta: date, limite: int, offset: int = 0
+        self, desde: date, hasta: date, limite: int, offset: int = 0,
+        facturas: list[str] | None = None,
     ) -> list[Atencion]:
-        return generar_atenciones(limite=limite, desde=desde, hasta=hasta, offset=offset)
+        atenciones = generar_atenciones(limite=limite, desde=desde, hasta=hasta, offset=offset)
+        if facturas:
+            # Mock del cruce: simula que solo ~50% de afiliados aparecen en las facturas dadas.
+            # Usamos seq_seragil para que sea determinista entre llamadas.
+            atenciones = [a for a in atenciones if a.seq_seragil % 2 == 0]
+        return atenciones
 
-    def get_total(self, desde: date, hasta: date) -> int:
-        return 25_000
+    def get_total(self, desde: date, hasta: date, facturas: list[str] | None = None) -> int:
+        return 12_500 if facturas else 25_000
+
+    def contar_por_facturas(self, codigos: list[str]) -> dict:
+        """Mock determinista para previewing — conteo derivado del hash del código.
+
+        Estructura: {total_filas, documentos_unicos, por_codigo: {CAB123: {total_filas, documentos_unicos}}}.
+        """
+        por_codigo: dict[str, dict[str, int]] = {}
+        total_filas = 0
+        for c in codigos:
+            h = sum(ord(x) for x in c)
+            n = 100 + (h % 401)  # 100..500 filas
+            docs = int(n * 0.85)
+            por_codigo[c] = {"total_filas": n, "documentos_unicos": docs}
+            total_filas += n
+        # Si vienen >=2 códigos asumimos overlap fuerte (CAB+FAB suelen compartir afiliados)
+        ratio = 0.55 if len(codigos) >= 2 else 0.85
+        documentos_unicos = int(total_filas * ratio)
+        return {
+            "total_filas": total_filas,
+            "documentos_unicos": documentos_unicos,
+            "por_codigo": por_codigo,
+        }
 
 
 # === SQL Server real ============================================================
@@ -96,6 +125,7 @@ WITH X AS (
     WHERE B.FLG_REGIND_DEMIND = 'SI'
       AND B.FEC_REGISTRO_INFORMACION >= ?
       AND B.FEC_REGISTRO_INFORMACION <= ?
+      {factura_filter}
 )
 SELECT X.*
 FROM X
@@ -114,6 +144,52 @@ INNER JOIN AVS_PROGRAMA_ASOCIADO_DEMIND AS O ON O.SEQ_SERAGIL = B.SEQ_SERAGIL
 WHERE B.FLG_REGIND_DEMIND = 'SI'
   AND B.FEC_REGISTRO_INFORMACION >= ?
   AND B.FEC_REGISTRO_INFORMACION <= ?
+  {factura_filter}
+"""
+
+
+# Fragmento EXISTS contra AVS_REGISTROS_AP — se inyecta solo si vienen facturas.
+# Usamos EXISTS en vez de INNER JOIN para no multiplicar filas si un afiliado
+# aparece en más de una factura del set.
+_FACTURA_EXISTS = """AND EXISTS (
+    SELECT 1 FROM AVS_REGISTROS_AP r_ap
+    WHERE r_ap.NUM_TIPO_IDENTIFICACION = A.NRO_TIPO_IDENTIFICACION
+      AND r_ap.COD_TIPO_IDENTIFICACION = A.COD_TIPO_IDENTIFICACION
+      AND r_ap.NRO_FACTURA IN ({placeholders})
+)"""
+
+
+def _factura_filter_sql(facturas: list[str] | None) -> str:
+    """Devuelve el fragmento EXISTS con placeholders ?,?,... o cadena vacía."""
+    if not facturas:
+        return ""
+    placeholders = ",".join("?" * len(facturas))
+    return _FACTURA_EXISTS.format(placeholders=placeholders)
+
+
+# === Conteo por número de factura ============================================
+# Estructura fiel a la consulta del usuario; se reemplaza solo el SELECT por
+# agregaciones. El IN se parametriza inyectando N placeholders (?,?,...).
+QUERY_FACTURAS_POR_CODIGO = """
+SELECT r_ap.nro_factura AS nro_factura,
+       COUNT(*) AS total_filas,
+       COUNT(DISTINCT r_ap.num_tipo_identificacion) AS documentos_unicos
+FROM AVS_REGISTROS_AP r_ap
+INNER JOIN AVS_AFILIADO_MUTUALSER_HIS af
+    ON af.NRO_TIPO_IDENTIFICACION = r_ap.num_tipo_identificacion
+   AND af.COD_TIPO_IDENTIFICACION = r_ap.cod_tipo_identificacion
+WHERE r_ap.nro_factura IN ({placeholders})
+GROUP BY r_ap.nro_factura
+"""
+
+QUERY_FACTURAS_GLOBAL = """
+SELECT COUNT(*) AS total_filas,
+       COUNT(DISTINCT r_ap.num_tipo_identificacion) AS documentos_unicos
+FROM AVS_REGISTROS_AP r_ap
+INNER JOIN AVS_AFILIADO_MUTUALSER_HIS af
+    ON af.NRO_TIPO_IDENTIFICACION = r_ap.num_tipo_identificacion
+   AND af.COD_TIPO_IDENTIFICACION = r_ap.cod_tipo_identificacion
+WHERE r_ap.nro_factura IN ({placeholders})
 """
 
 
@@ -207,7 +283,8 @@ class SqlServerRepository:
     """SQL Server real vía pyodbc."""
 
     def obtener_atenciones(
-        self, desde: date, hasta: date, limite: int, offset: int = 0
+        self, desde: date, hasta: date, limite: int, offset: int = 0,
+        facturas: list[str] | None = None,
     ) -> list[Atencion]:
         try:
             import pyodbc
@@ -218,13 +295,21 @@ class SqlServerRepository:
             ) from e
 
         fecha_inicio, fecha_final = _fechas_dt(desde, hasta)
+        sql = QUERY_BASE.format(factura_filter=_factura_filter_sql(facturas))
+        # Orden de placeholders: fecha_inicio, fecha_final, [facturas...], offset, limite
+        params: list = [fecha_inicio, fecha_final]
+        if facturas:
+            params.extend(facturas)
+        params.extend([offset, limite])
+
         log.info(
             "sqlserver.query",
-            extra={"desde": str(desde), "hasta": str(hasta), "limite": limite, "offset": offset},
+            extra={"desde": str(desde), "hasta": str(hasta), "limite": limite,
+                   "offset": offset, "facturas": len(facturas or [])},
         )
         with pyodbc.connect(settings.db_dsn, timeout=60) as conn:
             cur = conn.cursor()
-            cur.execute(QUERY_BASE, fecha_inicio, fecha_final, offset, limite)
+            cur.execute(sql, *params)
             cols = [c[0] for c in cur.description]
             rows = [dict(zip(cols, r, strict=False)) for r in cur.fetchall()]
 
@@ -278,22 +363,74 @@ class SqlServerRepository:
         log.info("sqlserver.fetched", extra={"rows": len(atenciones)})
         return atenciones
 
-    def get_total(self, desde: date, hasta: date) -> int:
+    def get_total(self, desde: date, hasta: date, facturas: list[str] | None = None) -> int:
         """Retorna el total de registros para el rango — misma lógica que SERAGIL CAN_REGISTROS."""
         try:
             import pyodbc
         except ImportError:
             return 0
         fecha_inicio, fecha_final = _fechas_dt(desde, hasta)
+        sql = QUERY_COUNT.format(factura_filter=_factura_filter_sql(facturas))
+        params: list = [fecha_inicio, fecha_final]
+        if facturas:
+            params.extend(facturas)
         try:
             with pyodbc.connect(settings.db_dsn, timeout=30) as conn:
                 cur = conn.cursor()
-                cur.execute(QUERY_COUNT, fecha_inicio, fecha_final)
+                cur.execute(sql, *params)
                 row = cur.fetchone()
                 return int(row[0]) if row else 0
         except Exception:
             log.exception("sqlserver.get_total failed")
             return 0
+
+    def contar_por_facturas(self, codigos: list[str]) -> dict:
+        """Cuenta filas y documentos únicos para una lista de números de factura.
+
+        Estructura: {total_filas, documentos_unicos, por_codigo: {codigo: {total_filas, documentos_unicos}}}.
+        Códigos sin coincidencias se devuelven con ceros.
+        """
+        if not codigos:
+            return {"total_filas": 0, "documentos_unicos": 0, "por_codigo": {}}
+
+        try:
+            import pyodbc
+        except ImportError as e:
+            raise RuntimeError(
+                "pyodbc no instalado. Instalar con: pip install '.[sqlserver]' "
+                "y tener el ODBC Driver 17 for SQL Server en el sistema."
+            ) from e
+
+        placeholders = ",".join("?" * len(codigos))
+        sql_por_codigo = QUERY_FACTURAS_POR_CODIGO.format(placeholders=placeholders)
+        sql_global = QUERY_FACTURAS_GLOBAL.format(placeholders=placeholders)
+
+        log.info("sqlserver.contar_por_facturas", extra={"codigos": codigos})
+        with pyodbc.connect(settings.db_dsn, timeout=30) as conn:
+            cur = conn.cursor()
+
+            cur.execute(sql_por_codigo, *codigos)
+            por_codigo: dict[str, dict[str, int]] = {}
+            for row in cur.fetchall():
+                codigo = str(row[0]).strip()
+                por_codigo[codigo] = {
+                    "total_filas": int(row[1] or 0),
+                    "documentos_unicos": int(row[2] or 0),
+                }
+            for c in codigos:
+                if c not in por_codigo:
+                    por_codigo[c] = {"total_filas": 0, "documentos_unicos": 0}
+
+            cur.execute(sql_global, *codigos)
+            row = cur.fetchone()
+            total_filas = int(row[0] or 0) if row else 0
+            documentos_unicos = int(row[1] or 0) if row else 0
+
+        return {
+            "total_filas": total_filas,
+            "documentos_unicos": documentos_unicos,
+            "por_codigo": por_codigo,
+        }
 
     def ping(self) -> bool:
         """Verifica conexión sin tocar las tablas reales."""

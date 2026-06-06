@@ -10,6 +10,7 @@ from fastapi.responses import FileResponse
 
 from efdi import __version__
 from efdi.api.schemas import (
+    ConteoFacturasResp,
     CrearExtraccionReq,
     DiagCheck,
     DiagnosticsResp,
@@ -195,6 +196,78 @@ async def contar_registros(
     }
 
 
+def _validar_pares_facturas(codigos: list[str]) -> list[str]:
+    """Normaliza y valida los códigos de factura.
+
+    Reglas:
+    - Cada código empieza por CAB o FAB y trae al menos 1 carácter después.
+    - Sin duplicados.
+    - Cada CAB exige un FAB con el mismo sufijo (y viceversa).
+    """
+    normalizados: list[str] = []
+    for c in codigos:
+        cn = (c or "").strip().upper()
+        if not cn:
+            continue
+        if not (cn.startswith("CAB") or cn.startswith("FAB")):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Código '{c}' inválido: debe empezar por CAB o FAB.",
+            )
+        if len(cn) <= 3:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Código '{c}' inválido: falta el número después del prefijo.",
+            )
+        normalizados.append(cn)
+
+    if not normalizados:
+        raise HTTPException(status_code=400, detail="Debe enviar al menos un código de factura.")
+    if len(set(normalizados)) != len(normalizados):
+        raise HTTPException(status_code=400, detail="Hay códigos de factura repetidos.")
+
+    cabs = {c[3:] for c in normalizados if c.startswith("CAB")}
+    fabs = {c[3:] for c in normalizados if c.startswith("FAB")}
+    faltantes: list[str] = []
+    for n in sorted(cabs - fabs):
+        faltantes.append(f"FAB{n} (falta el par de CAB{n})")
+    for n in sorted(fabs - cabs):
+        faltantes.append(f"CAB{n} (falta el par de FAB{n})")
+    if faltantes:
+        raise HTTPException(
+            status_code=400,
+            detail="Códigos sin pareja: " + "; ".join(faltantes),
+        )
+
+    return normalizados
+
+
+@router.get(
+    "/extractions/facturas/count",
+    response_model=ConteoFacturasResp,
+    tags=["extracciones"],
+    summary="Preview: cuenta filas y documentos únicos para una lista de códigos de factura",
+)
+async def contar_por_facturas(
+    codigos: list[str] = Query(
+        ...,
+        description=(
+            "Códigos de factura (CAB/FAB). Repetir el parámetro por cada código, "
+            "o pasar uno solo separado por coma. Deben venir en pares CAB+FAB con el mismo número."
+        ),
+    ),
+) -> ConteoFacturasResp:
+    # Soporte "?codigos=CAB1,FAB1,CAB2,FAB2" además del repetido tradicional.
+    aplanados: list[str] = []
+    for raw in codigos:
+        aplanados.extend(part for part in (raw or "").split(",") if part.strip())
+
+    normalizados = _validar_pares_facturas(aplanados)
+    repo = get_repository()
+    resultado = repo.contar_por_facturas(normalizados)
+    return ConteoFacturasResp(**resultado)
+
+
 @router.post(
     "/extractions",
     response_model=ExtraccionResp,
@@ -211,14 +284,25 @@ async def crear_extraccion(
     Si `limite > tamano_lote`, el job se divide en N lotes que se procesan
     secuencialmente. Cada lote produce su propio zip descargable.
     """
+    # Construye lista CAB/FAB cuando viene factura
+    facturas: list[str] | None = None
+    nombre_default: str | None = None
+    if req.numero_factura is not None:
+        facturas = [f"CAB{req.numero_factura}", f"FAB{req.numero_factura}"]
+        # Nombre default que distingue jobs sub vs cont en el sidebar
+        nombre_default = f"DI {req.desde}—{req.hasta} · {req.regimen}"
+
     limite = req.limite
     if limite is None:
         repo = get_repository()
-        total = repo.get_total(req.desde, req.hasta)  # type: ignore[attr-defined]
+        total = repo.get_total(req.desde, req.hasta, facturas=facturas)  # type: ignore[attr-defined]
         if total <= 0:
             raise HTTPException(
                 status_code=400,
-                detail="No se pudo obtener el total de registros. Verifica la conexión a la base de datos.",
+                detail=(
+                    "No se encontraron registros para el rango/factura indicados. "
+                    "Verifica el conteo previo y la conexión a la base de datos."
+                ),
             )
         limite = min(total, 600_000)
 
@@ -231,6 +315,9 @@ async def crear_extraccion(
         limite=limite,
         tamano_lote=tamano_lote,
         modo_pdf=req.modo_pdf,
+        nombre=nombre_default,
+        regimen=req.regimen,
+        facturas=facturas,
         creado_en=datetime.now(),
     )
     store.save(job)

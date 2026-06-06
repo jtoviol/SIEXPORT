@@ -7,7 +7,7 @@ from threading import Lock
 
 from efdi.config import settings
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_version (version INTEGER PRIMARY KEY);
@@ -22,6 +22,8 @@ CREATE TABLE IF NOT EXISTS extracciones (
     tipo TEXT NOT NULL DEFAULT 'demanda_inducida',
     modo_pdf TEXT NOT NULL,
     nombre TEXT,
+    regimen TEXT,
+    facturas TEXT,
     estado TEXT NOT NULL,
     total_atenciones INTEGER NOT NULL DEFAULT 0,
     total_afiliados INTEGER NOT NULL DEFAULT 0,
@@ -79,6 +81,16 @@ class Database:
                 conn.execute("ALTER TABLE extracciones ADD COLUMN nombre TEXT")
             except Exception:
                 pass
+        if current_version < 5:
+            # Cruce por factura (Fase 2 DI) — ambas columnas nullable, no rompen jobs viejos
+            for ddl in (
+                "ALTER TABLE extracciones ADD COLUMN regimen TEXT",
+                "ALTER TABLE extracciones ADD COLUMN facturas TEXT",
+            ):
+                try:
+                    conn.execute(ddl)
+                except Exception:
+                    pass
 
     def _init_schema(self) -> None:
         with self.connect() as conn:

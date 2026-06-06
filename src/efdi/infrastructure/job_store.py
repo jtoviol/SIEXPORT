@@ -21,6 +21,9 @@ def _row_to_extraccion(row) -> Extraccion:
         tipo = ExtraccionTipo(tipo_raw)
     except ValueError:
         tipo = ExtraccionTipo.DEMANDA_INDUCIDA
+    regimen = row["regimen"] if "regimen" in cols else None
+    facturas_raw = row["facturas"] if "facturas" in cols else None
+    facturas = [c for c in (facturas_raw or "").split(",") if c.strip()] or None
     return Extraccion(
         id=UUID(row["id"]),
         desde=date.fromisoformat(row["desde"]),
@@ -31,6 +34,8 @@ def _row_to_extraccion(row) -> Extraccion:
         tipo=tipo,
         modo_pdf=ModoPdf(row["modo_pdf"]),
         nombre=row["nombre"] if "nombre" in cols else None,
+        regimen=regimen,
+        facturas=facturas,
         estado=EstadoExtraccion(row["estado"]),
         total_atenciones=row["total_atenciones"],
         total_afiliados=row["total_afiliados"],
@@ -82,14 +87,15 @@ class JobStore:
 
             tipo_val = job.tipo.value if hasattr(job.tipo, "value") else str(job.tipo)
 
+            facturas_csv = ",".join(job.facturas) if job.facturas else None
             conn.execute(
                 """
                 INSERT INTO extracciones (
                     id, desde, hasta, limite, tamano_lote, total_lotes,
-                    tipo, modo_pdf, nombre, estado,
+                    tipo, modo_pdf, nombre, regimen, facturas, estado,
                     total_atenciones, total_afiliados, total_pdfs,
                     creado_en, completado_en, mensaje_error, zip_path
-                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 ON CONFLICT(id) DO UPDATE SET
                     total_lotes=excluded.total_lotes,
                     tipo=excluded.tipo,
@@ -107,6 +113,8 @@ class JobStore:
                     tipo_val,
                     job.modo_pdf.value if hasattr(job.modo_pdf, "value") else str(job.modo_pdf),
                     job.nombre,
+                    job.regimen,
+                    facturas_csv,
                     estado_a_guardar,
                     job.total_atenciones, job.total_afiliados, job.total_pdfs,
                     job.creado_en.isoformat(),

@@ -416,7 +416,7 @@
   <aside id="sidebar" class="shrink-0 flex flex-col bg-white sm:rounded-xl sm:border sm:border-white/80"
          style="box-shadow: 0 2px 12px rgba(35,70,116,.1), 0 0 0 1px rgba(35,70,116,.06)">
 
-    <div class="px-3 pt-3 pb-2 shrink-0">
+    <div class="px-3 pt-3 pb-2 shrink-0 space-y-1.5">
       <button id="btn-toggle" onclick="toggleForm()"
               class="w-full flex items-center justify-center gap-1.5 h-9 rounded-lg
                      bg-brand-700 hover:bg-brand-800 text-white text-sm font-medium transition-colors">
@@ -425,6 +425,17 @@
           <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
         </svg>
         <span id="lbl-btn" class="s-label">Nueva extraccion</span>
+      </button>
+      <!-- Solo visible en pestaña Demanda Inducida -->
+      <button id="btn-facturas" type="button" onclick="openFacturasModal()"
+              class="hidden w-full items-center justify-center gap-1.5 h-8 rounded-lg
+                     bg-white border border-slate-300 hover:bg-slate-50 text-slate-700
+                     text-xs font-medium transition-colors">
+        <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round"
+                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+        </svg>
+        <span class="s-label">Conteo por facturas</span>
       </button>
     </div>
 
@@ -474,6 +485,34 @@
                      class="w-full h-8 px-2 rounded-md border border-slate-300 text-xs bg-white
                             outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500"/>
               <p id="lote-preview" class="text-[10px] text-slate-400 mt-1"></p>
+            </div>
+          </div>
+          <!-- Filtro por factura (solo Demanda Inducida — toggle via switchTab) -->
+          <div id="factura-section" class="hidden di-only border-t border-slate-200 pt-2.5">
+            <label class="text-xs font-medium text-slate-500 block mb-1.5">
+              Filtro por factura
+              <span class="text-[10px] text-slate-400 font-normal">(opcional · cruza con AVS_REGISTROS_AP)</span>
+            </label>
+            <div class="space-y-1.5">
+              <div class="flex items-center gap-1.5">
+                <span class="text-[10px] font-semibold uppercase tracking-wide text-slate-600 w-12 shrink-0">Sub</span>
+                <span class="font-mono text-[10px] text-slate-400 shrink-0">CAB/FAB</span>
+                <input id="fac-form-sub" type="text" maxlength="20" placeholder="ej: 11502" autocomplete="off"
+                       oninput="onFacturaFormInput()"
+                       class="flex-1 min-w-0 h-7 px-2 rounded-md border border-slate-300 text-xs font-mono bg-white
+                              outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500"/>
+              </div>
+              <div class="flex items-center gap-1.5">
+                <span class="text-[10px] font-semibold uppercase tracking-wide text-slate-600 w-12 shrink-0">Cont</span>
+                <span class="font-mono text-[10px] text-slate-400 shrink-0">CAB/FAB</span>
+                <input id="fac-form-cont" type="text" maxlength="20" placeholder="ej: 11503" autocomplete="off"
+                       oninput="onFacturaFormInput()"
+                       class="flex-1 min-w-0 h-7 px-2 rounded-md border border-slate-300 text-xs font-mono bg-white
+                              outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500"/>
+              </div>
+              <p class="text-[10px] text-slate-500 leading-snug">
+                Al cargar un régimen las fechas saltan al mes anterior. Con los 2 cargados se crean 2 jobs separados.
+              </p>
             </div>
           </div>
           <p id="ferr" class="text-xs text-red-500 hidden"></p>
@@ -689,6 +728,92 @@
             <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
           </svg>
           Si, detener
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ MODAL: CONTEO POR FACTURAS (Demanda Inducida) ═══ -->
+<div id="facturas-overlay"
+     class="hidden fixed inset-0 bg-black/40 backdrop-blur-sm z-[60] flex items-center justify-center p-4"
+     onclick="closeFacturasModal()">
+  <div id="facturas-modal"
+       class="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden"
+       style="transform:scale(.94) translateY(8px);opacity:0;transition:transform .22s cubic-bezier(.34,1.56,.64,1),opacity .18s ease"
+       onclick="event.stopPropagation()">
+    <div class="h-1 w-full bg-gradient-to-r from-brand-500 to-brand-700"></div>
+    <div class="p-6">
+      <div class="flex items-start gap-4 mb-4">
+        <div class="h-10 w-10 rounded-xl bg-brand-50 flex items-center justify-center shrink-0">
+          <svg class="h-5 w-5 text-brand-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+          </svg>
+        </div>
+        <div>
+          <h3 class="font-semibold text-slate-900 text-base leading-tight">Conteo por facturas</h3>
+          <p class="text-xs text-slate-500 mt-0.5">Preview de cuántos registros traen los códigos CAB/FAB del mes</p>
+        </div>
+      </div>
+
+      <p class="text-xs text-slate-500 mb-3 leading-snug">
+        Pega el número de la factura. Buscamos automáticamente el par
+        <span class="font-mono text-slate-700">CAB</span> +
+        <span class="font-mono text-slate-700">FAB</span> con ese número.
+      </p>
+
+      <!-- SUBSIDIADO -->
+      <div class="mb-3">
+        <div class="flex items-center justify-between mb-1">
+          <label class="text-xs font-semibold text-slate-700 uppercase tracking-wide">Subsidiado</label>
+          <span class="text-[10px] text-slate-400">opcional si solo cargas contributivo</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="font-mono text-xs text-slate-400 select-none">CAB/FAB</span>
+          <input id="fac-sub" type="text" maxlength="20" placeholder="ej: 11502"
+                 oninput="updateFacturasPreview()" onkeydown="onFacturasKey(event)"
+                 class="flex-1 h-9 px-3 rounded-md border border-slate-300 text-sm font-mono bg-white
+                        outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500"/>
+        </div>
+        <p id="fac-sub-preview" class="text-[10px] text-slate-400 mt-1 font-mono"></p>
+      </div>
+
+      <!-- CONTRIBUTIVO -->
+      <div class="mb-3">
+        <div class="flex items-center justify-between mb-1">
+          <label class="text-xs font-semibold text-slate-700 uppercase tracking-wide">Contributivo</label>
+          <span class="text-[10px] text-slate-400">opcional si solo cargas subsidiado</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="font-mono text-xs text-slate-400 select-none">CAB/FAB</span>
+          <input id="fac-cont" type="text" maxlength="20" placeholder="ej: 11503"
+                 oninput="updateFacturasPreview()" onkeydown="onFacturasKey(event)"
+                 class="flex-1 h-9 px-3 rounded-md border border-slate-300 text-sm font-mono bg-white
+                        outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500"/>
+        </div>
+        <p id="fac-cont-preview" class="text-[10px] text-slate-400 mt-1 font-mono"></p>
+      </div>
+
+      <!-- Error / resultado -->
+      <p id="fac-err" class="hidden text-xs text-red-500 mb-3"></p>
+      <div id="fac-result" class="hidden rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs space-y-2 mb-3"></div>
+
+      <!-- Botones -->
+      <div class="flex gap-3 mt-4">
+        <button onclick="closeFacturasModal()"
+                class="flex-1 h-10 rounded-xl border border-slate-200 text-sm font-medium
+                       text-slate-600 hover:bg-slate-50 active:bg-slate-100 transition-colors">
+          Cerrar
+        </button>
+        <button id="fac-verify-btn" onclick="submitFacturas()"
+                class="flex-1 h-10 rounded-xl bg-brand-700 hover:bg-brand-800 active:bg-brand-900
+                       text-white text-sm font-semibold transition-colors
+                       inline-flex items-center justify-center gap-1.5 disabled:opacity-50">
+          <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+          <span id="fac-verify-lbl">Verificar</span>
         </button>
       </div>
     </div>
@@ -1157,6 +1282,21 @@ function switchTab(tabId) {
     btn.classList.toggle("active", btn.dataset.mobTab === tabId)
   );
 
+  // Elementos "solo Demanda Inducida": boton conteo + seccion factura en form
+  const isDI = tabId === "demanda-inducida";
+  const btnFac = $("btn-facturas");
+  if (btnFac) {
+    btnFac.classList.toggle("hidden", !isDI);
+    btnFac.classList.toggle("flex",   isDI);
+  }
+  const facSection = $("factura-section");
+  if (facSection) facSection.classList.toggle("hidden", !isDI);
+  // Reset inputs de factura al cambiar de tab
+  const fSub  = $("fac-form-sub");
+  const fCont = $("fac-form-cont");
+  if (fSub)  fSub.value  = "";
+  if (fCont) fCont.value = "";
+
   // ── Dashboard: vista exclusiva, ocultar módulos + franja B ──────────────
   const dbView = $("dashboard-view");
   const modView = $("modules-view");
@@ -1223,9 +1363,13 @@ function jobHtml(e) {
   const s  = STATUS[e.estado] || STATUS.pending;
   const ok = e.estado === "completed";
   const ko = e.estado === "failed";
-  const sub = ok ? `${e.total_afiliados} afil &middot; ${e.total_pdfs} PDFs`
-            : ko ? `<span class="text-red-400 truncate">${e.mensaje_error || "Error"}</span>`
-            : s.label;
+  const regimenBadge = e.regimen
+    ? `<span class="inline-block px-1.5 rounded-sm bg-emerald-50 text-emerald-700 text-[9px] font-bold uppercase tracking-wide mr-1 align-middle"
+             title="Cruce por factura (${(e.facturas || []).join(', ')})">${e.regimen.slice(0,3)}</span>`
+    : "";
+  const sub = ok ? `${regimenBadge}${e.total_afiliados} afil &middot; ${e.total_pdfs} PDFs`
+            : ko ? `${regimenBadge}<span class="text-red-400 truncate">${e.mensaje_error || "Error"}</span>`
+            : `${regimenBadge}${s.label}`;
   const shortId    = e.id.slice(0, 8);
   const customName = e.nombre || null;
   const tipLabel   = ok ? `${customName || shortId} · ${e.total_pdfs} PDFs` : `${customName || shortId} · ${s.label}`;
@@ -1495,6 +1639,139 @@ async function confirmarCancelacion() {
   } catch (e) {
     toast("Error al cancelar", e.message, "error");
   }
+}
+
+// ─── Conteo por facturas (solo Demanda Inducida) ───
+function openFacturasModal() {
+  $("fac-sub").value = "";
+  $("fac-cont").value = "";
+  $("fac-sub-preview").textContent = "";
+  $("fac-cont-preview").textContent = "";
+  $("fac-err").classList.add("hidden");
+  $("fac-result").classList.add("hidden");
+  $("fac-result").innerHTML = "";
+  $("fac-verify-btn").disabled = false;
+  $("fac-verify-lbl").textContent = "Verificar";
+
+  const overlay = $("facturas-overlay");
+  const modal   = $("facturas-modal");
+  overlay.classList.remove("hidden");
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    modal.style.transform = "scale(1) translateY(0)";
+    modal.style.opacity   = "1";
+  }));
+  setTimeout(() => $("fac-sub")?.focus(), 220);
+}
+
+function closeFacturasModal() {
+  const modal = $("facturas-modal");
+  modal.style.transform = "scale(.94) translateY(8px)";
+  modal.style.opacity   = "0";
+  setTimeout(() => $("facturas-overlay").classList.add("hidden"), 220);
+}
+
+// Acepta tanto "11502" como "CAB11502"/"FAB11502" y devuelve el sufijo numerico
+function _parseFacturaSufijo(raw) {
+  const s = (raw || "").trim().toUpperCase();
+  if (!s) return "";
+  if (s.startsWith("CAB") || s.startsWith("FAB")) return s.slice(3);
+  return s;
+}
+
+function updateFacturasPreview() {
+  const subN  = _parseFacturaSufijo($("fac-sub").value);
+  const contN = _parseFacturaSufijo($("fac-cont").value);
+  $("fac-sub-preview").textContent  = subN  ? `Buscará: CAB${subN} + FAB${subN}` : "";
+  $("fac-cont-preview").textContent = contN ? `Buscará: CAB${contN} + FAB${contN}` : "";
+}
+
+function onFacturasKey(ev) {
+  if (ev.key === "Enter") {
+    ev.preventDefault();
+    submitFacturas();
+  }
+}
+
+async function submitFacturas() {
+  const errEl = $("fac-err");
+  const resEl = $("fac-result");
+  errEl.classList.add("hidden");
+  resEl.classList.add("hidden");
+
+  const subN  = _parseFacturaSufijo($("fac-sub").value);
+  const contN = _parseFacturaSufijo($("fac-cont").value);
+
+  if (!subN && !contN) {
+    errEl.textContent = "Ingresá al menos un número de factura (subsidiado o contributivo).";
+    errEl.classList.remove("hidden");
+    return;
+  }
+
+  const codigos = [];
+  const grupos  = [];
+  if (subN) {
+    codigos.push(`CAB${subN}`, `FAB${subN}`);
+    grupos.push({label: "SUBSIDIADO",   cab: `CAB${subN}`,  fab: `FAB${subN}`});
+  }
+  if (contN) {
+    codigos.push(`CAB${contN}`, `FAB${contN}`);
+    grupos.push({label: "CONTRIBUTIVO", cab: `CAB${contN}`, fab: `FAB${contN}`});
+  }
+
+  const verifyBtn = $("fac-verify-btn");
+  const verifyLbl = $("fac-verify-lbl");
+  verifyBtn.disabled = true;
+  verifyLbl.textContent = "Consultando…";
+
+  try {
+    const qs = codigos.map(c => `codigos=${encodeURIComponent(c)}`).join("&");
+    const r  = await fetch(`/extractions/facturas/count?${qs}`);
+    const body = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      errEl.textContent = body.detail || `Error ${r.status}`;
+      errEl.classList.remove("hidden");
+      return;
+    }
+    renderFacturasResult(body, grupos);
+  } catch (e) {
+    errEl.textContent = "No se pudo consultar el servidor: " + e.message;
+    errEl.classList.remove("hidden");
+  } finally {
+    verifyBtn.disabled = false;
+    verifyLbl.textContent = "Verificar";
+  }
+}
+
+function renderFacturasResult(data, grupos) {
+  const resEl = $("fac-result");
+  const fmt = n => Number(n || 0).toLocaleString("es-CO");
+  let html = "";
+  for (const g of grupos) {
+    const cabItem = (data.por_codigo || {})[g.cab] || {total_filas: 0, documentos_unicos: 0};
+    const fabItem = (data.por_codigo || {})[g.fab] || {total_filas: 0, documentos_unicos: 0};
+    const subtotal = (cabItem.total_filas || 0) + (fabItem.total_filas || 0);
+    const warn = subtotal === 0 ? '<span class="text-amber-600 ml-1">⚠ sin coincidencias</span>' : "";
+    html += `
+      <div class="border-b border-slate-200 last:border-0 pb-2 last:pb-0">
+        <div class="flex items-center justify-between font-semibold text-slate-700">
+          <span>${g.label}${warn}</span>
+          <span class="text-brand-700">${fmt(subtotal)} filas</span>
+        </div>
+        <div class="pl-2 mt-1 text-slate-500 leading-relaxed">
+          <div class="flex justify-between"><span class="font-mono">${g.cab}</span><span>${fmt(cabItem.total_filas)} filas · ${fmt(cabItem.documentos_unicos)} doc únicos</span></div>
+          <div class="flex justify-between"><span class="font-mono">${g.fab}</span><span>${fmt(fabItem.total_filas)} filas · ${fmt(fabItem.documentos_unicos)} doc únicos</span></div>
+        </div>
+      </div>
+    `;
+  }
+  html += `
+    <div class="pt-2 mt-1 border-t border-slate-300 flex justify-between font-semibold text-slate-800">
+      <span>TOTAL</span>
+      <span>${fmt(data.total_filas)} filas · ${fmt(data.documentos_unicos)} documentos únicos</span>
+    </div>
+  `;
+  resEl.innerHTML = html;
+  resEl.classList.remove("hidden");
 }
 
 // Acumulador de eventos por job para feed estilo GitHub Actions
@@ -2175,6 +2452,32 @@ function setGenLoading(on) {
 $("desde").addEventListener("change", fetchAutoPreview);
 $("hasta").addEventListener("change", fetchAutoPreview);
 
+// ─── Filtro por factura en form (DI Fase 2) ───
+function _facturaFormSufijo(raw) {
+  const s = (raw || "").trim().toUpperCase();
+  if (!s) return "";
+  if (s.startsWith("CAB") || s.startsWith("FAB")) return s.slice(3);
+  return s;
+}
+
+function onFacturaFormInput() {
+  // Auto-fill fechas al mes anterior cuando aparece el primer caracter de factura
+  const tieneFactura = !!(_facturaFormSufijo($("fac-form-sub").value)
+                        || _facturaFormSufijo($("fac-form-cont").value));
+  if (!tieneFactura) return;
+  const desdeInput = $("desde");
+  const hastaInput = $("hasta");
+  if (desdeInput.value || hastaInput.value) return;  // respetar lo que el usuario ya escribió
+  const hoy = new Date();
+  // Primer día del mes anterior a hoy
+  const primero = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1);
+  // Último día del mes anterior = día 0 del mes actual
+  const ultimo  = new Date(hoy.getFullYear(), hoy.getMonth(), 0);
+  const fmt = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+  desdeInput.value = fmt(primero);
+  hastaInput.value = fmt(ultimo);
+}
+
 $("fext").addEventListener("submit", async ev => {
   ev.preventDefault();
   $("ferr").classList.add("hidden");
@@ -2198,24 +2501,52 @@ $("fext").addEventListener("submit", async ev => {
     $("ferr").textContent = "'Hasta' debe ser mayor o igual a 'Desde'.";
     $("ferr").classList.remove("hidden"); return;
   }
-  const body = {
+
+  // ── Construir lista de jobs a disparar ──
+  // Solo aplica en pestaña DI; en otros módulos, los inputs no existen o están vacíos.
+  const subN  = _facturaFormSufijo($("fac-form-sub")?.value || "");
+  const contN = _facturaFormSufijo($("fac-form-cont")?.value || "");
+  const lanzamientos = [];
+  if (subN)  lanzamientos.push({regimen: "SUBSIDIADO",   numero: subN});
+  if (contN) lanzamientos.push({regimen: "CONTRIBUTIVO", numero: contN});
+  if (lanzamientos.length === 0) lanzamientos.push(null);  // POST sin factura
+
+  const bodyBase = {
     desde: $("desde").value, hasta: $("hasta").value,
     modo_pdf: "uno_por_atencion",
   };
   if (!esAuto) {
-    body.limite = limite;
-    body.tamano_lote = calcularTamanoLote(limite);
+    bodyBase.limite = limite;
+    bodyBase.tamano_lote = calcularTamanoLote(limite);
   }
+
   setGenLoading(true);
+  let primerId = null;
+  let errores = [];
   try {
-    const r = await apiPost(getModuleApi(), body);
-    toast("Extraccion iniciada", `ID ${r.id.slice(0, 8)} — generando ${r.limite.toLocaleString()} registros`, "success");
+    for (const fac of lanzamientos) {
+      const body = {...bodyBase};
+      if (fac) {
+        body.numero_factura = fac.numero;
+        body.regimen        = fac.regimen;
+      }
+      try {
+        const r = await apiPost(getModuleApi(), body);
+        if (!primerId) primerId = r.id;
+        const sufijo = fac ? ` · ${fac.regimen}` : "";
+        toast("Extraccion iniciada",
+              `ID ${r.id.slice(0, 8)}${sufijo} — ${r.limite.toLocaleString()} registros`,
+              "success");
+      } catch (e) {
+        errores.push((fac ? `${fac.regimen}: ` : "") + e.message);
+      }
+    }
+    if (errores.length) {
+      toast("Algunos jobs no se crearon", errores.join(" · "), "error");
+    }
     toggleForm();
     await loadJobs();
-    // Auto-seleccionar el nuevo job → muestra vista de progreso con animaciones
-    await selJob(r.id);
-  } catch (e) {
-    toast("Error", e.message, "error");
+    if (primerId) await selJob(primerId);
   } finally {
     setGenLoading(false);
   }

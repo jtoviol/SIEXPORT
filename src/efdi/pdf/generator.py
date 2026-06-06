@@ -291,13 +291,21 @@ def _atenciones_del_dia_table(atenciones: list[Atencion]) -> Table:
     return t
 
 
-def _construir_pagina_multi(afiliado: AfiliadoConAtenciones) -> list:
-    """Arma los flowables de UNA página con TODAS las atenciones del día."""
+def _construir_pagina_multi(
+    afiliado: AfiliadoConAtenciones,
+    regimen_override: str | None = None,
+) -> list:
+    """Arma los flowables de UNA página con TODAS las atenciones del día.
+
+    Si `regimen_override` viene poblado (ej: "SUBSIDIADO" desde el cruce por factura),
+    se imprime ese valor en la línea "Régimen" en lugar del de AFIC_REGIMEN de BD.
+    """
     atenciones = afiliado.atenciones
     primera = atenciones[0]
     elems: list = []
     sexo_full = "Femenino" if primera.sexo == "F" else "Masculino"
     codigos = [a.cod_programa for a in atenciones]
+    regimen_str = regimen_override or primera.regimen or ""
 
     # Cabecera — reutiliza _header_table con la primera atención
     elems.append(_header_table(afiliado, primera, 1, 1))
@@ -315,7 +323,7 @@ def _construir_pagina_multi(afiliado: AfiliadoConAtenciones) -> list:
         ("Tel 1",        primera.telefono_1 or ""),
         ("Tel 2",        primera.telefono_2 or ""),
         ("Correo",       primera.correo or ""),
-        ("Régimen",      primera.regimen or ""),
+        ("Régimen",      regimen_str),
         ("Dirección",    primera.direccion or ""),
         ("Depto / Mun.", f"{primera.departamento or ''} / {primera.municipio or ''}"),
     ]))
@@ -340,8 +348,17 @@ def _construir_pagina_multi(afiliado: AfiliadoConAtenciones) -> list:
     return elems
 
 
-def generar_pdf_afiliado(afiliado: AfiliadoConAtenciones, output_path: Path) -> Path:
-    """Genera UN PDF de UNA página con todas las atenciones del mismo día."""
+def generar_pdf_afiliado(
+    afiliado: AfiliadoConAtenciones,
+    output_path: Path,
+    regimen_override: str | None = None,
+) -> Path:
+    """Genera UN PDF de UNA página con todas las atenciones del mismo día.
+
+    `regimen_override` viene seteado cuando la extracción se hizo por cruce con
+    factura — manda sobre el régimen de BD para que el soporte coincida con lo
+    que se está facturando.
+    """
     output_path.parent.mkdir(parents=True, exist_ok=True)
     doc = SimpleDocTemplate(
         str(output_path),
@@ -351,7 +368,7 @@ def generar_pdf_afiliado(afiliado: AfiliadoConAtenciones, output_path: Path) -> 
         title=f"Demanda inducida — {afiliado.pdf_key}",
         author="SIEDFASER",
     )
-    elems = _construir_pagina_multi(afiliado)
+    elems = _construir_pagina_multi(afiliado, regimen_override=regimen_override)
     elems.append(Spacer(1, 6))
     elems.append(Paragraph(
         "Documento generado automáticamente por SIEDFASER — Sistema Inteligente de Exportación de Datos para Facturación de Seragil",
