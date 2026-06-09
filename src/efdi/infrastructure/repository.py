@@ -18,6 +18,14 @@ class AtencionRepository(Protocol):
         facturas: list[str] | None = None,
     ) -> list[Atencion]: ...
 
+    def get_total(
+        self, desde: date, hasta: date, facturas: list[str] | None = None,
+    ) -> int: ...
+
+    def contar_por_facturas(
+        self, codigos: list[str], cod_diag: str | None = None,
+    ) -> dict: ...
+
 
 class MockRepository:
     """Datos falsos deterministas."""
@@ -36,16 +44,25 @@ class MockRepository:
     def get_total(self, desde: date, hasta: date, facturas: list[str] | None = None) -> int:
         return 12_500 if facturas else 25_000
 
-    def contar_por_facturas(self, codigos: list[str]) -> dict:
+    def contar_por_facturas(
+        self, codigos: list[str], cod_diag: str | None = None,
+    ) -> dict:
         """Mock determinista para previewing — conteo derivado del hash del código.
 
         Estructura: {total_filas, documentos_unicos, por_codigo: {CAB123: {total_filas, documentos_unicos}}}.
+        Cuando se pasa `cod_diag` (ej: Z048), el mock simula el recorte que aplica
+        el filtro real — multiplica por un ratio fijo derivado del CIEX.
         """
         por_codigo: dict[str, dict[str, int]] = {}
         total_filas = 0
+        # Si filtramos por CIEX, simulamos un recorte (~85% para Z048 — la mayoría
+        # de filas AP son DI; ~5% para Z131 — minoría FINDRISC; etc.).
+        ciex_ratio = {"Z048": 0.85, "Z131": 0.05, "Z309": 0.02}.get(
+            (cod_diag or "").upper(), 1.0
+        )
         for c in codigos:
             h = sum(ord(x) for x in c)
-            n = 100 + (h % 401)  # 100..500 filas
+            n = int((100 + (h % 401)) * ciex_ratio)  # filas recortadas por CIEX
             docs = int(n * 0.85)
             por_codigo[c] = {"total_filas": n, "documentos_unicos": docs}
             total_filas += n
@@ -133,9 +150,12 @@ ORDER BY X.NUM_REGISTRO
 OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
 """
 
-# COUNT rápido — mismos filtros, solo INNER JOINs que afectan el conteo.
+# COUNT — debe contar la MISMA unidad que devuelve QUERY_BASE (filas-programa,
+# no atenciones únicas) para que el LIMIT/OFFSET de la paginación cubra todo el
+# universo. Un COUNT(DISTINCT SEQ_SERAGIL) subestimaba ~8x porque cada atención
+# tiene N programas asociados vía AVS_PROGRAMA_ASOCIADO_DEMIND.
 QUERY_COUNT = """
-SELECT COUNT(DISTINCT B.SEQ_SERAGIL) AS total
+SELECT COUNT(*) AS total
 FROM AVS_REGISTRO_SERAGIL AS B
 INNER JOIN AVS_AFILIADO_MUTUALSER_HIS AS A
     ON A.COD_TIPO_IDENTIFICACION = B.COD_TIPO_IDENTIFICACION_PERSONA
@@ -151,11 +171,16 @@ WHERE B.FLG_REGIND_DEMIND = 'SI'
 # Fragmento EXISTS contra AVS_REGISTROS_AP — se inyecta solo si vienen facturas.
 # Usamos EXISTS en vez de INNER JOIN para no multiplicar filas si un afiliado
 # aparece en más de una factura del set.
+# `cod_diag_principal = 'Z048'` es la firma que deja el SP prGeneraRips en las
+# filas que vienen del cursor cuDemandaInducida (otros módulos usan Z131/Z309/etc.).
+# Sin este filtro, se cuelan afiliados que entraron a la factura solo por
+# FINDRISC/pruebas/gestantes y arrastran sus DI no facturadas como tales.
 _FACTURA_EXISTS = """AND EXISTS (
     SELECT 1 FROM AVS_REGISTROS_AP r_ap
     WHERE r_ap.NUM_TIPO_IDENTIFICACION = A.NRO_TIPO_IDENTIFICACION
       AND r_ap.COD_TIPO_IDENTIFICACION = A.COD_TIPO_IDENTIFICACION
       AND r_ap.NRO_FACTURA IN ({placeholders})
+      AND r_ap.cod_diag_principal = 'Z048'
 )"""
 
 
@@ -170,6 +195,9 @@ def _factura_filter_sql(facturas: list[str] | None) -> str:
 # === Conteo por número de factura ============================================
 # Estructura fiel a la consulta del usuario; se reemplaza solo el SELECT por
 # agregaciones. El IN se parametriza inyectando N placeholders (?,?,...).
+# `{cod_diag_filter}` se inyecta cuando viene cod_diag (ej: 'Z048' para DI) y
+# permite que el preview refleje EXACTAMENTE lo que el módulo va a entregar
+# (no la suma de DI+FINDRISC+pruebas+etc. mezclada en la misma factura).
 QUERY_FACTURAS_POR_CODIGO = """
 SELECT r_ap.nro_factura AS nro_factura,
        COUNT(*) AS total_filas,
@@ -179,6 +207,7 @@ INNER JOIN AVS_AFILIADO_MUTUALSER_HIS af
     ON af.NRO_TIPO_IDENTIFICACION = r_ap.num_tipo_identificacion
    AND af.COD_TIPO_IDENTIFICACION = r_ap.cod_tipo_identificacion
 WHERE r_ap.nro_factura IN ({placeholders})
+  {cod_diag_filter}
 GROUP BY r_ap.nro_factura
 """
 
@@ -190,7 +219,15 @@ INNER JOIN AVS_AFILIADO_MUTUALSER_HIS af
     ON af.NRO_TIPO_IDENTIFICACION = r_ap.num_tipo_identificacion
    AND af.COD_TIPO_IDENTIFICACION = r_ap.cod_tipo_identificacion
 WHERE r_ap.nro_factura IN ({placeholders})
+  {cod_diag_filter}
 """
+
+
+def _cod_diag_filter(cod_diag: str | None) -> str:
+    """Fragmento opcional para filtrar AP por cod_diag_principal (CIEX del módulo)."""
+    if not cod_diag:
+        return ""
+    return "AND r_ap.cod_diag_principal = ?"
 
 
 def _normalizar_sexo(cod: str | None, des: str | None) -> Sexo:
@@ -384,11 +421,16 @@ class SqlServerRepository:
             log.exception("sqlserver.get_total failed")
             return 0
 
-    def contar_por_facturas(self, codigos: list[str]) -> dict:
+    def contar_por_facturas(
+        self, codigos: list[str], cod_diag: str | None = None,
+    ) -> dict:
         """Cuenta filas y documentos únicos para una lista de números de factura.
 
         Estructura: {total_filas, documentos_unicos, por_codigo: {codigo: {total_filas, documentos_unicos}}}.
         Códigos sin coincidencias se devuelven con ceros.
+        Cuando se pasa `cod_diag` (ej: 'Z048' para DI), el preview se restringe
+        a las filas AP cuyo cod_diag_principal coincide — refleja exactamente
+        lo que el módulo correspondiente va a entregar como PDFs.
         """
         if not codigos:
             return {"total_filas": 0, "documentos_unicos": 0, "por_codigo": {}}
@@ -402,14 +444,26 @@ class SqlServerRepository:
             ) from e
 
         placeholders = ",".join("?" * len(codigos))
-        sql_por_codigo = QUERY_FACTURAS_POR_CODIGO.format(placeholders=placeholders)
-        sql_global = QUERY_FACTURAS_GLOBAL.format(placeholders=placeholders)
+        cod_diag_frag = _cod_diag_filter(cod_diag)
+        sql_por_codigo = QUERY_FACTURAS_POR_CODIGO.format(
+            placeholders=placeholders, cod_diag_filter=cod_diag_frag,
+        )
+        sql_global = QUERY_FACTURAS_GLOBAL.format(
+            placeholders=placeholders, cod_diag_filter=cod_diag_frag,
+        )
+        # Orden de parámetros: códigos del IN, [cod_diag si viene]
+        params_base: list = list(codigos)
+        if cod_diag:
+            params_base.append(cod_diag)
 
-        log.info("sqlserver.contar_por_facturas", extra={"codigos": codigos})
+        log.info(
+            "sqlserver.contar_por_facturas",
+            extra={"codigos": codigos, "cod_diag": cod_diag or ""},
+        )
         with pyodbc.connect(settings.db_dsn, timeout=30) as conn:
             cur = conn.cursor()
 
-            cur.execute(sql_por_codigo, *codigos)
+            cur.execute(sql_por_codigo, *params_base)
             por_codigo: dict[str, dict[str, int]] = {}
             for row in cur.fetchall():
                 codigo = str(row[0]).strip()
@@ -421,7 +475,7 @@ class SqlServerRepository:
                 if c not in por_codigo:
                     por_codigo[c] = {"total_filas": 0, "documentos_unicos": 0}
 
-            cur.execute(sql_global, *codigos)
+            cur.execute(sql_global, *params_base)
             row = cur.fetchone()
             total_filas = int(row[0] or 0) if row else 0
             documentos_unicos = int(row[1] or 0) if row else 0

@@ -54,7 +54,7 @@ async def contar_registros_findrisc(
     total = repo.get_total(desde, hasta, facturas=facturas)
     if total <= 0:
         return {"total_en_db": 0, "limite_efectivo": 0, "tamano_lote": 0, "lotes_estimados": 0, "capeado": False}
-    limite_efectivo = min(total, 600_000)
+    limite_efectivo = total
     tamano = _auto_tamano_lote(limite_efectivo)
     lotes = math.ceil(limite_efectivo / tamano)
     return {
@@ -62,7 +62,7 @@ async def contar_registros_findrisc(
         "limite_efectivo": limite_efectivo,
         "tamano_lote": tamano,
         "lotes_estimados": lotes,
-        "capeado": total > 600_000,
+        "capeado": False,
     }
 
 
@@ -97,7 +97,7 @@ async def crear_extraccion_findrisc(
                     "Verifica el conteo previo y la conexión a la base de datos."
                 ),
             )
-        limite = min(total, 600_000)
+        limite = total
 
     tamano_lote = req.tamano_lote or _auto_tamano_lote(limite)
 

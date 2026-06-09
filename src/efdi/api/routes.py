@@ -175,16 +175,34 @@ async def diagnostics() -> DiagnosticsResp:
 async def contar_registros(
     desde: date = Query(..., description="Fecha inicial (YYYY-MM-DD)"),
     hasta: date = Query(..., description="Fecha final (YYYY-MM-DD)"),
+    numero_factura: str | None = Query(
+        None,
+        description="Sufijo numérico del código de régimen (ej '11502'). Backend arma CABn+FABn.",
+    ),
 ) -> dict:
     """Consulta cuántos registros existen en la DB para el rango sin lanzar extracción.
-    Útil para que el usuario confirme el volumen antes de generar."""
+    Útil para que el usuario confirme el volumen antes de generar.
+
+    Si viene `numero_factura`, el conteo se restringe a los afiliados que están en
+    CABn/FABn como Demanda Inducida (cod_diag_principal='Z048' vía _FACTURA_EXISTS),
+    igual que lo va a hacer la extracción real."""
     if hasta < desde:
         raise HTTPException(status_code=400, detail="hasta debe ser >= desde")
+    facturas: list[str] | None = None
+    if numero_factura:
+        n = numero_factura.strip().upper()
+        if n.startswith("CAB") or n.startswith("FAB"):
+            n = n[3:]
+        if not n:
+            raise HTTPException(status_code=400, detail="numero_factura no puede ser vacío")
+        facturas = [f"CAB{n}", f"FAB{n}"]
     repo = get_repository()
-    total = repo.get_total(desde, hasta)
+    total = repo.get_total(desde, hasta, facturas=facturas)
     if total <= 0:
         return {"total_en_db": 0, "limite_efectivo": 0, "tamano_lote": 0, "lotes_estimados": 0, "capeado": False}
-    limite_efectivo = min(total, 600_000)
+    # Sin cap — el sistema procesa todo el universo que el filtro devuelva.
+    # `capeado` se mantiene en la respuesta por compat con el frontend, siempre False.
+    limite_efectivo = total
     tamano = _auto_tamano_lote(limite_efectivo)
     lotes = math.ceil(limite_efectivo / tamano)
     return {
@@ -192,7 +210,7 @@ async def contar_registros(
         "limite_efectivo": limite_efectivo,
         "tamano_lote": tamano,
         "lotes_estimados": lotes,
-        "capeado": total > 600_000,
+        "capeado": False,
     }
 
 
@@ -256,6 +274,14 @@ async def contar_por_facturas(
             "o pasar uno solo separado por coma. Deben venir en pares CAB+FAB con el mismo número."
         ),
     ),
+    cod_diag: str | None = Query(
+        None,
+        description=(
+            "CIEX del módulo que invoca el preview, para que el conteo refleje SOLO "
+            "lo que ese módulo va a generar. Z048=Demanda Inducida, Z131=FINDRISC, "
+            "Z309=Planificación Familiar. Si no se pasa, cuenta todas las filas AP."
+        ),
+    ),
 ) -> ConteoFacturasResp:
     # Soporte "?codigos=CAB1,FAB1,CAB2,FAB2" además del repetido tradicional.
     aplanados: list[str] = []
@@ -264,7 +290,7 @@ async def contar_por_facturas(
 
     normalizados = _validar_pares_facturas(aplanados)
     repo = get_repository()
-    resultado = repo.contar_por_facturas(normalizados)
+    resultado = repo.contar_por_facturas(normalizados, cod_diag=cod_diag)
     return ConteoFacturasResp(**resultado)
 
 
@@ -304,7 +330,7 @@ async def crear_extraccion(
                     "Verifica el conteo previo y la conexión a la base de datos."
                 ),
             )
-        limite = min(total, 600_000)
+        limite = total
 
     tamano_lote = req.tamano_lote or _auto_tamano_lote(limite)
 

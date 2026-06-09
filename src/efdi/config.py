@@ -33,8 +33,11 @@ class Settings(BaseSettings):
     # Umbral mínimo de atenciones por lote para activar Pool (debajo de eso, secuencial)
     pdf_parallel_threshold: int = 100
 
-    # Lotes en paralelo: cuántos lotes se procesan simultáneamente (1 = secuencial)
-    lote_workers: int = 2
+    # Lotes en paralelo: cuántos lotes se procesan simultáneamente (1 = secuencial).
+    # NOTA: cuando lote_workers > 1, el pool interno de PDFs por lote se desactiva
+    # (el paralelismo viene del nivel de lote). Para jobs grandes (~45k afiliados),
+    # 4 lotes paralelos × ~12k filas/lote da mejor throughput que 2 × 6k.
+    lote_workers: int = 4
 
     # Autenticación básica
     auth_user: str = Field(default="admin")

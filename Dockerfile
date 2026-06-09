@@ -18,11 +18,11 @@ WORKDIR /app
 
 # ── Dependencias (capa cacheada; se invalida solo si pyproject.toml o uv.lock cambian) ──
 COPY pyproject.toml uv.lock ./
-RUN uv sync --no-dev --extra sqlserver --no-install-project
+RUN uv sync --no-dev --extra sqlserver --extra excel --no-install-project
 
 # ── Código fuente ──────────────────────────────────────────────────────────────
 COPY src/ ./src/
-RUN uv sync --no-dev --extra sqlserver
+RUN uv sync --no-dev --extra sqlserver --extra excel
 
 # Directorio de datos persistente (SQLite + ZIPs generados)
 RUN mkdir -p data

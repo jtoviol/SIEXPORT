@@ -238,6 +238,10 @@
             class="tab-btn px-3.5 py-1.5 text-sm font-medium outline-none whitespace-nowrap rounded-full transition-all">
       Planificación Familiar
     </button>
+    <button data-tab="vacunacion" onclick="switchTab('vacunacion')"
+            class="tab-btn px-3.5 py-1.5 text-sm font-medium outline-none whitespace-nowrap rounded-full transition-all">
+      Vacunación
+    </button>
   </nav>
   <!-- Health badge + Logout -->
   <div class="shrink-0 flex items-center gap-2">
@@ -379,6 +383,27 @@
       </div>
       <div class="text-[10px] text-slate-400 mt-2 db-mod-ultimo">—</div>
     </div>
+    <div data-mod="vacunacion" class="db-mod-card bg-white rounded-xl border border-slate-200 p-4 cursor-pointer hover:border-cyan-400 hover:shadow transition-all">
+      <div class="flex items-center justify-between mb-2">
+        <div class="font-semibold text-slate-800 text-sm">Vacunación</div>
+        <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-cyan-100 text-cyan-700">VAC</span>
+      </div>
+      <div class="grid grid-cols-3 gap-2 text-center">
+        <div>
+          <div class="text-[9px] uppercase text-slate-400">En curso</div>
+          <div class="text-base font-bold text-amber-600 tabular-nums db-mod-curso">—</div>
+        </div>
+        <div>
+          <div class="text-[9px] uppercase text-slate-400">Completados</div>
+          <div class="text-base font-bold text-emerald-600 tabular-nums db-mod-ok">—</div>
+        </div>
+        <div>
+          <div class="text-[9px] uppercase text-slate-400">Fallidos</div>
+          <div class="text-base font-bold text-red-500 tabular-nums db-mod-fail">—</div>
+        </div>
+      </div>
+      <div class="text-[10px] text-slate-400 mt-2 db-mod-ultimo">—</div>
+    </div>
   </div>
 
   <!-- Actividad reciente -->
@@ -443,55 +468,11 @@
     <div id="form-wrap">
       <div>
         <form id="fext" class="px-3 pb-3 space-y-2.5 border-b border-slate-200 bg-slate-50">
-          <div class="grid grid-cols-2 gap-2 pt-0.5">
-            <div>
-              <label class="text-xs font-medium text-slate-500 block mb-1">Desde</label>
-              <input id="desde" type="date" required
-                     class="w-full h-8 px-2 rounded-md border border-slate-300 text-xs bg-white
-                            outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500"/>
-            </div>
-            <div>
-              <label class="text-xs font-medium text-slate-500 block mb-1">Hasta</label>
-              <input id="hasta" type="date" required
-                     class="w-full h-8 px-2 rounded-md border border-slate-300 text-xs bg-white
-                            outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500"/>
-            </div>
-          </div>
-          <div>
-            <label class="text-xs font-medium text-slate-500 block mb-1">Limite de registros</label>
-            <!-- Toggle Auto / Manual -->
-            <div class="flex rounded-md overflow-hidden border border-slate-300 mb-1.5 text-xs">
-              <button type="button" id="btn-modo-auto" onclick="setModoLimite('auto')"
-                      class="flex-1 h-7 font-medium transition-colors bg-brand-700 text-white">
-                Auto
-              </button>
-              <button type="button" id="btn-modo-manual" onclick="setModoLimite('manual')"
-                      class="flex-1 h-7 font-medium transition-colors bg-white text-slate-600 hover:bg-slate-50">
-                Manual
-              </button>
-            </div>
-            <!-- Descripcion modo Auto -->
-            <div id="auto-desc" class="space-y-1">
-              <p class="text-[10px] text-brand-600 leading-tight">Trae todos los registros del rango seleccionado</p>
-              <!-- Preview de conteo -->
-              <div id="auto-preview" class="hidden rounded-md px-2 py-1.5 text-[10px] leading-snug border">
-                <span id="auto-preview-txt"></span>
-              </div>
-            </div>
-            <!-- Input modo Manual -->
-            <div id="manual-wrap" class="hidden">
-              <input id="limite" type="number" min="1" max="600000" value="25"
-                     oninput="updateLotePreview()"
-                     class="w-full h-8 px-2 rounded-md border border-slate-300 text-xs bg-white
-                            outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500"/>
-              <p id="lote-preview" class="text-[10px] text-slate-400 mt-1"></p>
-            </div>
-          </div>
-          <!-- Filtro por código de régimen (DI, FINDRISC y Captación — toggle via switchTab) -->
-          <div id="factura-section" class="hidden border-t border-slate-200 pt-2.5">
+          <!-- 1. Factura (requerida en módulos que aceptan el filtro; oculta en otros tabs) -->
+          <div id="factura-section" class="hidden pt-0.5">
             <label class="text-xs font-medium text-slate-500 block mb-1.5">
-              Filtro por factura
-              <span class="text-[10px] text-slate-400 font-normal">(opcional · cruza con AVS_REGISTROS_AP)</span>
+              Código de régimen <span class="text-red-500">*</span>
+              <span class="text-[10px] text-slate-400 font-normal">(requerido · cruza con AVS_REGISTROS_AP)</span>
             </label>
             <div class="space-y-1.5">
               <div class="flex items-center gap-1.5">
@@ -511,8 +492,55 @@
                               outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500"/>
               </div>
               <p class="text-[10px] text-slate-500 leading-snug">
-                Al cargar un régimen las fechas saltan al mes anterior. Con los 2 cargados se crean 2 jobs separados.
+                Al cargar un régimen las fechas saltan al mes anterior automáticamente.
+                Con los 2 cargados se crean 2 jobs separados.
               </p>
+            </div>
+          </div>
+          <!-- 2. Rango de fechas (siempre requeridas; con factura se autocompletan al mes anterior) -->
+          <div class="grid grid-cols-2 gap-2 border-t border-slate-200 pt-2.5">
+            <div>
+              <label class="text-xs font-medium text-slate-500 block mb-1">Desde <span class="text-red-500">*</span></label>
+              <input id="desde" type="date" required
+                     class="w-full h-8 px-2 rounded-md border border-slate-300 text-xs bg-white
+                            outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500"/>
+            </div>
+            <div>
+              <label class="text-xs font-medium text-slate-500 block mb-1">Hasta <span class="text-red-500">*</span></label>
+              <input id="hasta" type="date" required
+                     class="w-full h-8 px-2 rounded-md border border-slate-300 text-xs bg-white
+                            outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500"/>
+            </div>
+          </div>
+          <!-- 3. Límite de registros (Auto = todo el universo del rango+factura) -->
+          <div>
+            <label class="text-xs font-medium text-slate-500 block mb-1">Limite de registros</label>
+            <!-- Toggle Auto / Manual -->
+            <div class="flex rounded-md overflow-hidden border border-slate-300 mb-1.5 text-xs">
+              <button type="button" id="btn-modo-auto" onclick="setModoLimite('auto')"
+                      class="flex-1 h-7 font-medium transition-colors bg-brand-700 text-white">
+                Auto
+              </button>
+              <button type="button" id="btn-modo-manual" onclick="setModoLimite('manual')"
+                      class="flex-1 h-7 font-medium transition-colors bg-white text-slate-600 hover:bg-slate-50">
+                Manual
+              </button>
+            </div>
+            <!-- Descripcion modo Auto -->
+            <div id="auto-desc" class="space-y-1">
+              <p class="text-[10px] text-brand-600 leading-tight">Trae todas las filas-programa del rango + factura</p>
+              <!-- Preview de conteo -->
+              <div id="auto-preview" class="hidden rounded-md px-2 py-1.5 text-[10px] leading-snug border">
+                <span id="auto-preview-txt"></span>
+              </div>
+            </div>
+            <!-- Input modo Manual -->
+            <div id="manual-wrap" class="hidden">
+              <input id="limite" type="number" min="1" value="25"
+                     oninput="updateLotePreview()"
+                     class="w-full h-8 px-2 rounded-md border border-slate-300 text-xs bg-white
+                            outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500"/>
+              <p id="lote-preview" class="text-[10px] text-slate-400 mt-1"></p>
             </div>
           </div>
           <p id="ferr" class="text-xs text-red-500 hidden"></p>
@@ -532,6 +560,108 @@
       </div>
     </div>
 
+    <!-- ═══ FORM Vacunación (visible solo en tab vacunacion) ═══ -->
+    <div id="vacunacion-form-wrap" class="hidden">
+      <div class="px-3 pb-3 space-y-2.5 border-b border-slate-200 bg-slate-50">
+        <div class="pt-0.5">
+          <label class="text-xs font-medium text-slate-500 block mb-1.5">
+            1. Subir Excel <span class="text-red-500">*</span>
+            <span class="text-[10px] text-slate-400 font-normal">(.xlsx con datos de vacunación)</span>
+          </label>
+          <!-- Dropzone -->
+          <div id="vac-dropzone"
+               class="relative border-2 border-dashed border-slate-300 rounded-md
+                      p-4 text-center cursor-pointer hover:border-cyan-500
+                      hover:bg-cyan-50/50 transition-colors">
+            <input id="vac-file-input" type="file" accept=".xlsx"
+                   class="absolute inset-0 w-full h-full opacity-0 cursor-pointer"/>
+            <div id="vac-dz-idle">
+              <svg class="h-7 w-7 mx-auto mb-1 text-slate-400" fill="none"
+                   viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                <path stroke-linecap="round" stroke-linejoin="round"
+                      d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+              </svg>
+              <p class="text-xs text-slate-600 font-medium">
+                Arrastrá el .xlsx acá o clic para elegir
+              </p>
+              <p class="text-[10px] text-slate-400 mt-0.5">Solo Excel moderno (.xlsx)</p>
+            </div>
+            <div id="vac-dz-uploading" class="hidden">
+              <svg class="h-7 w-7 mx-auto mb-1 text-cyan-500 animate-spin" fill="none"
+                   viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" opacity="0.25"></circle>
+                <path fill="currentColor"
+                      d="M4 12a8 8 0 018-8v3l4-4-4-4v3a9 9 0 100 18v-3l-4 4 4 4v-3a8 8 0 01-8-8z"/>
+              </svg>
+              <p class="text-xs text-slate-600 font-medium">Subiendo y analizando…</p>
+            </div>
+            <div id="vac-dz-ready" class="hidden text-left">
+              <div class="flex items-center gap-2 mb-1.5">
+                <svg class="h-5 w-5 text-emerald-500 shrink-0" fill="none"
+                     viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round"
+                        d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+                <span id="vac-file-name" class="text-xs font-semibold text-slate-700 truncate"></span>
+                <button type="button" onclick="vacResetUpload()"
+                        class="ml-auto text-[10px] text-slate-400 hover:text-red-500 px-1 rounded">
+                  Cambiar
+                </button>
+              </div>
+              <div class="grid grid-cols-3 gap-1.5 text-center">
+                <div class="bg-white rounded p-1.5 border border-slate-200">
+                  <div class="text-[9px] uppercase text-slate-400">Filas</div>
+                  <div id="vac-stat-filas" class="text-xs font-bold text-slate-700 tabular-nums">—</div>
+                </div>
+                <div class="bg-white rounded p-1.5 border border-slate-200">
+                  <div class="text-[9px] uppercase text-slate-400">SUB</div>
+                  <div id="vac-stat-sub" class="text-xs font-bold text-cyan-700 tabular-nums">—</div>
+                </div>
+                <div class="bg-white rounded p-1.5 border border-slate-200">
+                  <div class="text-[9px] uppercase text-slate-400">CONT</div>
+                  <div id="vac-stat-cont" class="text-xs font-bold text-cyan-700 tabular-nums">—</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div id="vac-regimen-section" class="border-t border-slate-200 pt-2.5 hidden">
+          <label class="text-xs font-medium text-slate-500 block mb-1.5">
+            2. Régimen <span class="text-red-500">*</span>
+            <span class="text-[10px] text-slate-400 font-normal">(elegí uno o ambos)</span>
+          </label>
+          <div class="grid grid-cols-2 gap-1.5">
+            <label class="flex items-center gap-2 px-2 py-1.5 rounded-md border border-slate-300
+                          bg-white cursor-pointer hover:border-cyan-400 transition-colors text-xs">
+              <input id="vac-cb-sub" type="checkbox" checked class="accent-cyan-600 h-3.5 w-3.5"/>
+              <span class="font-semibold text-slate-700">Subsidiado</span>
+              <span id="vac-cb-sub-cnt" class="ml-auto text-[10px] text-slate-400 tabular-nums">—</span>
+            </label>
+            <label class="flex items-center gap-2 px-2 py-1.5 rounded-md border border-slate-300
+                          bg-white cursor-pointer hover:border-cyan-400 transition-colors text-xs">
+              <input id="vac-cb-cont" type="checkbox" class="accent-cyan-600 h-3.5 w-3.5"/>
+              <span class="font-semibold text-slate-700">Contributivo</span>
+              <span id="vac-cb-cont-cnt" class="ml-auto text-[10px] text-slate-400 tabular-nums">—</span>
+            </label>
+          </div>
+          <p id="vac-ferr" class="text-xs text-red-500 mt-1.5 hidden"></p>
+          <button type="button" id="vac-btn-gen" onclick="vacGenerar()"
+                  class="w-full h-8 mt-2 rounded-md bg-cyan-700 hover:bg-cyan-800 text-white
+                         text-xs font-semibold transition-colors disabled:opacity-50
+                         inline-flex items-center justify-center gap-1.5">
+            <span class="vac-bico">
+              <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24"
+                   stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round"
+                      d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
+              </svg>
+            </span>
+            <span class="vac-blbl">Generar carnés</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- List header -->
     <div class="s-section-hdr px-4 py-2 flex items-center justify-between shrink-0">
       <div class="s-label flex items-center gap-2">
@@ -547,7 +677,7 @@
       </button>
     </div>
 
-    <div class="flex-1 overflow-y-auto">
+    <div class="flex-1 overflow-y-auto min-h-0">
       <div id="jempty" class="hidden px-4 py-10 text-center">
         <svg class="h-8 w-8 text-slate-200 mx-auto mb-2" fill="none" viewBox="0 0 24 24"
              stroke="currentColor" stroke-width="1.5">
@@ -864,6 +994,14 @@
       </svg>
       <span>PlanFami</span>
     </button>
+    <button data-mob-tab="vacunacion" onclick="switchTab('vacunacion')"
+            class="mob-tab flex-1 flex flex-col items-center gap-0.5 py-2.5 transition-colors">
+      <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+        <path stroke-linecap="round" stroke-linejoin="round"
+              d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"/>
+      </svg>
+      <span>Vacunación</span>
+    </button>
   </div>
 </nav>
 
@@ -884,6 +1022,7 @@ function getModuleApi() {
   if (activeTab === "findrisc")               return "/findrisc/extractions";
   if (activeTab === "gestion-captacion")      return "/gestion-captacion/extractions";
   if (activeTab === "planificacion-familiar") return "/planificacion-familiar/extractions";
+  if (activeTab === "vacunacion")             return "/vacunacion/extractions";
   return "/extractions";
 }
 // API base capturada al seleccionar un job — persiste en callbacks deferred
@@ -947,7 +1086,10 @@ function renderExpName(id, nombre) {
   const isFindrisc = _selApiBase.includes("findrisc");
   const isCaptacion = _selApiBase.includes("gestion-captacion");
   const isPlanFami = _selApiBase.includes("planificacion-familiar");
-  const modBadge = isPlanFami
+  const isVacunacion = _selApiBase.includes("vacunacion");
+  const modBadge = isVacunacion
+    ? `<span class="ml-2 text-xs font-semibold px-1.5 py-0.5 rounded-full bg-cyan-100 text-cyan-700">Vacunación</span>`
+    : isPlanFami
     ? `<span class="ml-2 text-xs font-semibold px-1.5 py-0.5 rounded-full bg-rose-100 text-rose-700">Planificación Familiar</span>`
     : isCaptacion
     ? `<span class="ml-2 text-xs font-semibold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">Gestión Captación</span>`
@@ -1183,7 +1325,11 @@ function renderDashboard(d) {
     card.querySelector(".db-mod-ultimo").textContent =
       m.ultimo ? "Última: " + fmtRel(m.ultimo) : "Sin actividad";
     card.onclick = () => switchTab(m.tab);
+    // Guardamos el tab destino en dataset para que refrescarBloqueoCardsDashboard()
+    // pueda evaluar el bloqueo sin tener que recargar el dashboard completo.
+    card.dataset.tab = m.tab;
   });
+  refrescarBloqueoCardsDashboard();  // aplicar estado de bloqueo inmediatamente
 
   // Actividad reciente
   const ul = $("db-recientes");
@@ -1203,6 +1349,7 @@ function renderDashboard(d) {
     findrisc:               "bg-emerald-100 text-emerald-700",
     gestion_captacion:      "bg-amber-100 text-amber-700",
     planificacion_familiar: "bg-rose-100 text-rose-700",
+    vacunacion:             "bg-cyan-100 text-cyan-700",
   };
   ul.innerHTML = d.recientes.map(r => {
     const stCls = stColor[r.estado] || "text-slate-600 bg-slate-100";
@@ -1267,13 +1414,49 @@ function hasActiveJobs() {
   return Object.values(prevSt).some(s => s === "pending" || s === "running");
 }
 
+function refrescarBloqueoCardsDashboard() {
+  // Aplica feedback visual a las cards del dashboard: cuando hay un job activo
+  // en otro módulo, esta card aparece atenuada y con cursor-not-allowed.
+  // La card del módulo del job activo y todas las cards (cuando NO hay jobs)
+  // quedan habilitadas normalmente. El click sigue pasando por switchTab que
+  // muestra el toast — esto es solo el avance visual para evitar fricción.
+  const hayJobs = hasActiveJobs();
+  document.querySelectorAll(".db-mod-card").forEach(card => {
+    const cardTab = card.dataset.tab;
+    const bloqueada = hayJobs && cardTab && !activeTabsSet.has(cardTab);
+    card.classList.toggle("opacity-50", bloqueada);
+    card.classList.toggle("cursor-not-allowed", bloqueada);
+    card.classList.toggle("cursor-pointer", !bloqueada);
+    card.title = bloqueada
+      ? "Hay una extracción corriendo en otro módulo. Esperá a que termine."
+      : "";
+  });
+}
+
 function switchTab(tabId) {
   if (tabId === activeTab) return;
-  // Permitimos siempre cambiar a "dashboard"; el bloqueo por jobs activos solo aplica entre módulos
-  if (tabId !== "dashboard" && activeTab !== "dashboard" && hasActiveJobs()) {
-    toast("No se puede cambiar de modulo", "Hay una extraccion en curso. Espera a que finalice.", "info");
+  // Permitimos siempre ir a "dashboard". Si hay jobs activos, solo se puede
+  // entrar al módulo donde está corriendo el job (no a otros módulos vacíos).
+  // Esto cubre TODOS los caminos: cards del dashboard, tabs superiores, tabs móviles.
+  if (tabId !== "dashboard" && hasActiveJobs() && !activeTabsSet.has(tabId)) {
+    toast("Módulo bloqueado",
+          "Hay una extracción corriendo en otro módulo. Esperá a que termine para entrar a éste.",
+          "info");
     return;
   }
+  // Limpiar la lista de jobs ANTES de cambiar de módulo — evita que se vea
+  // residual la lista del módulo anterior hasta que el polling traiga la nueva.
+  const jlist = $("jlist");
+  const jempty = $("jempty");
+  if (jlist) jlist.innerHTML = "";
+  if (jempty) jempty.classList.add("hidden");
+  prevSt = {};
+  // Cerrar el panel de detalle del job si estaba abierto (apuntaba a otro módulo)
+  selId = null;
+  $("rp")?.classList.remove("mopen");
+  $("rp-empty")?.classList.remove("hidden");
+  $("rp-content")?.classList.add("hidden");
+
   activeTab = tabId;
   document.querySelectorAll(".tab-btn").forEach(btn =>
     btn.classList.toggle("active", btn.dataset.tab === tabId)
@@ -1290,7 +1473,8 @@ function switchTab(tabId) {
     btnFac.classList.toggle("flex",   isDI);
   }
   // El filtro CAB/FAB aplica a DI, FINDRISC, Captación y Planificación Familiar
-  // (todos cruzan contra AVS_REGISTROS_AP, que es global).
+  // (todos cruzan contra AVS_REGISTROS_AP, que es global). Vacunación NO usa
+  // factura — tiene su propio form con dropzone de Excel.
   const aceptaFiltroRegimen = ["demanda-inducida", "findrisc", "gestion-captacion", "planificacion-familiar"].includes(tabId);
   const facSection = $("factura-section");
   if (facSection) facSection.classList.toggle("hidden", !aceptaFiltroRegimen);
@@ -1301,6 +1485,13 @@ function switchTab(tabId) {
     if (fSub)  fSub.value  = "";
     if (fCont) fCont.value = "";
   }
+
+  // ── Vacunación: alternar form SQL ↔ form de upload Excel ──
+  const isVacunacion = tabId === "vacunacion";
+  const formSqlWrap  = $("form-wrap");
+  const formVacWrap  = $("vacunacion-form-wrap");
+  if (formSqlWrap) formSqlWrap.classList.toggle("hidden", isVacunacion);
+  if (formVacWrap) formVacWrap.classList.toggle("hidden", !isVacunacion);
 
   // ── Dashboard: vista exclusiva, ocultar módulos + franja B ──────────────
   const dbView = $("dashboard-view");
@@ -1363,6 +1554,15 @@ function switchTab(tabId) {
 // JOBS LIST
 // ═══════════════════════════════════════════════════════════════════
 let selId = null, prevSt = {}, _poll = null;
+// Set de tabs (módulos) que tienen jobs en estado pending/running.
+// Lo usa switchTab para permitir volver SOLO al módulo donde está corriendo el job
+// (no a otros módulos vacíos) cuando se navega desde el dashboard.
+let activeTabsSet = new Set();
+function _tipoToTab(tipo) {
+  // ExtraccionTipo usa underscores ('demanda_inducida'), los tabIds usan guiones
+  // ('demanda-inducida'). Mapeo trivial.
+  return tipo ? String(tipo).replace(/_/g, "-") : null;
+}
 
 function jobHtml(e) {
   const s  = STATUS[e.estado] || STATUS.pending;
@@ -1511,8 +1711,17 @@ async function loadJobs() {
     if (badge) badge.textContent = activos > 0 ? `${total} · ${activos} activo${activos !== 1 ? "s" : ""}` : `${total}`;
 
     prevSt = Object.fromEntries(data.map(e => [e.id, e.estado]));
+    // Recalcular qué módulos tienen jobs activos — usado por switchTab para
+    // permitir volver SOLO al módulo del job corriendo desde el dashboard.
+    activeTabsSet = new Set(
+      data
+        .filter(e => e.estado === "pending" || e.estado === "running")
+        .map(e => _tipoToTab(e.tipo))
+        .filter(Boolean)
+    );
     const active = data.some(e => e.estado === "pending" || e.estado === "running");
     updateGenButtons(active);  // ← bloquea/habilita botones según haya jobs activos
+    refrescarBloqueoCardsDashboard();  // visual feedback en cards del dashboard
     clearTimeout(_poll);
     _poll = setTimeout(loadJobs, active ? 45000 : 5000);
   } catch {
@@ -1729,8 +1938,12 @@ async function submitFacturas() {
   verifyLbl.textContent = "Consultando…";
 
   try {
+    // El botón de preview solo está activo en Demanda Inducida (CIEX Z048),
+    // que es la firma que deja el SP prGeneraRips en AVS_REGISTROS_AP. Pasamos
+    // cod_diag para que el conteo refleje SOLO las DI facturadas, no la mezcla
+    // con FINDRISC/pruebas/gestantes que también viven en la misma factura.
     const qs = codigos.map(c => `codigos=${encodeURIComponent(c)}`).join("&");
-    const r  = await fetch(`/extractions/facturas/count?${qs}`);
+    const r  = await fetch(`/extractions/facturas/count?${qs}&cod_diag=Z048`);
     const body = await r.json().catch(() => ({}));
     if (!r.ok) {
       errEl.textContent = body.detail || `Error ${r.status}`;
@@ -2321,12 +2534,22 @@ function fetchAutoPreview() {
   const hasta  = $("hasta").value;
   if (!desde || !hasta || modoLimite !== "auto") { setAutoPreview(null); return; }
   if (new Date(hasta) < new Date(desde)) { setAutoPreview("err"); return; }
+  // Si hay factura cargada, la incluimos en el preview para que el conteo
+  // refleje EXACTAMENTE lo que se va a procesar al generar. Priorizamos Sub
+  // si están los dos; si el usuario ve un total muy chico, sabe que es el del
+  // régimen subsidiado y al lanzar se crearán los 2 jobs por separado.
+  const subN  = _facturaFormSufijo($("fac-form-sub")?.value || "");
+  const contN = _facturaFormSufijo($("fac-form-cont")?.value || "");
+  const facN  = subN || contN || "";
+  const url = facN
+    ? `${getModuleApi()}/count?desde=${desde}&hasta=${hasta}&numero_factura=${encodeURIComponent(facN)}`
+    : `${getModuleApi()}/count?desde=${desde}&hasta=${hasta}`;
   setAutoPreview("loading");
   setBtnGenDisabled(true);
   clearTimeout(_previewTimer);
   _previewTimer = setTimeout(async () => {
     try {
-      const r = await fetch(`${getModuleApi()}/count?desde=${desde}&hasta=${hasta}`);
+      const r = await fetch(url);
       if (!r.ok) { setAutoPreview("err"); setBtnGenDisabled(false); return; }
       setAutoPreview(await r.json());
     } catch { setAutoPreview("err"); }
@@ -2363,7 +2586,7 @@ function setAutoPreview(data) {
     txt.textContent = "No hay registros para este rango de fechas.";
     return;
   }
-  const cap = data.capeado ? ` (cap: la DB tiene más de 600.000)` : "";
+  const cap = "";
   box.className = "rounded-md px-2 py-1.5 text-[10px] leading-snug border bg-brand-50 border-brand-200 text-brand-700";
   txt.innerHTML =
     `<span class="font-semibold">${data.limite_efectivo.toLocaleString()} registros</span>` +
@@ -2394,6 +2617,9 @@ function toggleForm() {
 function updateGenButtons(busy) {
   const btnToggle = $("btn-toggle");
   const btnGen    = $("btn-gen");
+  const btnVacGen = $("vac-btn-gen");
+  const dzInput   = $("vac-file-input");
+  const dzBox     = $("vac-dropzone");
   const lbl       = $("lbl-btn");
   if (btnToggle) {
     btnToggle.disabled = busy;
@@ -2407,6 +2633,17 @@ function updateGenButtons(busy) {
   if (btnGen) {
     btnGen.disabled = busy || btnGen.dataset.submitting === "1";
     btnGen.classList.toggle("opacity-50", btnGen.disabled);
+  }
+  // Vacunación: bloquear botón Generar carnés + dropzone (no más uploads ni jobs nuevos)
+  if (btnVacGen) {
+    btnVacGen.disabled = busy || btnVacGen.dataset.submitting === "1";
+    btnVacGen.classList.toggle("opacity-50", btnVacGen.disabled);
+    btnVacGen.title = busy ? "Hay una extracción en curso. Espera a que termine." : "";
+  }
+  if (dzInput) dzInput.disabled = busy;
+  if (dzBox) {
+    dzBox.classList.toggle("opacity-50", busy);
+    dzBox.classList.toggle("pointer-events-none", busy);
   }
   // Si el form está abierto y empieza una extracción, cerrar form para evitar otro submit
   if (busy && formOpen) toggleForm();
@@ -2429,10 +2666,6 @@ function updateLotePreview() {
   if (!el) return;
   if (!Number.isFinite(limite) || limite < 1) {
     el.textContent = "";
-    return;
-  }
-  if (limite > 600000) {
-    el.innerHTML = `<span class="text-red-500">&#9888; maximo 600.000</span>`;
     return;
   }
   const t = calcularTamanoLote(limite);
@@ -2469,19 +2702,179 @@ function onFacturaFormInput() {
   // Auto-fill fechas al mes anterior cuando aparece el primer caracter de factura
   const tieneFactura = !!(_facturaFormSufijo($("fac-form-sub").value)
                         || _facturaFormSufijo($("fac-form-cont").value));
-  if (!tieneFactura) return;
   const desdeInput = $("desde");
   const hastaInput = $("hasta");
-  if (desdeInput.value || hastaInput.value) return;  // respetar lo que el usuario ya escribió
-  const hoy = new Date();
-  // Primer día del mes anterior a hoy
-  const primero = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1);
-  // Último día del mes anterior = día 0 del mes actual
-  const ultimo  = new Date(hoy.getFullYear(), hoy.getMonth(), 0);
-  const fmt = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
-  desdeInput.value = fmt(primero);
-  hastaInput.value = fmt(ultimo);
+  if (tieneFactura && !desdeInput.value && !hastaInput.value) {
+    const hoy = new Date();
+    // Primer día del mes anterior a hoy
+    const primero = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1);
+    // Último día del mes anterior = día 0 del mes actual
+    const ultimo  = new Date(hoy.getFullYear(), hoy.getMonth(), 0);
+    const fmt = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+    desdeInput.value = fmt(primero);
+    hastaInput.value = fmt(ultimo);
+  }
+  // Re-disparar preview SIEMPRE que cambie la factura (no solo al auto-llenar
+  // fechas) para que el conteo refleje el filtro actual.
+  if (desdeInput.value && hastaInput.value) {
+    fetchAutoPreview();
+  }
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// VACUNACIÓN — upload + crear extracción
+// ═══════════════════════════════════════════════════════════════════
+let vacUpload = null;  // {upload_id, filename, total_filas, por_regimen, afiliados_por_regimen}
+
+function vacResetUpload() {
+  vacUpload = null;
+  const inp = $("vac-file-input"); if (inp) inp.value = "";
+  $("vac-dz-idle")?.classList.remove("hidden");
+  $("vac-dz-uploading")?.classList.add("hidden");
+  $("vac-dz-ready")?.classList.add("hidden");
+  $("vac-regimen-section")?.classList.add("hidden");
+  const err = $("vac-ferr");
+  if (err) { err.textContent = ""; err.classList.add("hidden"); }
+}
+
+async function vacSubirArchivo(file) {
+  if (!file) return;
+  if (!file.name.toLowerCase().endsWith(".xlsx")) {
+    toast("Formato inválido", "Solo se acepta .xlsx (Excel moderno).", "error");
+    return;
+  }
+  $("vac-dz-idle")?.classList.add("hidden");
+  $("vac-dz-uploading")?.classList.remove("hidden");
+  $("vac-dz-ready")?.classList.add("hidden");
+  $("vac-regimen-section")?.classList.add("hidden");
+
+  try {
+    const fd = new FormData();
+    fd.append("file", file);
+    const r = await fetch("/vacunacion/uploads", {method: "POST", body: fd});
+    const body = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      throw new Error(body.detail || `HTTP ${r.status}`);
+    }
+    vacUpload = body;
+    $("vac-dz-uploading")?.classList.add("hidden");
+    $("vac-dz-ready")?.classList.remove("hidden");
+    $("vac-file-name").textContent = body.filename;
+    $("vac-stat-filas").textContent = body.total_filas.toLocaleString();
+    $("vac-stat-sub").textContent   = (body.por_regimen.SUBSIDIADO || 0).toLocaleString();
+    $("vac-stat-cont").textContent  = (body.por_regimen.CONTRIBUTIVO || 0).toLocaleString();
+
+    // Mostrar sección de régimen + contadores en los checkboxes
+    $("vac-regimen-section")?.classList.remove("hidden");
+    const afi = body.afiliados_por_regimen || {};
+    $("vac-cb-sub-cnt").textContent  = afi.SUBSIDIADO   ? `≈ ${afi.SUBSIDIADO.toLocaleString()} PDFs`   : "0";
+    $("vac-cb-cont-cnt").textContent = afi.CONTRIBUTIVO ? `≈ ${afi.CONTRIBUTIVO.toLocaleString()} PDFs` : "0";
+    // Si solo un régimen tiene datos, marcarlo automáticamente y deshabilitar el otro
+    $("vac-cb-sub").checked  = (body.por_regimen.SUBSIDIADO   || 0) > 0;
+    $("vac-cb-cont").checked = (body.por_regimen.CONTRIBUTIVO || 0) > 0;
+    $("vac-cb-sub").disabled  = (body.por_regimen.SUBSIDIADO   || 0) === 0;
+    $("vac-cb-cont").disabled = (body.por_regimen.CONTRIBUTIVO || 0) === 0;
+    toast("Excel cargado", `${body.total_filas.toLocaleString()} filas listas`, "success");
+  } catch (e) {
+    vacResetUpload();
+    toast("Error al subir", e.message || "No se pudo procesar el archivo", "error");
+  }
+}
+
+function setVacGenLoading(on) {
+  const btn = $("vac-btn-gen");
+  if (!btn) return;
+  btn.disabled = on;
+  const lbl = btn.querySelector(".vac-blbl");
+  const ico = btn.querySelector(".vac-bico");
+  if (lbl) lbl.textContent = on ? "Procesando..." : "Generar carnés";
+  if (ico) ico.innerHTML = on
+    ? `<svg class="h-3.5 w-3.5 spin" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
+         <path stroke-linecap="round" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+       </svg>`
+    : `<svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+         <path stroke-linecap="round" stroke-linejoin="round"
+               d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
+       </svg>`;
+}
+
+async function vacGenerar() {
+  const err = $("vac-ferr");
+  err.classList.add("hidden");
+  err.textContent = "";
+
+  if (!vacUpload) {
+    err.textContent = "Primero subí un archivo .xlsx.";
+    err.classList.remove("hidden"); return;
+  }
+  if (hasActiveJobs()) {
+    err.textContent = "Hay una extracción en curso. Esperá a que termine.";
+    err.classList.remove("hidden"); return;
+  }
+  const regimenes = [];
+  if ($("vac-cb-sub").checked)  regimenes.push("SUBSIDIADO");
+  if ($("vac-cb-cont").checked) regimenes.push("CONTRIBUTIVO");
+  if (regimenes.length === 0) {
+    err.textContent = "Marcá al menos un régimen.";
+    err.classList.remove("hidden"); return;
+  }
+
+  const btn = $("vac-btn-gen");
+  btn.dataset.submitting = "1";
+  setVacGenLoading(true);
+  try {
+    const r = await fetch("/vacunacion/extractions", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({upload_id: vacUpload.upload_id, regimenes}),
+    });
+    const body = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      throw new Error(body.detail || `HTTP ${r.status}`);
+    }
+    const jobs = Array.isArray(body) ? body : [body];
+    toast(
+      jobs.length === 1 ? "Extracción iniciada" : `${jobs.length} extracciones iniciadas`,
+      jobs.map(j => `${j.regimen}: ${j.limite.toLocaleString()} registros`).join(" · "),
+      "success",
+    );
+    // Seleccionar el primer job creado
+    if (jobs[0]?.id) {
+      selId = jobs[0].id;
+      _selApiBase = "/vacunacion/extractions";
+    }
+    loadJobs();
+  } catch (e) {
+    err.textContent = e.message || "No se pudo crear la extracción.";
+    err.classList.remove("hidden");
+  } finally {
+    delete btn.dataset.submitting;
+    setVacGenLoading(false);
+  }
+}
+
+// Wire del dropzone — click en el div, drag/drop, change del input
+(function wireVacunacionDropzone() {
+  const dz  = $("vac-dropzone");
+  const inp = $("vac-file-input");
+  if (!dz || !inp) return;
+  inp.addEventListener("change", e => {
+    const f = e.target.files?.[0];
+    if (f) vacSubirArchivo(f);
+  });
+  ["dragenter", "dragover"].forEach(ev => dz.addEventListener(ev, e => {
+    e.preventDefault();
+    dz.classList.add("border-cyan-500", "bg-cyan-50");
+  }));
+  ["dragleave", "drop"].forEach(ev => dz.addEventListener(ev, e => {
+    e.preventDefault();
+    dz.classList.remove("border-cyan-500", "bg-cyan-50");
+  }));
+  dz.addEventListener("drop", e => {
+    const f = e.dataTransfer?.files?.[0];
+    if (f) vacSubirArchivo(f);
+  });
+})();
 
 $("fext").addEventListener("submit", async ev => {
   ev.preventDefault();
@@ -2498,19 +2891,22 @@ $("fext").addEventListener("submit", async ev => {
     $("ferr").textContent = "El limite debe ser un numero mayor a 0.";
     $("ferr").classList.remove("hidden"); return;
   }
-  if (!esAuto && limite > 600000) {
-    $("ferr").textContent = "El maximo permitido es 600.000 registros.";
-    $("ferr").classList.remove("hidden"); return;
-  }
   if (new Date($("hasta").value) < new Date($("desde").value)) {
     $("ferr").textContent = "'Hasta' debe ser mayor o igual a 'Desde'.";
     $("ferr").classList.remove("hidden"); return;
   }
 
   // ── Construir lista de jobs a disparar ──
-  // Solo aplica en pestaña DI; en otros módulos, los inputs no existen o están vacíos.
   const subN  = _facturaFormSufijo($("fac-form-sub")?.value || "");
   const contN = _facturaFormSufijo($("fac-form-cont")?.value || "");
+
+  // Validación: en los módulos que aceptan filtro, la factura es REQUERIDA.
+  // La idea operativa es siempre extraer mes+factura, nunca uno sin el otro.
+  const moduloRequiereFactura = ["demanda-inducida", "findrisc", "gestion-captacion", "planificacion-familiar"].includes(activeTab);
+  if (moduloRequiereFactura && !subN && !contN) {
+    $("ferr").textContent = "Debes ingresar al menos un código de régimen (Subsidiado o Contributivo) antes de generar.";
+    $("ferr").classList.remove("hidden"); return;
+  }
   const lanzamientos = [];
   if (subN)  lanzamientos.push({regimen: "SUBSIDIADO",   numero: subN});
   if (contN) lanzamientos.push({regimen: "CONTRIBUTIVO", numero: contN});

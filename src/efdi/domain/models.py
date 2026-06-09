@@ -160,6 +160,7 @@ class ExtraccionTipo(str, Enum):
     FINDRISC = "findrisc"
     GESTION_CAPTACION = "gestion_captacion"
     PLANIFICACION_FAMILIAR = "planificacion_familiar"
+    VACUNACION = "vacunacion"
 
 
 # ─── Factores Clínicos del módulo Seguimiento Planificación Familiar ────────
@@ -452,6 +453,92 @@ class AfiliadoConPlanFamiliar(BaseModel):
         return f"{self.doc_key}_{self.fecha_gestion}"
 
 
+# ─── Vacunación ─────────────────────────────────────────────────────────────
+# El Excel ya viene con todos los datos cocinados (mismo shape que la query de DI
+# pero solo programas de vacunación). 1 fila = 1 vacuna aplicada. Para el PDF
+# tipo carné agrupamos por afiliado: 1 PDF por persona con todas sus vacunas.
+
+
+class RegistroVacuna(BaseModel):
+    """Una fila del Excel — 1 vacuna aplicada a 1 afiliado en una fecha."""
+
+    model_config = ConfigDict(use_enum_values=True, str_strip_whitespace=True)
+
+    # === Identificación afiliado ===
+    seq_seragil: int = Field(description="SEQ_SERAGIL — id de la atención origen")
+    tipo_documento: TipoDocumento = Field(description="Normalizado desde DES_TIPO_IDENTIFICACION")
+    num_documento: str = Field(description="NRO_TIPO_IDENTIFICACION")
+    tipo_identificacion_desc: str | None = Field(
+        default=None, description="DES_TIPO_IDENTIFICACION (label largo: 'CEDULA DE CIUDADANIA')"
+    )
+    primer_nombre: str
+    segundo_nombre: str | None = None
+    primer_apellido: str
+    segundo_apellido: str | None = None
+    sexo: Sexo
+    edad: int = Field(ge=0, le=120, description="VLR_EDAD_ACTUAL")
+    fecha_nacimiento: date
+
+    # === Contacto ===
+    direccion: str | None = None
+    telefono_1: str | None = None
+    telefono_2: str | None = None
+    correo: str | None = None
+
+    # === Ubicación ===
+    departamento: str | None = None
+    municipio: str | None = None
+    zona_afiliado: int | None = Field(default=None, description="ZONA_AFILIADO (1=urbana, 2=rural)")
+
+    # === Sociodemográfico ===
+    curso_vida: str | None = None
+    regimen: Regimen | None = Field(default=None, description="Viene del propio Excel (col REGIMEN)")
+
+    # === Vacuna específica ===
+    fecha_aplicacion: date = Field(description="FEC_REGISTRO_INFORMACION normalizada")
+    programa: str = Field(description="DES_PROGRAMA_DEMIND (ej: 'VACUNACION VPH')")
+    modo_ingreso: str | None = Field(default=None, description="DES_MODO_INGRESO (COMUNIDAD/...)")
+    encuestador: str | None = Field(default=None, description="ENCUESTADOR = vacunador")
+    cargo_encuestador: str | None = None
+
+    @property
+    def doc_key(self) -> str:
+        return f"{self.tipo_documento}_{self.num_documento}"
+
+
+class AfiliadoConVacunas(BaseModel):
+    """1 PDF tipo carné por afiliado, con todas sus vacunas del Excel."""
+
+    doc_key: str
+    tipo_documento: TipoDocumento
+    num_documento: str
+    nombre_completo: str
+
+    # Datos demográficos del afiliado (tomados del primer registro)
+    sexo: Sexo
+    edad: int
+    fecha_nacimiento: date
+    tipo_identificacion_desc: str | None = None
+    direccion: str | None = None
+    telefono_1: str | None = None
+    telefono_2: str | None = None
+    correo: str | None = None
+    departamento: str | None = None
+    municipio: str | None = None
+    regimen: Regimen | None = None
+
+    vacunas: list[RegistroVacuna]
+
+    @property
+    def total_vacunas(self) -> int:
+        return len(self.vacunas)
+
+    @property
+    def pdf_key(self) -> str:
+        """Nombre del PDF: tipo_documento_numero. Sin fecha — es el carné completo."""
+        return self.doc_key
+
+
 class ModoPdf(str, Enum):
     UNO_POR_ATENCION = "uno_por_atencion"
 
@@ -480,7 +567,7 @@ class Extraccion(BaseModel):
     id: UUID
     desde: date
     hasta: date
-    limite: int = Field(ge=1, le=600_000, description="Total de registros a generar (sumando lotes)")
+    limite: int = Field(ge=1, description="Total de registros a generar (sumando lotes)")
     tamano_lote: int = Field(default=10_000, ge=1, le=50_000, description="Registros por lote")
     total_lotes: int = 0
     tipo: ExtraccionTipo = ExtraccionTipo.DEMANDA_INDUCIDA
@@ -493,6 +580,13 @@ class Extraccion(BaseModel):
     facturas: list[str] | None = Field(
         default=None,
         description="Lista de códigos CAB/FAB para cruzar con AVS_REGISTROS_AP",
+    )
+    # ── Vacunación: ruta al Excel uploadeado ──
+    # No usamos `facturas` ni `regimen` del módulo Vacunación: el régimen viene
+    # del propio Excel y se pasa como filtro al servicio.
+    excel_path: str | None = Field(
+        default=None,
+        description="Ruta absoluta al .xlsx subido en data/uploads/vacunacion/<uuid>.xlsx",
     )
     estado: EstadoExtraccion = EstadoExtraccion.PENDING
     total_atenciones: int = 0

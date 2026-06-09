@@ -10,7 +10,7 @@ from efdi.domain.models import EstadoExtraccion, ExtraccionTipo, ModoPdf
 class CrearExtraccionReq(BaseModel):
     desde: date = Field(description="Fecha inicial del rango (FEC_REGISTRO_INFORMACION)")
     hasta: date = Field(description="Fecha final del rango")
-    limite: int | None = Field(default=None, ge=1, le=600_000, description="None=Auto: trae todos los registros del rango (máx 600K)")
+    limite: int | None = Field(default=None, ge=1, description="None=Auto: trae todos los registros del rango")
     tamano_lote: int | None = Field(
         default=None, ge=1, le=50_000,
         description="None=Auto-calculado según el total de registros",
@@ -105,6 +105,55 @@ class ConteoFacturasResp(BaseModel):
     por_codigo: dict[str, ConteoFacturaItem] = Field(
         description="Desglose por código de factura, incluyendo los que dieron cero",
     )
+
+
+# ─── Vacunación ──────────────────────────────────────────────────────────────
+
+
+class VacunacionUploadResp(BaseModel):
+    """Respuesta al subir el .xlsx — resumen para que la UI muestre el preview."""
+
+    upload_id: UUID
+    filename: str = Field(description="Nombre original del archivo subido")
+    size_bytes: int
+    total_filas: int
+    por_regimen: dict[str, int] = Field(
+        description="Filas por régimen: SUBSIDIADO / CONTRIBUTIVO / OTRO",
+    )
+    afiliados_por_regimen: dict[str, int] = Field(
+        description="Afiliados únicos por régimen (= PDFs estimados por régimen)",
+    )
+
+
+class CrearVacunacionReq(BaseModel):
+    """Crea uno o dos jobs (uno por régimen) a partir de un upload."""
+
+    upload_id: UUID = Field(description="UUID del .xlsx ya subido vía POST /vacunacion/uploads")
+    regimenes: list[str] = Field(
+        min_length=1,
+        description="Al menos uno: 'SUBSIDIADO' y/o 'CONTRIBUTIVO'. Cada uno lanza un job.",
+    )
+    nombre: str | None = Field(
+        default=None,
+        description="Nombre custom del job. Si no viene, se arma 'VACUNACION <regimen>'.",
+    )
+    tamano_lote: int | None = Field(
+        default=None, ge=1, le=50_000,
+        description="None=Auto según el total",
+    )
+
+    @model_validator(mode="after")
+    def validar_regimenes(self) -> "CrearVacunacionReq":
+        validos = {"SUBSIDIADO", "CONTRIBUTIVO"}
+        norm = []
+        for r in self.regimenes:
+            u = (r or "").strip().upper()
+            if u not in validos:
+                raise ValueError(f"regimen invalido '{r}'. Debe ser SUBSIDIADO o CONTRIBUTIVO")
+            if u not in norm:
+                norm.append(u)
+        self.regimenes = norm
+        return self
 
 
 class HealthResp(BaseModel):
