@@ -35,11 +35,23 @@ def _auto_tamano_lote(limite: int) -> int:
 async def contar_registros_captacion(
     desde: date = Query(...),
     hasta: date = Query(...),
+    numero_factura: str | None = Query(
+        None,
+        description="Sufijo del código de régimen (ej '11502'). Backend arma CABn+FABn.",
+    ),
 ) -> dict:
     if hasta < desde:
         raise HTTPException(status_code=400, detail="hasta debe ser >= desde")
+    facturas: list[str] | None = None
+    if numero_factura:
+        n = numero_factura.strip().upper()
+        if n.startswith("CAB") or n.startswith("FAB"):
+            n = n[3:]
+        if not n:
+            raise HTTPException(status_code=400, detail="numero_factura no puede ser vacío")
+        facturas = [f"CAB{n}", f"FAB{n}"]
     repo = get_captacion_repository()
-    total = repo.get_total(desde, hasta)
+    total = repo.get_total(desde, hasta, facturas=facturas)
     if total <= 0:
         return {"total_en_db": 0, "limite_efectivo": 0, "tamano_lote": 0, "lotes_estimados": 0, "capeado": False}
     limite_efectivo = min(total, 600_000)
@@ -64,14 +76,24 @@ async def crear_extraccion_captacion(
     req: CrearExtraccionReq,
     background: BackgroundTasks,
 ) -> ExtraccionResp:
+    # Mismo patrón que DI/FINDRISC: CAB+N / FAB+N es el código de régimen.
+    facturas: list[str] | None = None
+    nombre_default: str | None = None
+    if req.numero_factura is not None:
+        facturas = [f"CAB{req.numero_factura}", f"FAB{req.numero_factura}"]
+        nombre_default = f"CAPTACION {req.desde}—{req.hasta} · {req.regimen}"
+
     limite = req.limite
     if limite is None:
         repo = get_captacion_repository()
-        total = repo.get_total(req.desde, req.hasta)
+        total = repo.get_total(req.desde, req.hasta, facturas=facturas)
         if total <= 0:
             raise HTTPException(
                 status_code=400,
-                detail="No se pudo obtener el total de registros de captación.",
+                detail=(
+                    "No se encontraron registros de Captación para el rango/código indicados. "
+                    "Verifica el conteo previo y la conexión a la base de datos."
+                ),
             )
         limite = min(total, 600_000)
 
@@ -85,6 +107,9 @@ async def crear_extraccion_captacion(
         tamano_lote=tamano_lote,
         tipo=ExtraccionTipo.GESTION_CAPTACION,
         modo_pdf=ModoPdf.UNO_POR_ATENCION,
+        nombre=nombre_default,
+        regimen=req.regimen,
+        facturas=facturas,
         creado_en=datetime.now(),
     )
     store.save(job)

@@ -11,10 +11,11 @@ log = logging.getLogger(__name__)
 
 class FindriscRepository(Protocol):
     def obtener_registros(
-        self, desde: date, hasta: date, limite: int, offset: int = 0
+        self, desde: date, hasta: date, limite: int, offset: int = 0,
+        facturas: list[str] | None = None,
     ) -> list[RegistroFindrisc]: ...
 
-    def get_total(self, desde: date, hasta: date) -> int: ...
+    def get_total(self, desde: date, hasta: date, facturas: list[str] | None = None) -> int: ...
 
 
 # === Query principal paginada ================================================
@@ -83,6 +84,7 @@ WITH X AS (
     WHERE B.FLG_FORMATO_COLDRISC = 'SI'
       AND B.FEC_REGISTRO_INFORMACION >= ?
       AND B.FEC_REGISTRO_INFORMACION <= ?
+      {factura_filter}
 )
 SELECT
     -- Metadata interna (no se muestra en el reporte; necesaria para agrupar y nombrar archivos)
@@ -128,10 +130,34 @@ QUERY_FINDRISC_COUNT = """
 SELECT COUNT(DISTINCT B.SEQ_SERAGIL) AS total
 FROM AVS_REGISTRO_SERAGIL AS B
 JOIN SRG_FORMATO_FINDRISC AS J ON J.SEQ_SERAGIL = B.SEQ_SERAGIL
+LEFT JOIN AVS_AFILIADO_MUTUALSER_HIS AS A
+    ON A.COD_TIPO_IDENTIFICACION = B.COD_TIPO_IDENTIFICACION_PERSONA
+   AND A.NRO_TIPO_IDENTIFICACION = B.NUM_TIPO_IDENTIFICACION_PERSONA
 WHERE B.FLG_FORMATO_COLDRISC = 'SI'
   AND B.FEC_REGISTRO_INFORMACION >= ?
   AND B.FEC_REGISTRO_INFORMACION <= ?
+  {factura_filter}
 """
+
+
+# Fragmento EXISTS contra AVS_REGISTROS_AP — mismo patrón que DI Fase 2.
+# El código completo (CAB+N o FAB+N) identifica un régimen específico de
+# facturación. Cuando vienen facturas, el filtro garantiza que el afiliado
+# esté en al menos uno de esos códigos. EXISTS evita multiplicar filas.
+_FACTURA_EXISTS_FINDRISC = """AND EXISTS (
+    SELECT 1 FROM AVS_REGISTROS_AP r_ap
+    WHERE r_ap.NUM_TIPO_IDENTIFICACION = A.NRO_TIPO_IDENTIFICACION
+      AND r_ap.COD_TIPO_IDENTIFICACION = A.COD_TIPO_IDENTIFICACION
+      AND r_ap.NRO_FACTURA IN ({placeholders})
+)"""
+
+
+def _factura_filter_findrisc(facturas: list[str] | None) -> str:
+    """Devuelve el fragmento EXISTS con N placeholders, o cadena vacía."""
+    if not facturas:
+        return ""
+    placeholders = ",".join("?" * len(facturas))
+    return _FACTURA_EXISTS_FINDRISC.format(placeholders=placeholders)
 
 
 def _to_bool(v: object) -> bool:
@@ -199,7 +225,8 @@ def _normalizar_tipo_doc(cod: str | None) -> TipoDocumento:
 
 class MockFindriscRepository:
     def obtener_registros(
-        self, desde: date, hasta: date, limite: int, offset: int = 0
+        self, desde: date, hasta: date, limite: int, offset: int = 0,
+        facturas: list[str] | None = None,
     ) -> list[RegistroFindrisc]:
         import random
         from datetime import timedelta
@@ -278,15 +305,20 @@ class MockFindriscRepository:
                 antecedente_diabetes=antecedente,
                 puntaje_total=total,
             ))
+        if facturas:
+            # Mock del cruce: simula que ~50% de afiliados aparece en el set
+            # de facturas. Determinista vía seq_seragil para ser estable.
+            registros = [r for r in registros if r.seq_seragil % 2 == 0]
         return registros
 
-    def get_total(self, desde: date, hasta: date) -> int:
-        return 500
+    def get_total(self, desde: date, hasta: date, facturas: list[str] | None = None) -> int:
+        return 250 if facturas else 500
 
 
 class SqlServerFindriscRepository:
     def obtener_registros(
-        self, desde: date, hasta: date, limite: int, offset: int = 0
+        self, desde: date, hasta: date, limite: int, offset: int = 0,
+        facturas: list[str] | None = None,
     ) -> list[RegistroFindrisc]:
         try:
             import pyodbc
@@ -294,11 +326,19 @@ class SqlServerFindriscRepository:
             raise RuntimeError("pyodbc no instalado") from e
 
         fecha_inicio, fecha_final = _fechas_dt(desde, hasta)
-        log.info("findrisc.query", extra={"desde": str(desde), "hasta": str(hasta), "limite": limite, "offset": offset})
+        sql = QUERY_FINDRISC.format(factura_filter=_factura_filter_findrisc(facturas))
+        # Orden de placeholders: fecha_inicio, fecha_final, [facturas...], offset, limite
+        params: list = [fecha_inicio, fecha_final]
+        if facturas:
+            params.extend(facturas)
+        params.extend([offset, limite])
+        log.info("findrisc.query", extra={"desde": str(desde), "hasta": str(hasta),
+                                          "limite": limite, "offset": offset,
+                                          "facturas": len(facturas or [])})
 
         with pyodbc.connect(settings.db_dsn, timeout=60) as conn:
             cur = conn.cursor()
-            cur.execute(QUERY_FINDRISC, fecha_inicio, fecha_final, offset, limite)
+            cur.execute(sql, *params)
             cols = [c[0] for c in cur.description]
             rows = [dict(zip(cols, r, strict=False)) for r in cur.fetchall()]
 
@@ -343,16 +383,20 @@ class SqlServerFindriscRepository:
         log.info("findrisc.fetched", extra={"rows": len(registros)})
         return registros
 
-    def get_total(self, desde: date, hasta: date) -> int:
+    def get_total(self, desde: date, hasta: date, facturas: list[str] | None = None) -> int:
         try:
             import pyodbc
         except ImportError:
             return 0
         fecha_inicio, fecha_final = _fechas_dt(desde, hasta)
+        sql = QUERY_FINDRISC_COUNT.format(factura_filter=_factura_filter_findrisc(facturas))
+        params: list = [fecha_inicio, fecha_final]
+        if facturas:
+            params.extend(facturas)
         try:
             with pyodbc.connect(settings.db_dsn, timeout=30) as conn:
                 cur = conn.cursor()
-                cur.execute(QUERY_FINDRISC_COUNT, fecha_inicio, fecha_final)
+                cur.execute(sql, *params)
                 row = cur.fetchone()
                 return int(row[0]) if row else 0
         except Exception:

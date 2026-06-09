@@ -198,28 +198,52 @@ El nombre se sanitiza vía `safe_filename()` en `domain/models.py`:
 
 ### Requisitos
 
-- Python ≥ 3.10
+- Python ≥ 3.10 (fijado en `.python-version`)
+- [`uv`](https://docs.astral.sh/uv/) — gestor recomendado de entorno + dependencias
 - (Solo para SQL real) ODBC Driver 17 for SQL Server
 
-```bash
-# Clonar y entrar al proyecto
-cd D:\proyecto
+### Camino recomendado — `uv` (reproducible vía `uv.lock`)
 
-# Entorno virtual
+```bash
+# 1. Instalar uv (una sola vez por máquina)
+# Linux/macOS:
+curl -LsSf https://astral.sh/uv/install.sh | sh
+# Windows (PowerShell):
+# powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+
+# 2. Clonar y entrar al proyecto
+git clone <repo-url> && cd proyecto
+
+# 3. Sincronizar dependencias (crea .venv y resuelve uv.lock)
+uv sync --extra dev                    # mock, sin SQL Server real
+uv sync --extra dev --extra sqlserver  # con SQL Server real
+
+# 4. Configuración
+cp .env.example .env
+# Editar .env con tus valores
+
+# 5. Correr cualquier comando dentro del venv
+uv run python -m efdi.main
+uv run pytest
+uv run ruff check .
+```
+
+`uv sync` lee `uv.lock` (committeado en el repo) y reproduce el entorno **exacto** — mismas versiones que la última vez que se actualizó el lock. Si alguien agrega o sube una dependencia: editar `pyproject.toml`, correr `uv lock` y commitear el `uv.lock` actualizado.
+
+### Camino alternativo — pip (sin lock, deps resueltas en cada instalación)
+
+```bash
 python -m venv .venv
 .venv\Scripts\activate          # Windows
 # source .venv/bin/activate     # Linux/macOS
 
-# Dependencias base
-pip install -e ".[dev]"
+pip install -e ".[dev]"                # mock, sin SQL Server
+pip install -e ".[dev,sqlserver]"      # con SQL Server real
 
-# Dependencias con SQL Server real
-pip install -e ".[dev,sqlserver]"
-
-# Configuración
 cp .env.example .env
-# Editar .env con tus valores
 ```
+
+> Con pip las versiones se resuelven según los `>=` declarados en `pyproject.toml` — distintas máquinas pueden recibir versiones distintas. Para reproducibilidad usar `uv sync`.
 
 ---
 

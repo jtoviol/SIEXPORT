@@ -23,7 +23,10 @@ class CrearExtraccionReq(BaseModel):
     )
     regimen: str | None = Field(
         default=None,
-        description="SUBSIDIADO o CONTRIBUTIVO — obligatorio si viene numero_factura",
+        description=(
+            "SUBSIDIADO o CONTRIBUTIVO. En DI es obligatorio si viene numero_factura. "
+            "En FINDRISC se acepta solo (sin numero_factura) y filtra por NRO_FACTURA LIKE CAB%/FAB%."
+        ),
     )
 
     @model_validator(mode="after")
@@ -34,8 +37,11 @@ class CrearExtraccionReq(BaseModel):
 
     @model_validator(mode="after")
     def validar_factura(self) -> "CrearExtraccionReq":
-        if (self.numero_factura is None) != (self.regimen is None):
-            raise ValueError("numero_factura y regimen deben venir juntos o ambos ausentes")
+        # numero_factura SIEMPRE requiere regimen (DI Fase 2).
+        # regimen sin numero_factura SÍ es válido (FINDRISC y otros módulos
+        # que solo filtran por régimen vía AVS_REGISTROS_AP, sin sufijo).
+        if self.numero_factura is not None and self.regimen is None:
+            raise ValueError("numero_factura requiere regimen")
         if self.regimen is not None:
             r = self.regimen.strip().upper()
             if r not in ("SUBSIDIADO", "CONTRIBUTIVO"):

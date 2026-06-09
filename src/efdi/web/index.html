@@ -487,8 +487,8 @@
               <p id="lote-preview" class="text-[10px] text-slate-400 mt-1"></p>
             </div>
           </div>
-          <!-- Filtro por factura (solo Demanda Inducida — toggle via switchTab) -->
-          <div id="factura-section" class="hidden di-only border-t border-slate-200 pt-2.5">
+          <!-- Filtro por código de régimen (DI, FINDRISC y Captación — toggle via switchTab) -->
+          <div id="factura-section" class="hidden border-t border-slate-200 pt-2.5">
             <label class="text-xs font-medium text-slate-500 block mb-1.5">
               Filtro por factura
               <span class="text-[10px] text-slate-400 font-normal">(opcional · cruza con AVS_REGISTROS_AP)</span>
@@ -1282,20 +1282,25 @@ function switchTab(tabId) {
     btn.classList.toggle("active", btn.dataset.mobTab === tabId)
   );
 
-  // Elementos "solo Demanda Inducida": boton conteo + seccion factura en form
+  // Elementos "solo Demanda Inducida": boton conteo previo de códigos de régimen
   const isDI = tabId === "demanda-inducida";
   const btnFac = $("btn-facturas");
   if (btnFac) {
     btnFac.classList.toggle("hidden", !isDI);
     btnFac.classList.toggle("flex",   isDI);
   }
+  // El filtro CAB/FAB aplica a DI, FINDRISC, Captación y Planificación Familiar
+  // (todos cruzan contra AVS_REGISTROS_AP, que es global).
+  const aceptaFiltroRegimen = ["demanda-inducida", "findrisc", "gestion-captacion", "planificacion-familiar"].includes(tabId);
   const facSection = $("factura-section");
-  if (facSection) facSection.classList.toggle("hidden", !isDI);
-  // Reset inputs de factura al cambiar de tab
+  if (facSection) facSection.classList.toggle("hidden", !aceptaFiltroRegimen);
+  // Reset inputs al cambiar de tab si el destino NO soporta filtro
   const fSub  = $("fac-form-sub");
   const fCont = $("fac-form-cont");
-  if (fSub)  fSub.value  = "";
-  if (fCont) fCont.value = "";
+  if (!aceptaFiltroRegimen) {
+    if (fSub)  fSub.value  = "";
+    if (fCont) fCont.value = "";
+  }
 
   // ── Dashboard: vista exclusiva, ocultar módulos + franja B ──────────────
   const dbView = $("dashboard-view");

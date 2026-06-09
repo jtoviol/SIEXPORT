@@ -16,10 +16,11 @@ log = logging.getLogger(__name__)
 
 class PlanFamiRepository(Protocol):
     def obtener_registros(
-        self, desde: date, hasta: date, limite: int, offset: int = 0
+        self, desde: date, hasta: date, limite: int, offset: int = 0,
+        facturas: list[str] | None = None,
     ) -> list[RegistroPlanFamiliar]: ...
 
-    def get_total(self, desde: date, hasta: date) -> int: ...
+    def get_total(self, desde: date, hasta: date, facturas: list[str] | None = None) -> int: ...
 
 
 # === Query principal paginada =================================================
@@ -147,6 +148,7 @@ WITH X AS (
     WHERE 1 = 1
       AND a.fec_gestion_seguimiento >= ?
       AND a.fec_gestion_seguimiento <= ?
+      {factura_filter}
 )
 SELECT X.NUM_REGISTRO,
        X.seq_poblacion_riesgo,
@@ -204,9 +206,32 @@ SELECT COUNT(DISTINCT a.seq_poblacion_riesgo) AS total
 FROM SRG_POBLACION_RIESGO_REPRODUCTIVO a
 LEFT JOIN SRG_DETALLE_RIESGO_REPRODUCTIVO l
     ON a.seq_poblacion_riesgo = l.seq_poblacion_riesgo
+LEFT JOIN AVS_AFILIADO_MUTUALSER_HIS AS b
+    ON a.cod_tipo_identificacion = b.COD_TIPO_IDENTIFICACION
+   AND a.nro_tipo_identificacion = b.NRO_TIPO_IDENTIFICACION
 WHERE a.fec_gestion_seguimiento >= ?
   AND a.fec_gestion_seguimiento <= ?
+  {factura_filter}
 """
+
+
+# Fragmento EXISTS contra AVS_REGISTROS_AP — mismo patrón que DI/FINDRISC/Captación.
+# Planificación Familiar usa alias 'b' para el afiliado (AVS_AFILIADO_MUTUALSER_HIS).
+# El código completo CAB+N / FAB+N identifica el régimen de facturación.
+_FACTURA_EXISTS_PLANFAMI = """AND EXISTS (
+    SELECT 1 FROM AVS_REGISTROS_AP r_ap
+    WHERE r_ap.NUM_TIPO_IDENTIFICACION = b.NRO_TIPO_IDENTIFICACION
+      AND r_ap.COD_TIPO_IDENTIFICACION = b.COD_TIPO_IDENTIFICACION
+      AND r_ap.NRO_FACTURA IN ({placeholders})
+)"""
+
+
+def _factura_filter_planfami(facturas: list[str] | None) -> str:
+    """Devuelve fragmento EXISTS con N placeholders o cadena vacía."""
+    if not facturas:
+        return ""
+    placeholders = ",".join("?" * len(facturas))
+    return _FACTURA_EXISTS_PLANFAMI.format(placeholders=placeholders)
 
 
 # ─── helpers ──────────────────────────────────────────────────────────────────
@@ -257,7 +282,8 @@ def _normalizar_tipo_doc(cod: str | None) -> TipoDocumento:
 
 class MockPlanFamiRepository:
     def obtener_registros(
-        self, desde: date, hasta: date, limite: int, offset: int = 0
+        self, desde: date, hasta: date, limite: int, offset: int = 0,
+        facturas: list[str] | None = None,
     ) -> list[RegistroPlanFamiliar]:
         import random
         from datetime import timedelta
@@ -348,17 +374,21 @@ class MockPlanFamiRepository:
                 observaciones="Educación realizada con respecto a los servicios de PYM" if cerrada else "",
                 **fic_dict,
             ))
+        if facturas:
+            # Mock del cruce: ~50% de afiliados en el set de códigos (determinista).
+            regs = [r for r in regs if r.seq_poblacion_riesgo % 2 == 0]
         return regs
 
-    def get_total(self, desde: date, hasta: date) -> int:
-        return 800
+    def get_total(self, desde: date, hasta: date, facturas: list[str] | None = None) -> int:
+        return 400 if facturas else 800
 
 
 # ─── SQL Server real ─────────────────────────────────────────────────────────
 
 class SqlServerPlanFamiRepository:
     def obtener_registros(
-        self, desde: date, hasta: date, limite: int, offset: int = 0
+        self, desde: date, hasta: date, limite: int, offset: int = 0,
+        facturas: list[str] | None = None,
     ) -> list[RegistroPlanFamiliar]:
         try:
             import pyodbc
@@ -366,12 +396,18 @@ class SqlServerPlanFamiRepository:
             raise RuntimeError("pyodbc no instalado") from e
 
         fecha_inicio, fecha_final = _fechas_dt(desde, hasta)
+        sql = QUERY_PLANFAMI.format(factura_filter=_factura_filter_planfami(facturas))
+        params: list = [fecha_inicio, fecha_final]
+        if facturas:
+            params.extend(facturas)
+        params.extend([offset, limite])
         log.info("planfami.query", extra={"desde": str(desde), "hasta": str(hasta),
-                                           "limite": limite, "offset": offset})
+                                           "limite": limite, "offset": offset,
+                                           "facturas": len(facturas or [])})
 
         with pyodbc.connect(settings.db_dsn, timeout=60) as conn:
             cur = conn.cursor()
-            cur.execute(QUERY_PLANFAMI, fecha_inicio, fecha_final, offset, limite)
+            cur.execute(sql, *params)
             cols = [c[0] for c in cur.description]
             rows = [dict(zip(cols, r, strict=False)) for r in cur.fetchall()]
 
@@ -442,16 +478,20 @@ class SqlServerPlanFamiRepository:
         log.info("planfami.fetched", extra={"rows": len(registros)})
         return registros
 
-    def get_total(self, desde: date, hasta: date) -> int:
+    def get_total(self, desde: date, hasta: date, facturas: list[str] | None = None) -> int:
         try:
             import pyodbc
         except ImportError:
             return 0
         fecha_inicio, fecha_final = _fechas_dt(desde, hasta)
+        sql = QUERY_PLANFAMI_COUNT.format(factura_filter=_factura_filter_planfami(facturas))
+        params: list = [fecha_inicio, fecha_final]
+        if facturas:
+            params.extend(facturas)
         try:
             with pyodbc.connect(settings.db_dsn, timeout=30) as conn:
                 cur = conn.cursor()
-                cur.execute(QUERY_PLANFAMI_COUNT, fecha_inicio, fecha_final)
+                cur.execute(sql, *params)
                 row = cur.fetchone()
                 return int(row[0]) if row else 0
         except Exception:

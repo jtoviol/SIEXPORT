@@ -135,8 +135,17 @@ def _section_header(text: str, width: float) -> Table:
     return t
 
 
-def _datos_generales(reg: RegistroFindrisc, width: float) -> Table:
-    """Bloque de datos demográficos del afiliado."""
+def _datos_generales(
+    reg: RegistroFindrisc,
+    width: float,
+    regimen_override: str | None = None,
+) -> Table:
+    """Bloque de datos demográficos del afiliado.
+
+    `regimen_override` viene seteado cuando la extracción se filtró por régimen
+    (SUBSIDIADO/CONTRIBUTIVO vía AVS_REGISTROS_AP) — manda sobre cualquier valor
+    que pudiera traer la BD para garantizar consistencia con el filtro de la query.
+    """
     def cell(label: str, value: str) -> Table:
         inner = Table(
             [[Paragraph(label, STYLE_LABEL)], [Paragraph(value, STYLE_VALUE)]],
@@ -151,15 +160,17 @@ def _datos_generales(reg: RegistroFindrisc, width: float) -> Table:
         return inner
 
     doc_full = f"{_sn(reg.tipo_identificacion_desc, reg.tipo_documento)}: {_sn(reg.num_documento)}"
+    regimen_str = (regimen_override or "").strip() or "—"
 
-    # Layout: 4 filas de info
+    # Layout: 5 filas de info
     row1 = [cell("Nombre del afiliado", _sn(reg.nombre_completo)),
             cell("Sexo", _sn(reg.sexo))]
     row2 = [cell("Edad actual", f"{reg.edad} años"),
             cell("Documento", doc_full),
             cell("Municipio", _sn(reg.municipio))]
     row3 = [cell("Teléfono 1", _sn(reg.telefono_1)),
-            cell("Teléfono 2", _sn(reg.telefono_2))]
+            cell("Teléfono 2", _sn(reg.telefono_2)),
+            cell("Régimen", regimen_str)]
     row4 = [cell("Correo electrónico", _sn(reg.correo))]
     row5 = [cell("IPS de atención integral a la que se remite", _sn(reg.ips))]
 
@@ -168,7 +179,7 @@ def _datos_generales(reg: RegistroFindrisc, width: float) -> Table:
     for row, widths in [
         (row1, [width * 0.62, width * 0.38]),
         (row2, [width * 0.20, width * 0.42, width * 0.38]),
-        (row3, [width * 0.50, width * 0.50]),
+        (row3, [width * 0.34, width * 0.34, width * 0.32]),
         (row4, [width]),
         (row5, [width]),
     ]:
@@ -397,7 +408,10 @@ def _puntaje_final(reg: RegistroFindrisc, width: float) -> Table:
 
 # ─── Composición del documento ────────────────────────────────────────────────
 
-def _construir_pagina_findrisc(afiliado: AfiliadoConFindrisc) -> list:
+def _construir_pagina_findrisc(
+    afiliado: AfiliadoConFindrisc,
+    regimen_override: str | None = None,
+) -> list:
     reg = afiliado.registros[0]   # un registro por afiliado por día
     # ancho usable: letter (612pt) - márgenes (10mm c/u)
     width = letter[0] - 20 * mm
@@ -407,7 +421,7 @@ def _construir_pagina_findrisc(afiliado: AfiliadoConFindrisc) -> list:
     elems.append(Spacer(1, 4))
 
     elems.append(_section_header("DATOS GENERALES DEL AFILIADO", width))
-    elems.append(_datos_generales(reg, width))
+    elems.append(_datos_generales(reg, width, regimen_override=regimen_override))
     elems.append(Spacer(1, 4))
 
     elems.append(_section_header("CUESTIONARIO FINDRISC", width))
@@ -422,7 +436,17 @@ def _construir_pagina_findrisc(afiliado: AfiliadoConFindrisc) -> list:
     return elems
 
 
-def generar_pdf_findrisc(afiliado: AfiliadoConFindrisc, output_path: Path) -> Path:
+def generar_pdf_findrisc(
+    afiliado: AfiliadoConFindrisc,
+    output_path: Path,
+    regimen_override: str | None = None,
+) -> Path:
+    """Genera el PDF FINDRISC.
+
+    `regimen_override` se popula desde el job cuando la extracción se filtró
+    por régimen — se imprime en el bloque de datos generales para que el soporte
+    deje claro a qué régimen pertenece la encuesta.
+    """
     output_path.parent.mkdir(parents=True, exist_ok=True)
     doc = SimpleDocTemplate(
         str(output_path),
@@ -432,7 +456,7 @@ def generar_pdf_findrisc(afiliado: AfiliadoConFindrisc, output_path: Path) -> Pa
         title=f"FINDRISC — {afiliado.pdf_key}",
         author="SIEDFASER",
     )
-    elems = _construir_pagina_findrisc(afiliado)
+    elems = _construir_pagina_findrisc(afiliado, regimen_override=regimen_override)
     elems.append(Spacer(1, 6))
     elems.append(Paragraph(
         "Documento generado automáticamente por SIEDFASER — Evaluación de Riesgo FINDRISC",
