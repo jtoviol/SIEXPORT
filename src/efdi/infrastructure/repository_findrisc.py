@@ -127,7 +127,7 @@ OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
 """
 
 QUERY_FINDRISC_COUNT = """
-SELECT COUNT(DISTINCT B.SEQ_SERAGIL) AS total
+SELECT COUNT(*) AS total
 FROM AVS_REGISTRO_SERAGIL AS B
 JOIN SRG_FORMATO_FINDRISC AS J ON J.SEQ_SERAGIL = B.SEQ_SERAGIL
 LEFT JOIN AVS_AFILIADO_MUTUALSER_HIS AS A
@@ -144,11 +144,15 @@ WHERE B.FLG_FORMATO_COLDRISC = 'SI'
 # El código completo (CAB+N o FAB+N) identifica un régimen específico de
 # facturación. Cuando vienen facturas, el filtro garantiza que el afiliado
 # esté en al menos uno de esos códigos. EXISTS evita multiplicar filas.
+# `cod_diag_principal = 'Z131'` es la firma que deja el SP prGeneraRips en las
+# filas AP de FINDRISC (cursor cuFormatoFindrisc) — sin él se cuelan afiliados
+# facturados en el mismo código de régimen bajo otro módulo (Z048 DI, Z309 PF…).
 _FACTURA_EXISTS_FINDRISC = """AND EXISTS (
     SELECT 1 FROM AVS_REGISTROS_AP r_ap
     WHERE r_ap.NUM_TIPO_IDENTIFICACION = A.NRO_TIPO_IDENTIFICACION
       AND r_ap.COD_TIPO_IDENTIFICACION = A.COD_TIPO_IDENTIFICACION
       AND r_ap.NRO_FACTURA IN ({placeholders})
+      AND r_ap.cod_diag_principal = 'Z131'
 )"""
 
 

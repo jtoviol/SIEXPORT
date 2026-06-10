@@ -202,7 +202,7 @@ OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
 """
 
 QUERY_PLANFAMI_COUNT = """
-SELECT COUNT(DISTINCT a.seq_poblacion_riesgo) AS total
+SELECT COUNT(*) AS total
 FROM SRG_POBLACION_RIESGO_REPRODUCTIVO a
 LEFT JOIN SRG_DETALLE_RIESGO_REPRODUCTIVO l
     ON a.seq_poblacion_riesgo = l.seq_poblacion_riesgo
@@ -218,11 +218,15 @@ WHERE a.fec_gestion_seguimiento >= ?
 # Fragmento EXISTS contra AVS_REGISTROS_AP — mismo patrón que DI/FINDRISC/Captación.
 # Planificación Familiar usa alias 'b' para el afiliado (AVS_AFILIADO_MUTUALSER_HIS).
 # El código completo CAB+N / FAB+N identifica el régimen de facturación.
+# `cod_diag_principal = 'Z309'` es la firma que deja el SP prGeneraRips en las
+# filas AP de Riesgo Reproductivo (cursor cuRiesgoReproductivo) — sin él se
+# cuelan afiliados facturados en el mismo régimen bajo otro módulo (Z048, Z131…).
 _FACTURA_EXISTS_PLANFAMI = """AND EXISTS (
     SELECT 1 FROM AVS_REGISTROS_AP r_ap
     WHERE r_ap.NUM_TIPO_IDENTIFICACION = b.NRO_TIPO_IDENTIFICACION
       AND r_ap.COD_TIPO_IDENTIFICACION = b.COD_TIPO_IDENTIFICACION
       AND r_ap.NRO_FACTURA IN ({placeholders})
+      AND r_ap.cod_diag_principal = 'Z309'
 )"""
 
 
