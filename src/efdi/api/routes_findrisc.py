@@ -5,7 +5,8 @@ from datetime import date, datetime
 from pathlib import Path
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, status
+from fastapi import Depends, APIRouter, BackgroundTasks, HTTPException, Query, status
+from efdi.api.dependencies import require_modulo, require_no_viewer
 from fastapi.responses import FileResponse
 
 from efdi.api.schemas import CrearExtraccionReq, ExtraccionResp, RenombrarJobReq
@@ -15,7 +16,7 @@ from efdi.infrastructure.job_store import store
 from efdi.infrastructure.repository_findrisc import get_findrisc_repository, SqlServerFindriscRepository
 from efdi.services.extraction_findrisc import ejecutar_extraccion_findrisc
 
-router = APIRouter(prefix="/findrisc", tags=["findrisc"])
+router = APIRouter(prefix="/findrisc", tags=["findrisc"], dependencies=[Depends(require_modulo("findrisc"))])
 
 
 def _auto_tamano_lote(limite: int) -> int:
@@ -71,6 +72,7 @@ async def contar_registros_findrisc(
     response_model=ExtraccionResp,
     status_code=status.HTTP_202_ACCEPTED,
     summary="Crear extracción de PDFs FINDRISC",
+    dependencies=[Depends(require_no_viewer)],
 )
 async def crear_extraccion_findrisc(
     req: CrearExtraccionReq,
@@ -195,6 +197,7 @@ async def descargar_lote_findrisc(job_id: UUID, numero: int) -> FileResponse:
     "/extractions/{job_id}/nombre",
     response_model=ExtraccionResp,
     summary="Renombrar una extracción FINDRISC",
+    dependencies=[Depends(require_no_viewer)],
 )
 async def renombrar_extraccion_findrisc(job_id: UUID, req: RenombrarJobReq) -> ExtraccionResp:
     job = store.get(job_id)
@@ -208,6 +211,7 @@ async def renombrar_extraccion_findrisc(job_id: UUID, req: RenombrarJobReq) -> E
 @router.post(
     "/extractions/{job_id}/cancel",
     summary="Cancelar extracción FINDRISC en curso",
+    dependencies=[Depends(require_no_viewer)],
 )
 async def cancelar_extraccion_findrisc(job_id: UUID) -> dict:
     job = store.get(job_id)
@@ -224,6 +228,7 @@ async def cancelar_extraccion_findrisc(job_id: UUID) -> dict:
 @router.delete(
     "/extractions/{job_id}",
     summary="Eliminar extracción FINDRISC",
+    dependencies=[Depends(require_no_viewer)],
 )
 async def eliminar_extraccion_findrisc(job_id: UUID) -> dict:
     job = store.get(job_id)

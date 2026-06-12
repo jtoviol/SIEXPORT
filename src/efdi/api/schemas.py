@@ -4,7 +4,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, model_validator
 
-from efdi.domain.models import EstadoExtraccion, ExtraccionTipo, ModoPdf
+from efdi.domain.models import EstadoExtraccion, ExtraccionTipo, ModoPdf, Rol
 
 
 class CrearExtraccionReq(BaseModel):
@@ -177,3 +177,58 @@ class DiagnosticsResp(BaseModel):
     checks: dict[str, DiagCheck]
     metricas: dict[str, int]
     advertencias: list[str] = []
+
+
+# ─── Auth / Multi-user ──────────────────────────────────────────────────────
+
+
+class UserPublic(BaseModel):
+    """User sin password_hash. Lo que devolvemos en /api/users y /api/me."""
+
+    id: UUID
+    username: str
+    nombre: str | None = None
+    email: str | None = None
+    rol: Rol
+    modulos: list[str]
+    modulos_efectivos: list[str]
+    activo: bool
+    creado_en: datetime
+    actualizado_en: datetime | None = None
+    ultimo_login_en: datetime | None = None
+    creado_por: str | None = None
+
+
+class UserCreateReq(BaseModel):
+    """Body para POST /api/users. Solo ADMIN."""
+
+    username: str = Field(min_length=3, max_length=40, pattern=r"^[a-zA-Z0-9._-]+$")
+    nombre: str | None = Field(default=None, max_length=80)
+    email: str | None = Field(default=None, max_length=120)
+    password: str = Field(min_length=8, max_length=72)
+    rol: Rol = Rol.VIEWER
+    modulos: list[str] = Field(default_factory=list)
+    activo: bool = True
+
+
+class UserUpdateReq(BaseModel):
+    """Body para PUT /api/users/{id}. Sin password (eso va por reset-password)."""
+
+    nombre: str | None = Field(default=None, max_length=80)
+    email: str | None = Field(default=None, max_length=120)
+    rol: Rol | None = None
+    modulos: list[str] | None = None
+    activo: bool | None = None
+
+
+class ResetPasswordReq(BaseModel):
+    """Body para POST /api/users/{id}/reset-password (admin)."""
+
+    password: str = Field(min_length=8, max_length=72)
+
+
+class CambiarPasswordReq(BaseModel):
+    """Body para PUT /api/me/password — el user cambia su propia password."""
+
+    password_actual: str = Field(min_length=1, max_length=72)
+    password_nueva: str = Field(min_length=8, max_length=72)

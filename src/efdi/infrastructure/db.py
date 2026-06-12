@@ -7,10 +7,27 @@ from threading import Lock
 
 from efdi.config import settings
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_version (version INTEGER PRIMARY KEY);
+
+CREATE TABLE IF NOT EXISTS users (
+    id TEXT PRIMARY KEY,
+    username TEXT NOT NULL UNIQUE,
+    nombre TEXT,
+    email TEXT,
+    password_hash TEXT NOT NULL,
+    rol TEXT NOT NULL DEFAULT 'viewer',
+    modulos TEXT NOT NULL DEFAULT '',
+    activo INTEGER NOT NULL DEFAULT 1,
+    creado_en TEXT NOT NULL,
+    actualizado_en TEXT,
+    ultimo_login_en TEXT,
+    creado_por TEXT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username);
+CREATE INDEX IF NOT EXISTS idx_users_activo ON users(activo);
 
 CREATE TABLE IF NOT EXISTS extracciones (
     id TEXT PRIMARY KEY,
@@ -86,6 +103,18 @@ class Database:
             for ddl in (
                 "ALTER TABLE extracciones ADD COLUMN regimen TEXT",
                 "ALTER TABLE extracciones ADD COLUMN facturas TEXT",
+            ):
+                try:
+                    conn.execute(ddl)
+                except Exception:
+                    pass
+        if current_version < 6:
+            # Tabla users: la crea SCHEMA directamente con CREATE IF NOT EXISTS,
+            # solo aseguramos los índices únicos cuando se migra desde una versión
+            # vieja que ya pasó por el executescript.
+            for ddl in (
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username)",
+                "CREATE INDEX IF NOT EXISTS idx_users_activo ON users(activo)",
             ):
                 try:
                     conn.execute(ddl)

@@ -7,6 +7,65 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 
+# ─── Auth / Multi-user ─────────────────────────────────────────────────────
+class Rol(str, Enum):
+    """Roles del sistema. Solo ADMIN puede gestionar otros usuarios.
+
+    - ADMIN:    todo, incluyendo CRUD de usuarios.
+    - OPERADOR: puede crear/cancelar/borrar extracciones de sus módulos asignados.
+    - VIEWER:   solo lectura: lista y descarga, no genera.
+    """
+
+    ADMIN = "admin"
+    OPERADOR = "operador"
+    VIEWER = "viewer"
+
+
+# Módulos válidos (tab IDs del frontend). Mismo conjunto que el registry MODULES
+# del frontend — usado para validar permisos al crear/editar usuarios.
+MODULOS_VALIDOS: list[str] = [
+    "demanda-inducida",
+    "findrisc",
+    "gestion-captacion",
+    "planificacion-familiar",
+    "vacunacion",
+    "caracterizacion-familiar",
+]
+
+
+class User(BaseModel):
+    """Usuario del sistema. `password_hash` SOLO sale por endpoints internos."""
+
+    model_config = ConfigDict(use_enum_values=True, str_strip_whitespace=True)
+
+    id: UUID
+    username: str = Field(min_length=3, max_length=40, pattern=r"^[a-zA-Z0-9._-]+$")
+    nombre: str | None = None
+    email: str | None = None
+    password_hash: str
+    rol: Rol = Rol.VIEWER
+    # Lista de tabIds de módulos a los que el usuario puede acceder.
+    # Si rol == ADMIN, este campo se ignora (admin ve todos).
+    modulos: list[str] = Field(default_factory=list)
+    activo: bool = True
+    creado_en: datetime
+    actualizado_en: datetime | None = None
+    ultimo_login_en: datetime | None = None
+    # username del admin que creó este usuario (audit trail).
+    creado_por: str | None = None
+
+    def modulos_efectivos(self) -> list[str]:
+        """Lista de módulos a los que tiene acceso. ADMIN ve todos."""
+        if self.rol == Rol.ADMIN or self.rol == Rol.ADMIN.value:
+            return list(MODULOS_VALIDOS)
+        return [m for m in self.modulos if m in MODULOS_VALIDOS]
+
+    def puede_modificar(self) -> bool:
+        """ADMIN y OPERADOR pueden crear/cancelar/borrar extracciones. VIEWER no."""
+        r = self.rol if isinstance(self.rol, str) else self.rol.value
+        return r in (Rol.ADMIN.value, Rol.OPERADOR.value)
+
+
 class TipoDocumento(str, Enum):
     CC = "CC"
     TI = "TI"
@@ -590,6 +649,11 @@ class RegistroCaracterizacion(BaseModel):
     longitud: str | None = None
     cohorte: str | None = None
     visita: str | None = None
+    # Régimen SGSSS — viene del catálogo SBW_TIPO_REGIMEN_SGSSS (LEFT JOIN R).
+    # cod_regimen == tipo_seguridad_social (misma columna PC.tipousua, query lo
+    # devuelve duplicado); el PDF muestra cod + descripción y omite el viejo.
+    cod_regimen: str | None = None         # PC.tipousua
+    descripcion_regimen: str | None = None # R.DES_TIPO_REGIMEN
     sisben_grupo: str | None = None
     sisben_subgrupo: str | None = None
     direccion: str | None = None

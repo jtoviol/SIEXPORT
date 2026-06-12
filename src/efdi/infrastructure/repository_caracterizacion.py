@@ -78,6 +78,8 @@ WITH X AS (
         CONCAT(UF.LON_GRA,' ',UF.LON_MIN,' ',UF.LON_SEG) AS longitud,
         UF.cohorte AS cohorte,
         UF.visita AS visita,
+        PC.tipousua AS cod_regimen,
+        R.DES_TIPO_REGIMEN AS descripcion_regimen,
         UF.sisb_grupo AS sisben_grupo,
         UF.sisb_subgr AS sisben_subgrupo,
         UF.direccion AS direccion,
@@ -88,6 +90,7 @@ WITH X AS (
     LEFT JOIN SBW_UBICACION_FAMILIA UF ON (UF.UID = PC.uid AND UF.ciuf = PC.ciuf)
     LEFT JOIN SBW_OCUPACION O ON O.COD_OCUPACION = PC.ocupacio
     LEFT JOIN tabla_institucion I ON I.cod_inst = PC.instusua
+    LEFT JOIN SBW_TIPO_REGIMEN_SGSSS R ON R.COD_TIPO_REGIMEN = PC.tipousua
     WHERE UF.fecha_reg >= ?
       AND UF.fecha_reg <= ?
 )
@@ -140,6 +143,7 @@ _CAMPOS = [
     "tipo_seguridad_social", "eps", "nombre_institucion", "etnia", "gae",
     "programa", "discapacidad",
     "fecha_registro", "latitud", "longitud", "cohorte", "visita",
+    "cod_regimen", "descripcion_regimen",
     "sisben_grupo", "sisben_subgrupo", "direccion", "telefono_1",
     "telefono_2", "correo",
 ]
@@ -164,6 +168,12 @@ class MockCaracterizacionRepository:
         ocupaciones = [("001", "AGRICULTOR"), ("002", "AMA DE CASA"), ("003", "ESTUDIANTE"),
                        ("004", "COMERCIANTE"), ("005", "DOCENTE")]
         etnias = ["NINGUNA", "AFRODESCENDIENTE", "INDIGENA"]
+        # Catálogo SBW_TIPO_REGIMEN_SGSSS (5 filas reales). El régimen es a NIVEL
+        # PERSONA: cada integrante elige el suyo, por eso pueden existir familias
+        # mixtas (cabeza C + hijo S, etc.) — pasa en ~4% de los casos reales.
+        regimenes = [("S", "SUBSIDIADO"), ("C", "CONTRIBUTIVO"), ("N", "POBRE NO ASEGURADO"),
+                     ("O", "OTRO (Regimen especial)"), ("P", "PARTICULAR")]
+        regimenes_pesos = [0.95, 0.04, 0.003, 0.002, 0.005]  # mismo skew que sibacom
 
         regs: list[RegistroCaracterizacion] = []
         # limite/offset en FAMILIAS (igual que el repo real): cada familia trae
@@ -178,6 +188,8 @@ class MockCaracterizacionRepository:
                 rng = random.Random(seq * 17)
                 fecha_r = desde + timedelta(days=rng_fam.randint(0, max((hasta - desde).days, 0)))
                 cod_ocu, nom_ocu = rng.choice(ocupaciones)
+                # Una sola elección: código y descripción siempre coherentes
+                cod_reg, des_reg = rng.choices(regimenes, weights=regimenes_pesos, k=1)[0]
                 es_cabeza = m == 0
                 regs.append(RegistroCaracterizacion(
                     departamento="13", municipio=f"{rng_fam.randint(1, 99):03d}",
@@ -203,6 +215,8 @@ class MockCaracterizacionRepository:
                     latitud=f"{rng_fam.randint(8, 10)} {rng_fam.randint(0, 59)} N",
                     longitud=f"{rng_fam.randint(74, 76)} {rng_fam.randint(0, 59)} W",
                     cohorte=str(rng_fam.randint(1, 5)), visita=str(rng_fam.randint(1, 3)),
+                    # Régimen por persona (rng, no rng_fam) → simula mezcla intrafamiliar
+                    cod_regimen=cod_reg, descripcion_regimen=des_reg,
                     sisben_grupo=rng_fam.choice(["A", "B", "C"]), sisben_subgrupo=str(rng_fam.randint(1, 9)),
                     direccion=f"CALLE {rng_fam.randint(1, 99)} # {rng_fam.randint(1, 99)}-{rng_fam.randint(1, 99)}",
                     telefono_1=f"30{rng_fam.randint(0, 9)}{rng_fam.randint(1000000, 9999999)}",

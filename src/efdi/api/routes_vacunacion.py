@@ -17,7 +17,8 @@ from datetime import date, datetime
 from pathlib import Path
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, BackgroundTasks, File, HTTPException, UploadFile, status
+from fastapi import Depends, APIRouter, BackgroundTasks, File, HTTPException, UploadFile, status
+from efdi.api.dependencies import require_modulo, require_no_viewer
 from fastapi.responses import FileResponse
 
 from efdi.api.schemas import (
@@ -40,7 +41,7 @@ from efdi.infrastructure.job_store import store
 from efdi.infrastructure.repository_vacunacion import get_vacunacion_repository
 from efdi.services.extraction_vacunacion import ejecutar_extraccion_vacunacion
 
-router = APIRouter(prefix="/vacunacion", tags=["vacunacion"])
+router = APIRouter(prefix="/vacunacion", tags=["vacunacion"], dependencies=[Depends(require_modulo("vacunacion"))])
 
 
 # ─── Helpers ────────────────────────────────────────────────────────────────
@@ -76,6 +77,7 @@ def _auto_tamano_lote(limite: int) -> int:
     response_model=VacunacionUploadResp,
     status_code=status.HTTP_201_CREATED,
     summary="Subir un .xlsx con datos de vacunación",
+    dependencies=[Depends(require_no_viewer)],
 )
 async def subir_excel_vacunacion(
     file: UploadFile = File(..., description="Archivo .xlsx exportado del sistema"),
@@ -138,6 +140,7 @@ async def obtener_upload_vacunacion(upload_id: UUID) -> VacunacionUploadResp:
 @router.delete(
     "/uploads/{upload_id}",
     summary="Borrar un upload (libera disco)",
+    dependencies=[Depends(require_no_viewer)],
 )
 async def borrar_upload_vacunacion(upload_id: UUID) -> dict:
     dest = _excel_path_for(upload_id)
@@ -155,6 +158,7 @@ async def borrar_upload_vacunacion(upload_id: UUID) -> dict:
     response_model=list[ExtraccionResp],
     status_code=status.HTTP_202_ACCEPTED,
     summary="Crear 1 o 2 jobs (uno por régimen) sobre un upload",
+    dependencies=[Depends(require_no_viewer)],
 )
 async def crear_extraccion_vacunacion(
     req: CrearVacunacionReq,
@@ -286,6 +290,7 @@ async def descargar_lote_vacunacion(job_id: UUID, numero: int) -> FileResponse:
     "/extractions/{job_id}/nombre",
     response_model=ExtraccionResp,
     summary="Renombrar una extracción Vacunación",
+    dependencies=[Depends(require_no_viewer)],
 )
 async def renombrar_extraccion_vacunacion(
     job_id: UUID, req: RenombrarJobReq,
@@ -301,6 +306,7 @@ async def renombrar_extraccion_vacunacion(
 @router.post(
     "/extractions/{job_id}/cancel",
     summary="Cancelar extracción Vacunación en curso",
+    dependencies=[Depends(require_no_viewer)],
 )
 async def cancelar_extraccion_vacunacion(job_id: UUID) -> dict:
     job = store.get(job_id)
@@ -320,6 +326,7 @@ async def cancelar_extraccion_vacunacion(job_id: UUID) -> dict:
 @router.delete(
     "/extractions/{job_id}",
     summary="Eliminar extracción Vacunación",
+    dependencies=[Depends(require_no_viewer)],
 )
 async def eliminar_extraccion_vacunacion(job_id: UUID) -> dict:
     job = store.get(job_id)

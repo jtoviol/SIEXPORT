@@ -199,22 +199,320 @@
     .qs-chip.qs-danger { background: #fef2f2; border-color: #fecaca; color: #dc2626; }
     .qs-chip.qs-ok { background: #ecfdf5; border-color: #bbf7d0; color: #047857; }
     #quick-stats::-webkit-scrollbar { display: none; }
+
+    /* ═══ Sidebar nav (lateral) ══════════════════════════════════════════════ */
+    /* Desktop ≥1024: sticky, ancho fijo 244px. Mobile: drawer overlay. */
+    #app-sidebar {
+      width: 244px; flex-shrink: 0;
+      display: flex; flex-direction: column;
+      background: #fff; border-right: 1px solid #e2e8f0;
+      transition: transform .25s ease;
+    }
+    @media (max-width: 1023.98px) {
+      #app-sidebar {
+        position: fixed; top: 0; bottom: 0; left: 0; z-index: 60;
+        transform: translateX(-100%); box-shadow: 0 12px 32px rgba(0,0,0,.2);
+      }
+      #app-sidebar.open { transform: translateX(0); }
+      #app-sidebar-backdrop {
+        position: fixed; inset: 0; background: rgba(15,23,42,.45);
+        z-index: 55; opacity: 0; pointer-events: none; transition: opacity .2s;
+      }
+      #app-sidebar-backdrop.open { opacity: 1; pointer-events: auto; }
+    }
+    .sidebar-item {
+      display: flex; align-items: center; gap: .6rem;
+      padding: .5rem .65rem; border-radius: .5rem;
+      font-size: 13px; color: #475569; font-weight: 500;
+      cursor: pointer; transition: background .12s, color .12s;
+    }
+    .sidebar-item:hover { background: #f1f5f9; color: #0f172a; }
+    .sidebar-item.active { background: #eef2ff; color: #1a2f6e; font-weight: 600; }
+    .sidebar-item.active .sidebar-icon-box {
+      background: rgba(26,47,110,.08); color: #1a2f6e;
+    }
+    .sidebar-icon-box {
+      width: 26px; height: 26px; border-radius: .45rem;
+      display: flex; align-items: center; justify-content: center;
+      background: #f1f5f9; color: #64748b; flex-shrink: 0;
+    }
+    .sidebar-icon-box svg { width: 15px; height: 15px; }
+    .sidebar-group-header {
+      padding: .8rem .65rem .35rem; font-size: 10px;
+      text-transform: uppercase; letter-spacing: .08em;
+      color: #94a3b8; font-weight: 700;
+    }
+    .sidebar-count {
+      margin-left: auto; font-size: 10px; color: #94a3b8;
+      background: #f1f5f9; padding: 1px 6px; border-radius: 99px;
+      font-weight: 600;
+    }
+
+    /* ═══ Cmd+K palette ════════════════════════════════════════════════════ */
+    #cmdk-overlay {
+      position: fixed; inset: 0; z-index: 80;
+      background: rgba(15,23,42,.5); backdrop-filter: blur(4px);
+      display: none; align-items: flex-start; justify-content: center;
+      padding-top: 12vh;
+    }
+    #cmdk-overlay.open { display: flex; }
+    #cmdk-modal {
+      width: min(560px, calc(100vw - 32px));
+      background: #fff; border-radius: 12px;
+      box-shadow: 0 20px 48px rgba(0,0,0,.25);
+      overflow: hidden; display: flex; flex-direction: column;
+      max-height: 70vh;
+    }
+    #cmdk-input {
+      padding: 14px 18px; border: 0; outline: none;
+      font-size: 15px; border-bottom: 1px solid #e2e8f0;
+      font-family: inherit;
+    }
+    #cmdk-results { padding: 6px; overflow-y: auto; }
+    .cmdk-item {
+      display: flex; align-items: center; gap: .65rem;
+      padding: 9px 12px; border-radius: 8px;
+      cursor: pointer; font-size: 13.5px; color: #1e293b;
+    }
+    .cmdk-item:hover, .cmdk-item.cmdk-active { background: #f1f5f9; }
+    .cmdk-item .cmdk-cat {
+      margin-left: auto; font-size: 10px; color: #94a3b8;
+      text-transform: uppercase; letter-spacing: .06em;
+    }
+    .cmdk-empty {
+      padding: 24px; text-align: center; color: #94a3b8; font-size: 13px;
+    }
+    .cmdk-trigger {
+      display: flex; align-items: center; gap: .5rem;
+      padding: 6px 10px; border-radius: 8px;
+      background: #f1f5f9; border: 1px solid #e2e8f0;
+      color: #64748b; font-size: 12px; cursor: pointer;
+      transition: background .15s, border-color .15s;
+    }
+    .cmdk-trigger:hover { background: #e2e8f0; border-color: #cbd5e1; }
+    .cmdk-trigger kbd {
+      font-family: ui-monospace, "SF Mono", monospace;
+      background: #fff; border: 1px solid #cbd5e1; border-radius: 4px;
+      padding: 1px 5px; font-size: 10px; color: #475569;
+    }
+
+    /* ═══ User menu (avatar + dropdown) ════════════════════════════════════ */
+    .user-avatar {
+      width: 32px; height: 32px; border-radius: 50%;
+      background: linear-gradient(135deg, #1a2f6e 0%, #22a84a 100%);
+      color: #fff; font-weight: 700; font-size: 12px;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; user-select: none;
+    }
+    #user-menu {
+      position: absolute; top: calc(100% + 6px); right: 0;
+      min-width: 220px; background: #fff; border: 1px solid #e2e8f0;
+      border-radius: 10px; box-shadow: 0 12px 32px rgba(0,0,0,.12);
+      z-index: 50; overflow: hidden;
+    }
+    #user-menu button, #user-menu a {
+      display: flex; align-items: center; gap: .55rem;
+      width: 100%; padding: 9px 12px;
+      font-size: 13px; color: #1e293b; text-align: left;
+      background: #fff; border: 0; cursor: pointer;
+    }
+    #user-menu button:hover, #user-menu a:hover { background: #f1f5f9; }
+    #user-menu .um-logout { color: #dc2626; }
+    #user-menu .um-logout:hover { background: #fef2f2; }
+    .um-divider { height: 1px; background: #e2e8f0; }
+    .um-header {
+      padding: 10px 12px; border-bottom: 1px solid #e2e8f0;
+      background: #f8fafc;
+    }
+    .rol-badge {
+      display: inline-block; padding: 1px 7px; border-radius: 99px;
+      font-size: 9px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+    .rol-badge.rol-admin    { background: #fef2f2; color: #b91c1c; }
+    .rol-badge.rol-operador { background: #eff6ff; color: #1e40af; }
+    .rol-badge.rol-viewer   { background: #f1f5f9; color: #475569; }
+
+    /* ═══ Generic modal (perfil, usuarios, user-form) ═══════════════════════ */
+    .modal-overlay {
+      position: fixed; inset: 0; z-index: 70;
+      background: rgba(15,23,42,.5); backdrop-filter: blur(3px);
+      display: none; align-items: flex-start; justify-content: center;
+      padding: 6vh 16px; overflow-y: auto;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal-box {
+      background: #fff; border-radius: 12px;
+      box-shadow: 0 20px 48px rgba(0,0,0,.25);
+      width: 100%; max-width: 480px;
+      display: flex; flex-direction: column; max-height: 90vh;
+    }
+    .modal-box.modal-lg  { max-width: 760px; }
+    .modal-box.modal-xl  { max-width: 920px; }
+    .modal-header {
+      padding: 14px 18px; border-bottom: 1px solid #e2e8f0;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .modal-header h2 { font-size: 15px; font-weight: 700; color: #0f172a; }
+    .modal-body { padding: 16px 18px; overflow-y: auto; }
+    .modal-footer {
+      padding: 12px 18px; border-top: 1px solid #e2e8f0;
+      display: flex; justify-content: flex-end; gap: 8px;
+      background: #fafbfc;
+    }
+    .modal-close {
+      width: 28px; height: 28px; border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+      color: #94a3b8; background: transparent; border: 0; cursor: pointer;
+    }
+    .modal-close:hover { background: #f1f5f9; color: #1e293b; }
+    .form-row {
+      display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px;
+    }
+    .form-row label {
+      font-size: 11px; font-weight: 600; color: #475569;
+      text-transform: uppercase; letter-spacing: .04em;
+    }
+    .form-row input, .form-row select {
+      padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px;
+      font-size: 13px; font-family: inherit; outline: none;
+      transition: border-color .15s, box-shadow .15s;
+    }
+    .form-row input:focus, .form-row select:focus {
+      border-color: #1a2f6e; box-shadow: 0 0 0 3px rgba(26,47,110,.15);
+    }
+    .form-row .hint { font-size: 10.5px; color: #94a3b8; }
+    .form-error {
+      padding: 8px 10px; border-radius: 6px;
+      background: #fef2f2; color: #b91c1c; font-size: 12px;
+      border: 1px solid #fecaca; margin-bottom: 12px;
+    }
+    .form-ok {
+      padding: 8px 10px; border-radius: 6px;
+      background: #ecfdf5; color: #047857; font-size: 12px;
+      border: 1px solid #bbf7d0; margin-bottom: 12px;
+    }
+    .btn-primary {
+      padding: 8px 14px; background: #1a2f6e; color: #fff;
+      border: 0; border-radius: 6px; font-size: 13px; font-weight: 600;
+      cursor: pointer;
+    }
+    .btn-primary:hover { background: #15265a; }
+    .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
+    .btn-secondary {
+      padding: 8px 14px; background: #fff; color: #475569;
+      border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;
+      cursor: pointer;
+    }
+    .btn-secondary:hover { background: #f8fafc; }
+    .btn-danger {
+      padding: 6px 10px; background: #fff; color: #dc2626;
+      border: 1px solid #fecaca; border-radius: 6px; font-size: 12px;
+      cursor: pointer;
+    }
+    .btn-danger:hover { background: #fef2f2; }
+    .btn-icon {
+      padding: 5px 8px; background: transparent; color: #475569;
+      border: 1px solid #e2e8f0; border-radius: 6px; font-size: 11.5px;
+      cursor: pointer; transition: background .15s;
+    }
+    .btn-icon:hover { background: #f1f5f9; }
+
+    /* Tabla users */
+    .users-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .users-table th {
+      text-align: left; font-size: 10.5px; font-weight: 700;
+      color: #64748b; text-transform: uppercase; letter-spacing: .05em;
+      padding: 8px 10px; border-bottom: 1px solid #e2e8f0; background: #f8fafc;
+    }
+    .users-table td { padding: 10px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+    .users-table tr:hover { background: #f8fafc; }
+    .users-table .acciones { display: flex; gap: 4px; justify-content: flex-end; }
+    .modulo-chip {
+      display: inline-block; font-size: 10px; padding: 1px 6px;
+      border-radius: 99px; margin: 1px 2px;
+      background: #f1f5f9; color: #475569;
+    }
+    .checkbox-grid {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 6px 12px;
+      padding: 10px; border: 1px solid #e2e8f0; border-radius: 6px;
+      background: #f8fafc;
+    }
+    .checkbox-grid label {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 12.5px; color: #1e293b; cursor: pointer;
+      text-transform: none; letter-spacing: 0; font-weight: 500;
+    }
+    .checkbox-grid input[type="checkbox"] { accent-color: #1a2f6e; }
+    .estado-dot {
+      display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+      margin-right: 4px;
+    }
+    .estado-dot.activo    { background: #22c55e; }
+    .estado-dot.inactivo  { background: #cbd5e1; }
   </style>
 </head>
 
-<body class="h-screen flex flex-col overflow-hidden text-slate-900 antialiased"
+<body class="h-screen flex overflow-hidden text-slate-900 antialiased"
       style="font-family: system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
              background: linear-gradient(145deg, #e4eef8 0%, #eef3f9 35%, #f1f5f9 65%, #e8f0f7 100%)">
+
+<!-- ═══ APP SIDEBAR (navegación principal) ═══ -->
+<div id="app-sidebar-backdrop" onclick="closeAppSidebar()"></div>
+<aside id="app-sidebar">
+  <!-- Logo + cerrar (mobile) -->
+  <div class="flex items-center justify-between px-3.5 pt-3.5 pb-2">
+    <div class="flex items-center gap-2">
+      <img src="/static/siedfaser_logo.png" alt="SIEDFASER" style="height:34px;width:auto" />
+      <span class="text-[11px] font-semibold leading-tight" style="color:#1a2f6e">SIEDFASER</span>
+    </div>
+    <button class="lg:hidden h-7 w-7 rounded hover:bg-slate-100 flex items-center justify-center text-slate-400"
+            onclick="closeAppSidebar()" title="Cerrar">
+      <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+      </svg>
+    </button>
+  </div>
+  <!-- Trigger Cmd+K -->
+  <div class="px-3 py-2">
+    <button class="cmdk-trigger w-full justify-between" onclick="openCmdK()">
+      <span class="flex items-center gap-1.5">
+        <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+        </svg>
+        Buscar módulo…
+      </span>
+      <kbd>⌘K</kbd>
+    </button>
+  </div>
+  <!-- Lista de navegación (renderizada desde MODULES) -->
+  <nav id="app-sidebar-nav" class="flex-1 overflow-y-auto px-2 pb-3"></nav>
+  <!-- Footer del sidebar -->
+  <div class="px-3 py-2.5 border-t border-slate-100 text-[10px] text-slate-400">
+    SIEDFASER · v0.1
+  </div>
+</aside>
+
+<!-- ═══ Contenido principal (header + main) ═══ -->
+<div class="flex-1 flex flex-col overflow-hidden">
 
 <!-- ═══ HEADER ═══ -->
 <header class="h-24 shrink-0 bg-white border-b border-slate-200 flex items-center px-4 gap-3 z-20"
         style="box-shadow:0 1px 4px rgba(0,0,0,.05)">
-  <!-- Logo -->
-  <div class="flex items-center gap-3 shrink-0">
+  <!-- Botón hamburguesa (mobile) -->
+  <button class="lg:hidden h-9 w-9 rounded-lg border border-slate-200 hover:bg-slate-50 flex items-center justify-center text-slate-600 shrink-0"
+          onclick="openAppSidebar()" title="Menú">
+    <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/>
+    </svg>
+  </button>
+  <!-- Logo (oculto en mobile, ya está en el drawer) -->
+  <div class="hidden lg:flex items-center gap-3 shrink-0">
     <img src="/static/siedfaser_logo.png"
          alt="SIEDFASER · Sistema Inteligente de Exportación de Datos para Facturación de Seragil"
          style="height:3rem;width:auto" class="object-contain" />
-    <span class="hidden md:block text-[12px] font-medium leading-snug" style="color:#64748b">
+    <span class="hidden xl:block text-[12px] font-medium leading-snug" style="color:#64748b">
       Sistema inteligente de exportación de
       <span style="color:#22a84a" class="font-semibold">datos</span><br/>
       para
@@ -223,54 +521,61 @@
       <span style="color:#22a84a" class="font-semibold">Seragil</span>
     </span>
   </div>
-  <!-- Tabs centrados (solo desktop) — scroll horizontal cuando no caben -->
-  <nav class="tabs-scroll flex-1 hidden sm:flex items-center gap-1">
-    <button data-tab="dashboard" onclick="switchTab('dashboard')"
-            class="tab-btn active px-3.5 py-1.5 text-sm font-medium outline-none whitespace-nowrap rounded-full transition-all">
-      Inicio
+  <!-- Trigger Cmd+K (desktop, en el header) -->
+  <div class="hidden lg:flex flex-1 justify-center">
+    <button class="cmdk-trigger" onclick="openCmdK()" style="min-width:280px">
+      <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+      </svg>
+      <span>Buscar módulo…</span>
+      <kbd class="ml-auto">⌘K</kbd>
     </button>
-    <button data-tab="demanda-inducida" onclick="switchTab('demanda-inducida')"
-            class="tab-btn px-3.5 py-1.5 text-sm font-medium outline-none whitespace-nowrap rounded-full transition-all">
-      Demanda Inducida
-    </button>
-    <button data-tab="findrisc" onclick="switchTab('findrisc')"
-            class="tab-btn px-3.5 py-1.5 text-sm font-medium outline-none whitespace-nowrap rounded-full transition-all">
-      FINDRISC
-    </button>
-    <button data-tab="gestion-captacion" onclick="switchTab('gestion-captacion')"
-            class="tab-btn px-3.5 py-1.5 text-sm font-medium outline-none whitespace-nowrap rounded-full transition-all">
-      Gestión Captación
-    </button>
-    <button data-tab="planificacion-familiar" onclick="switchTab('planificacion-familiar')"
-            class="tab-btn px-3.5 py-1.5 text-sm font-medium outline-none whitespace-nowrap rounded-full transition-all">
-      Planificación Familiar
-    </button>
-    <button data-tab="vacunacion" onclick="switchTab('vacunacion')"
-            class="tab-btn px-3.5 py-1.5 text-sm font-medium outline-none whitespace-nowrap rounded-full transition-all">
-      Vacunación
-    </button>
-    <button data-tab="caracterizacion-familiar" onclick="switchTab('caracterizacion-familiar')"
-            class="tab-btn px-3.5 py-1.5 text-sm font-medium outline-none whitespace-nowrap rounded-full transition-all">
-      Caracterización Familiar
-    </button>
-  </nav>
-  <!-- Health badge + Logout -->
+  </div>
+  <div class="flex-1 lg:hidden"></div>
+  <!-- Health badge + User menu (avatar + dropdown) -->
   <div class="shrink-0 flex items-center gap-2">
     <div id="health-badge"></div>
-    <form method="POST" action="/auth/logout">
-      <button type="submit"
-              title="Cerrar sesión"
-              class="h-8 px-3 rounded-lg border border-slate-200 bg-white hover:bg-red-50
-                     hover:border-red-200 hover:text-red-600 text-slate-500
-                     text-xs font-medium flex items-center gap-1.5 transition-colors">
-        <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24"
-             stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round"
-                d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
+    <div class="relative">
+      <button id="user-menu-btn" type="button" onclick="toggleUserMenu(event)"
+              class="h-9 pl-1 pr-2.5 rounded-full border border-slate-200 hover:border-slate-300 bg-white
+                     flex items-center gap-2 transition-colors">
+        <div class="user-avatar" id="user-avatar-iniciales">·</div>
+        <span class="hidden md:block text-xs font-semibold text-slate-700" id="user-menu-username">…</span>
+        <svg class="h-3 w-3 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
         </svg>
-        <span class="hidden sm:inline">Salir</span>
       </button>
-    </form>
+      <div id="user-menu" class="hidden">
+        <div class="um-header">
+          <div class="text-sm font-semibold text-slate-800" id="um-nombre">…</div>
+          <div class="text-[11px] text-slate-500 flex items-center gap-1.5 mt-0.5">
+            <span id="um-username-text">…</span>
+            <span class="rol-badge" id="um-rol-badge">…</span>
+          </div>
+        </div>
+        <button type="button" onclick="openProfileModal()">
+          <svg class="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+          </svg>
+          Mi perfil
+        </button>
+        <button type="button" id="um-users-btn" onclick="openUsersModal()" class="hidden">
+          <svg class="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
+          </svg>
+          Gestionar usuarios
+        </button>
+        <div class="um-divider"></div>
+        <form method="POST" action="/auth/logout" class="m-0">
+          <button type="submit" class="um-logout">
+            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
+            </svg>
+            Cerrar sesión
+          </button>
+        </form>
+      </div>
+    </div>
   </div>
 </header>
 
@@ -982,8 +1287,8 @@
   </div>
 </div>
 
-<!-- ═══ MOBILE BOTTOM NAV ═══ -->
-<nav class="sm:hidden shrink-0 bg-white border-t border-slate-100 z-20"
+<!-- ═══ MOBILE BOTTOM NAV (reemplazado por sidebar drawer + Cmd+K) ═══ -->
+<nav class="hidden shrink-0 bg-white border-t border-slate-100 z-20"
      style="padding-bottom: env(safe-area-inset-bottom, 0px)">
   <div class="tabs-scroll flex">
     <button data-mob-tab="dashboard" onclick="switchTab('dashboard')"
@@ -1045,6 +1350,199 @@
   </div>
 </nav>
 
+</div><!-- /flex-1 wrapper (header+main) -->
+
+<!-- ═══ MODAL: Mi perfil ═══ -->
+<div id="profile-overlay" class="modal-overlay" onclick="if(event.target===this) closeProfileModal()">
+  <div class="modal-box">
+    <div class="modal-header">
+      <h2>Mi perfil</h2>
+      <button class="modal-close" type="button" onclick="closeProfileModal()" title="Cerrar">
+        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="form-row">
+        <label>Usuario</label>
+        <div class="text-sm text-slate-700 font-mono" id="pr-username">—</div>
+      </div>
+      <div class="form-row">
+        <label>Nombre</label>
+        <div class="text-sm text-slate-700" id="pr-nombre">—</div>
+      </div>
+      <div class="form-row">
+        <label>Rol</label>
+        <div><span class="rol-badge" id="pr-rol">—</span></div>
+      </div>
+      <div class="form-row">
+        <label>Módulos con acceso</label>
+        <div id="pr-modulos" class="text-sm text-slate-700">—</div>
+      </div>
+      <div class="form-row">
+        <label>Último login</label>
+        <div class="text-sm text-slate-700" id="pr-ultimo-login">—</div>
+      </div>
+      <hr class="my-3 border-slate-200">
+      <h3 class="text-sm font-bold text-slate-800 mb-2">Cambiar password</h3>
+      <div id="pr-err" class="form-error hidden"></div>
+      <div id="pr-ok"  class="form-ok hidden">Password actualizada.</div>
+      <div class="form-row">
+        <label>Password actual</label>
+        <input id="pr-pwd-actual" type="password" autocomplete="current-password">
+      </div>
+      <div class="form-row">
+        <label>Password nueva</label>
+        <input id="pr-pwd-nueva" type="password" autocomplete="new-password" minlength="8">
+        <span class="hint">Mínimo 8 caracteres.</span>
+      </div>
+      <div class="form-row">
+        <label>Confirmar nueva password</label>
+        <input id="pr-pwd-confirm" type="password" autocomplete="new-password" minlength="8">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" type="button" onclick="closeProfileModal()">Cerrar</button>
+      <button id="pr-submit" class="btn-primary" type="button" onclick="submitProfilePwd()">Cambiar password</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ MODAL: Gestionar usuarios ═══ -->
+<div id="users-overlay" class="modal-overlay" onclick="if(event.target===this) closeUsersModal()">
+  <div class="modal-box modal-xl">
+    <div class="modal-header">
+      <h2>Gestionar usuarios</h2>
+      <div class="flex items-center gap-2">
+        <button class="btn-primary" type="button" onclick="openUserFormModal(null)">+ Nuevo usuario</button>
+        <button class="modal-close" type="button" onclick="closeUsersModal()" title="Cerrar">
+          <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="modal-body">
+      <div id="users-list-err" class="form-error hidden"></div>
+      <table class="users-table">
+        <thead>
+          <tr>
+            <th>Usuario</th>
+            <th>Nombre</th>
+            <th>Rol</th>
+            <th>Módulos</th>
+            <th>Estado</th>
+            <th>Último login</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="users-tbody">
+          <tr><td colspan="7" class="text-center text-slate-400 py-6">Cargando…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ MODAL: Crear / Editar usuario ═══ -->
+<div id="user-form-overlay" class="modal-overlay" onclick="if(event.target===this) closeUserFormModal()">
+  <div class="modal-box modal-lg">
+    <div class="modal-header">
+      <h2 id="uf-title">Nuevo usuario</h2>
+      <button class="modal-close" type="button" onclick="closeUserFormModal()" title="Cerrar">
+        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div id="uf-err" class="form-error hidden"></div>
+      <div id="uf-ok"  class="form-ok hidden"></div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-4">
+        <div class="form-row">
+          <label>Username *</label>
+          <input id="uf-username" type="text" maxlength="40">
+          <span class="hint">3-40 caracteres. Letras, números, punto, guión, underscore.</span>
+        </div>
+        <div class="form-row">
+          <label>Nombre completo</label>
+          <input id="uf-nombre" type="text" maxlength="80">
+        </div>
+        <div class="form-row">
+          <label>Email (opcional)</label>
+          <input id="uf-email" type="email" maxlength="120">
+        </div>
+        <div class="form-row" id="uf-password-row">
+          <label>Password *</label>
+          <input id="uf-password" type="password" autocomplete="new-password" minlength="8" maxlength="72">
+          <span class="hint">Mínimo 8 caracteres.</span>
+        </div>
+        <div class="form-row">
+          <label>Rol *</label>
+          <select id="uf-rol">
+            <option value="viewer">Viewer (solo lectura)</option>
+            <option value="operador">Operador (puede generar)</option>
+            <option value="admin">Admin (todo + gestión de usuarios)</option>
+          </select>
+          <span class="hint">Admin ignora la selección de módulos (ve todos).</span>
+        </div>
+        <div class="form-row">
+          <label>Estado</label>
+          <label class="flex items-center gap-2 mt-1 cursor-pointer">
+            <input id="uf-activo" type="checkbox" checked style="accent-color:#1a2f6e">
+            <span class="text-sm text-slate-700">Usuario activo</span>
+          </label>
+        </div>
+      </div>
+      <div class="form-row">
+        <label>Módulos permitidos</label>
+        <div class="checkbox-grid" id="uf-modulos">
+          <!-- renderizado por JS desde MODULES -->
+        </div>
+        <span class="hint">Aplica solo a Operador y Viewer. Admin ve todos los módulos automáticamente.</span>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" type="button" onclick="closeUserFormModal()">Cancelar</button>
+      <button id="uf-submit" class="btn-primary" type="button" onclick="submitUserForm()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ MODAL: Reset password (admin) ═══ -->
+<div id="reset-pwd-overlay" class="modal-overlay" onclick="if(event.target===this) closeResetPwdModal()">
+  <div class="modal-box">
+    <div class="modal-header">
+      <h2>Resetear password</h2>
+      <button class="modal-close" type="button" onclick="closeResetPwdModal()" title="Cerrar">
+        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="form-row">
+        <label>Usuario</label>
+        <div class="text-sm text-slate-700 font-mono" id="rp-username">—</div>
+      </div>
+      <div id="rp-err" class="form-error hidden"></div>
+      <div id="rp-ok"  class="form-ok hidden">Password reseteada. Avisale al usuario.</div>
+      <div class="form-row">
+        <label>Nueva password *</label>
+        <input id="rp-pwd" type="password" autocomplete="new-password" minlength="8" maxlength="72">
+        <span class="hint">Mínimo 8 caracteres. El usuario la podrá cambiar después en "Mi perfil".</span>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" type="button" onclick="closeResetPwdModal()">Cancelar</button>
+      <button id="rp-submit" class="btn-primary" type="button" onclick="submitResetPwd()">Resetear</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ CMD+K PALETTE ═══ -->
+<div id="cmdk-overlay" onclick="if(event.target===this) closeCmdK()">
+  <div id="cmdk-modal">
+    <input id="cmdk-input" placeholder="Buscar módulo…" autocomplete="off"
+           oninput="cmdkFilter(this.value)"
+           onkeydown="cmdkKey(event)" />
+    <div id="cmdk-results"></div>
+  </div>
+</div>
+
 <!-- ═══ TOAST STACK ═══ -->
 <div id="toast-stack"
      class="fixed right-4 z-50 flex flex-col-reverse gap-2 pointer-events-none"
@@ -1058,21 +1556,91 @@
 const API = "";
 const $ = id => document.getElementById(id);
 
+// ═══════════════════════════════════════════════════════════════════
+// MODULE REGISTRY — única fuente de verdad para todos los módulos
+// ═══════════════════════════════════════════════════════════════════
+// Para agregar un módulo nuevo:
+//   1. Agregar entrada acá (clave = tabId con guiones)
+//   2. Agregar botón en el nav desktop (data-tab) y nav móvil (data-mob-tab)
+//   3. Agregar card en el dashboard (data-mod con el tipoBackend)
+// El resto del JS (api, badge, color, unidad, factura, excel) se resuelve
+// automáticamente desde este registry — sin tocar ramas if/else.
+//
+// Las clases tipo `bg-{color}-100 text-{color}-700` y `hover:border-{color}-400`
+// ya viven en el HTML literal de las cards/badges, así que el JIT de Tailwind
+// CDN las genera. NO agregar colores acá sin agregar también clases literales.
+// Heroicons outline paths (24x24, stroke-width 1.8).
+const ICONS = {
+  home:    `<path stroke-linecap="round" stroke-linejoin="round" d="M3 12l9-9 9 9M5 10v10a1 1 0 001 1h12a1 1 0 001-1V10M9 21v-6a1 1 0 011-1h4a1 1 0 011 1v6"/>`,
+  doc:     `<path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6M9 8h6m-3 12H7a2 2 0 01-2-2V6a2 2 0 012-2h7l5 5v9a2 2 0 01-2 2h-2"/>`,
+  chart:   `<path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>`,
+  users:   `<path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/>`,
+  heart:   `<path stroke-linecap="round" stroke-linejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/>`,
+  beaker:  `<path stroke-linecap="round" stroke-linejoin="round" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"/>`,
+  house:   `<path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12l8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75"/>`,
+};
+
+const MODULES = {
+  "demanda-inducida": {
+    tipoBackend: "demanda_inducida", label: "Demanda Inducida",
+    api: "/extractions", color: "brand", icon: "doc",
+    categoria: "Prevención", badge: "DI",
+    usaFactura: true, usaExcel: false, unidad: "afiliados",
+  },
+  "findrisc": {
+    tipoBackend: "findrisc", label: "FINDRISC",
+    api: "/findrisc/extractions", color: "emerald", icon: "chart",
+    categoria: "Tamizajes", badge: "FR",
+    usaFactura: true, usaExcel: false, unidad: "afiliados",
+  },
+  "gestion-captacion": {
+    tipoBackend: "gestion_captacion", label: "Gestión Captación",
+    api: "/gestion-captacion/extractions", color: "amber", icon: "users",
+    categoria: "Seguimiento", badge: "GC",
+    usaFactura: true, usaExcel: false, unidad: "afiliados",
+  },
+  "planificacion-familiar": {
+    tipoBackend: "planificacion_familiar", label: "Planificación Familiar",
+    api: "/planificacion-familiar/extractions", color: "rose", icon: "heart",
+    categoria: "Seguimiento", badge: "PF",
+    usaFactura: true, usaExcel: false, unidad: "afiliados",
+  },
+  "vacunacion": {
+    tipoBackend: "vacunacion", label: "Vacunación",
+    api: "/vacunacion/extractions", color: "cyan", icon: "beaker",
+    categoria: "Prevención", badge: "VAC",
+    usaFactura: false, usaExcel: true, unidad: "afiliados",
+  },
+  "caracterizacion-familiar": {
+    tipoBackend: "caracterizacion_familiar", label: "Caracterización Familiar",
+    api: "/caracterizacion-familiar/extractions", color: "indigo", icon: "house",
+    categoria: "Caracterización", badge: "CF",
+    usaFactura: false, usaExcel: false, unidad: "familias",
+  },
+};
+
+// Orden de categorías en el sidebar (los que no estén acá quedan al final).
+const CATEGORIAS_ORDEN = ["Prevención", "Tamizajes", "Seguimiento", "Caracterización"];
+
+// Lookups: por tabId, por api base (lo que persiste en _selApiBase), por tipo backend.
+function modByTab(tabId)         { return MODULES[tabId] || null; }
+function modByApiBase(apiBase)   {
+  for (const m of Object.values(MODULES)) if (m.api === apiBase) return m;
+  return null;
+}
+function modByTipo(tipoBackend)  {
+  for (const m of Object.values(MODULES)) if (m.tipoBackend === tipoBackend) return m;
+  return null;
+}
+
 function getModuleApi() {
-  if (activeTab === "findrisc")                 return "/findrisc/extractions";
-  if (activeTab === "gestion-captacion")        return "/gestion-captacion/extractions";
-  if (activeTab === "planificacion-familiar")   return "/planificacion-familiar/extractions";
-  if (activeTab === "vacunacion")               return "/vacunacion/extractions";
-  if (activeTab === "caracterizacion-familiar") return "/caracterizacion-familiar/extractions";
-  return "/extractions";
+  return modByTab(activeTab)?.api || "/extractions";
 }
 // API base capturada al seleccionar un job — persiste en callbacks deferred
 let _selApiBase = "/extractions";
 
-// En Caracterización Familiar la unidad de agrupación es la familia (1 PDF
-// por familia); en el resto de módulos es el afiliado.
 function unidadAgrupacion() {
-  return _selApiBase.includes("caracterizacion-familiar") ? "familias" : "afiliados";
+  return modByApiBase(_selApiBase)?.unidad || "afiliados";
 }
 
 const DOC_COLORS = {
@@ -1130,22 +1698,8 @@ function setJobName(id, name)   {
 function renderExpName(id, nombre) {
   // nombre viene de la DB; localStorage solo como caché optimista
   const name = (nombre !== undefined ? nombre : null) ?? getJobName(id);
-  const isFindrisc = _selApiBase.includes("findrisc");
-  const isCaptacion = _selApiBase.includes("gestion-captacion");
-  const isPlanFami = _selApiBase.includes("planificacion-familiar");
-  const isVacunacion = _selApiBase.includes("vacunacion");
-  const isCaracterizacion = _selApiBase.includes("caracterizacion-familiar");
-  const modBadge = isCaracterizacion
-    ? `<span class="ml-2 text-xs font-semibold px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700">Caracterización Familiar</span>`
-    : isVacunacion
-    ? `<span class="ml-2 text-xs font-semibold px-1.5 py-0.5 rounded-full bg-cyan-100 text-cyan-700">Vacunación</span>`
-    : isPlanFami
-    ? `<span class="ml-2 text-xs font-semibold px-1.5 py-0.5 rounded-full bg-rose-100 text-rose-700">Planificación Familiar</span>`
-    : isCaptacion
-    ? `<span class="ml-2 text-xs font-semibold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">Gestión Captación</span>`
-    : isFindrisc
-    ? `<span class="ml-2 text-xs font-semibold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700">FINDRISC</span>`
-    : `<span class="ml-2 text-xs font-semibold px-1.5 py-0.5 rounded-full bg-brand-100 text-brand-700">Demanda Inducida</span>`;
+  const m = modByApiBase(_selApiBase) || MODULES["demanda-inducida"];
+  const modBadge = `<span class="ml-2 text-xs font-semibold px-1.5 py-0.5 rounded-full bg-${m.color}-100 text-${m.color}-700">${m.label}</span>`;
   const label = name
     ? `<span class="text-slate-800">${name}</span>`
     : `<span class="font-mono text-slate-500 text-xs">job_${id.slice(0, 8)}&hellip;</span>`;
@@ -1380,6 +1934,7 @@ function renderDashboard(d) {
     card.dataset.tab = m.tab;
   });
   refrescarBloqueoCardsDashboard();  // aplicar estado de bloqueo inmediatamente
+  filtrarCardsDashboard();           // ocultar cards de módulos sin permiso (RBAC)
 
   // Actividad reciente
   const ul = $("db-recientes");
@@ -1394,14 +1949,10 @@ function renderDashboard(d) {
     failed:    "text-red-700 bg-red-50",
     cancelled: "text-slate-500 bg-slate-100",
   };
-  const modColor = {
-    demanda_inducida:       "bg-brand-100 text-brand-700",
-    findrisc:               "bg-emerald-100 text-emerald-700",
-    gestion_captacion:      "bg-amber-100 text-amber-700",
-    planificacion_familiar:   "bg-rose-100 text-rose-700",
-    vacunacion:               "bg-cyan-100 text-cyan-700",
-    caracterizacion_familiar: "bg-indigo-100 text-indigo-700",
-  };
+  // Derivado del registry: cualquier módulo nuevo se pinta solo en actividad reciente.
+  const modColor = Object.fromEntries(
+    Object.values(MODULES).map(m => [m.tipoBackend, `bg-${m.color}-100 text-${m.color}-700`])
+  );
   ul.innerHTML = d.recientes.map(r => {
     const stCls = stColor[r.estado] || "text-slate-600 bg-slate-100";
     const mCls  = modColor[r.tipo]  || "bg-slate-100 text-slate-700";
@@ -1515,6 +2066,11 @@ function switchTab(tabId) {
   document.querySelectorAll(".mob-tab").forEach(btn =>
     btn.classList.toggle("active", btn.dataset.mobTab === tabId)
   );
+  // Sidebar nav: sincronizar item activo + cerrar drawer en mobile
+  document.querySelectorAll("#app-sidebar-nav .sidebar-item").forEach(el =>
+    el.classList.toggle("active", el.dataset.tab === tabId)
+  );
+  closeAppSidebar();
 
   // Elementos "solo Demanda Inducida": boton conteo previo de códigos de régimen
   const isDI = tabId === "demanda-inducida";
@@ -1523,10 +2079,9 @@ function switchTab(tabId) {
     btnFac.classList.toggle("hidden", !isDI);
     btnFac.classList.toggle("flex",   isDI);
   }
-  // El filtro CAB/FAB aplica a DI, FINDRISC, Captación y Planificación Familiar
-  // (todos cruzan contra AVS_REGISTROS_AP, que es global). Vacunación NO usa
-  // factura — tiene su propio form con dropzone de Excel.
-  const aceptaFiltroRegimen = ["demanda-inducida", "findrisc", "gestion-captacion", "planificacion-familiar"].includes(tabId);
+  // El filtro CAB/FAB aplica a los módulos que cruzan contra AVS_REGISTROS_AP
+  // (DI, FINDRISC, Captación, PlanFami). Resuelto desde el registry.
+  const aceptaFiltroRegimen = modByTab(tabId)?.usaFactura || false;
   const facSection = $("factura-section");
   if (facSection) facSection.classList.toggle("hidden", !aceptaFiltroRegimen);
   // Reset inputs al cambiar de tab si el destino NO soporta filtro
@@ -1537,12 +2092,12 @@ function switchTab(tabId) {
     if (fCont) fCont.value = "";
   }
 
-  // ── Vacunación: alternar form SQL ↔ form de upload Excel ──
-  const isVacunacion = tabId === "vacunacion";
+  // ── Form SQL ↔ form de upload Excel (módulos con usaExcel=true, ej: Vacunación) ──
+  const usaExcel = modByTab(tabId)?.usaExcel || false;
   const formSqlWrap  = $("form-wrap");
   const formVacWrap  = $("vacunacion-form-wrap");
-  if (formSqlWrap) formSqlWrap.classList.toggle("hidden", isVacunacion);
-  if (formVacWrap) formVacWrap.classList.toggle("hidden", !isVacunacion);
+  if (formSqlWrap) formSqlWrap.classList.toggle("hidden", usaExcel);
+  if (formVacWrap) formVacWrap.classList.toggle("hidden", !usaExcel);
 
   // ── Dashboard: vista exclusiva, ocultar módulos + franja B ──────────────
   const dbView = $("dashboard-view");
@@ -2953,7 +3508,7 @@ $("fext").addEventListener("submit", async ev => {
 
   // Validación: en los módulos que aceptan filtro, la factura es REQUERIDA.
   // La idea operativa es siempre extraer mes+factura, nunca uno sin el otro.
-  const moduloRequiereFactura = ["demanda-inducida", "findrisc", "gestion-captacion", "planificacion-familiar"].includes(activeTab);
+  const moduloRequiereFactura = modByTab(activeTab)?.usaFactura || false;
   if (moduloRequiereFactura && !subN && !contN) {
     $("ferr").textContent = "Debes ingresar al menos un código de régimen (Subsidiado o Contributivo) antes de generar.";
     $("ferr").classList.remove("hidden"); return;
@@ -3049,17 +3604,536 @@ setInterval(() => {
   els.forEach(el => el.setAttribute("src", LOTTIE_SRCS[_lottieIdx]));
 }, 15000);
 
-(function () {
+// ═══════════════════════════════════════════════════════════════════
+// SIDEBAR NAV (sidebar lateral + drawer móvil)
+// ═══════════════════════════════════════════════════════════════════
+function _iconSvg(name, cls = "") {
+  return `<svg class="${cls}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">${ICONS[name] || ""}</svg>`;
+}
+
+function renderAppSidebar() {
+  const nav = $("app-sidebar-nav");
+  if (!nav) return;
+
+  const inicioActive = activeTab === "dashboard" ? "active" : "";
+  let html = `
+    <div class="sidebar-item ${inicioActive}" data-tab="dashboard"
+         onclick="navTo('dashboard')">
+      <div class="sidebar-icon-box">${_iconSvg("home")}</div>
+      <span>Inicio</span>
+    </div>
+  `;
+
+  // Agrupar módulos por categoría, respetando CATEGORIAS_ORDEN
+  const grupos = {};
+  for (const [tabId, m] of Object.entries(MODULES)) {
+    (grupos[m.categoria] ||= []).push({ tabId, ...m });
+  }
+  const cats = [...CATEGORIAS_ORDEN.filter(c => grupos[c]),
+                ...Object.keys(grupos).filter(c => !CATEGORIAS_ORDEN.includes(c))];
+
+  for (const cat of cats) {
+    html += `<div class="sidebar-group-header">${cat} <span class="sidebar-count">${grupos[cat].length}</span></div>`;
+    for (const m of grupos[cat]) {
+      const cls = activeTab === m.tabId ? "active" : "";
+      html += `
+        <div class="sidebar-item ${cls}" data-tab="${m.tabId}"
+             onclick="navTo('${m.tabId}')">
+          <div class="sidebar-icon-box" style="background:rgb(var(--c-${m.color},241 245 249));">
+            ${_iconSvg(m.icon)}
+          </div>
+          <span class="truncate">${m.label}</span>
+        </div>
+      `;
+    }
+  }
+  nav.innerHTML = html;
+}
+
+function navTo(tabId) {
+  switchTab(tabId);
+  closeCmdK();
+}
+
+function openAppSidebar()  { $("app-sidebar").classList.add("open"); $("app-sidebar-backdrop").classList.add("open"); }
+function closeAppSidebar() { $("app-sidebar").classList.remove("open"); $("app-sidebar-backdrop").classList.remove("open"); }
+
+// ═══════════════════════════════════════════════════════════════════
+// CMD+K PALETTE
+// ═══════════════════════════════════════════════════════════════════
+let _cmdkIdx = 0;
+let _cmdkItems = [];
+
+function _cmdkAllItems() {
+  return [
+    { tabId: "dashboard", label: "Inicio", categoria: "Navegación", icon: "home", color: "brand" },
+    ...Object.entries(MODULES).map(([tabId, m]) => ({
+      tabId, label: m.label, categoria: m.categoria, icon: m.icon, color: m.color,
+    })),
+  ];
+}
+
+function openCmdK() {
+  $("cmdk-overlay").classList.add("open");
+  const input = $("cmdk-input");
+  input.value = "";
+  cmdkFilter("");
+  setTimeout(() => input.focus(), 50);
+}
+
+function closeCmdK() { $("cmdk-overlay").classList.remove("open"); }
+
+function _cmdkRender() {
+  const box = $("cmdk-results");
+  if (!_cmdkItems.length) {
+    box.innerHTML = `<div class="cmdk-empty">Sin resultados</div>`;
+    return;
+  }
+  box.innerHTML = _cmdkItems.map((it, i) => `
+    <div class="cmdk-item ${i === _cmdkIdx ? "cmdk-active" : ""}"
+         data-tab="${it.tabId}" onmouseenter="_cmdkIdx=${i};_cmdkRender()"
+         onclick="navTo('${it.tabId}')">
+      <div class="sidebar-icon-box">${_iconSvg(it.icon)}</div>
+      <span>${it.label}</span>
+      <span class="cmdk-cat">${it.categoria}</span>
+    </div>
+  `).join("");
+}
+
+function cmdkFilter(query) {
+  const q = (query || "").trim().toLowerCase();
+  const all = _cmdkAllItems();
+  _cmdkItems = !q ? all : all.filter(it =>
+    it.label.toLowerCase().includes(q) || (it.categoria || "").toLowerCase().includes(q)
+  );
+  _cmdkIdx = 0;
+  _cmdkRender();
+}
+
+function cmdkKey(e) {
+  if (e.key === "Escape")     { closeCmdK(); return; }
+  if (e.key === "ArrowDown")  { e.preventDefault(); _cmdkIdx = Math.min(_cmdkIdx + 1, _cmdkItems.length - 1); _cmdkRender(); return; }
+  if (e.key === "ArrowUp")    { e.preventDefault(); _cmdkIdx = Math.max(_cmdkIdx - 1, 0); _cmdkRender(); return; }
+  if (e.key === "Enter") {
+    const it = _cmdkItems[_cmdkIdx];
+    if (it) navTo(it.tabId);
+  }
+}
+
+document.addEventListener("keydown", e => {
+  // Cmd+K / Ctrl+K abre el palette
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+    e.preventDefault();
+    if ($("cmdk-overlay").classList.contains("open")) closeCmdK(); else openCmdK();
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// CURRENT USER + PERMISOS UI
+// ═══════════════════════════════════════════════════════════════════
+let currentUser = null;   // {id, username, nombre, rol, modulos_efectivos, ...}
+
+async function loadCurrentUser() {
+  try {
+    const r = await fetch("/api/me", { credentials: "same-origin" });
+    if (!r.ok) return null;
+    currentUser = await r.json();
+    return currentUser;
+  } catch { return null; }
+}
+
+function isAdmin()  { return currentUser?.rol === "admin"; }
+function isViewer() { return currentUser?.rol === "viewer"; }
+function canModify(){ return currentUser && !isViewer(); }
+function tieneAccesoModulo(tabId) {
+  if (!currentUser) return false;
+  return (currentUser.modulos_efectivos || []).includes(tabId);
+}
+
+function _iniciales(s) {
+  s = (s || "").trim();
+  if (!s) return "?";
+  const parts = s.split(/\s+/);
+  return (parts[0][0] + (parts[1]?.[0] || "")).toUpperCase();
+}
+
+function updateUserMenuChrome() {
+  if (!currentUser) return;
+  const display = currentUser.nombre || currentUser.username;
+  $("user-avatar-iniciales").textContent = _iniciales(display);
+  $("user-menu-username").textContent = currentUser.username;
+  $("um-nombre").textContent = display;
+  $("um-username-text").textContent = "@" + currentUser.username;
+  const badge = $("um-rol-badge");
+  badge.textContent = currentUser.rol;
+  badge.className = "rol-badge rol-" + currentUser.rol;
+  $("um-users-btn").classList.toggle("hidden", !isAdmin());
+}
+
+function toggleUserMenu(ev) {
+  ev?.stopPropagation();
+  $("user-menu").classList.toggle("hidden");
+}
+document.addEventListener("click", e => {
+  // Cerrar dropdown al hacer click fuera
+  if (!e.target.closest("#user-menu-btn") && !e.target.closest("#user-menu")) {
+    $("user-menu")?.classList.add("hidden");
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// FILTROS POR PERMISO — sidebar + dashboard + cmdk
+// ═══════════════════════════════════════════════════════════════════
+// Estos wrappers REEMPLAZAN funciones definidas antes (renderAppSidebar,
+// _cmdkAllItems) para añadirles el filtro por currentUser.modulos_efectivos.
+// Los originales siguen funcionando antes de cargar el user (caso edge:
+// si /api/me falla, currentUser=null y NO se filtra nada — el backend igual
+// devuelve 403 al intentar entrar, así que es seguro).
+
+const _renderAppSidebar_orig = renderAppSidebar;
+renderAppSidebar = function() {
+  const nav = $("app-sidebar-nav");
+  if (!nav) return;
+  const inicioActive = activeTab === "dashboard" ? "active" : "";
+  let html = `
+    <div class="sidebar-item ${inicioActive}" data-tab="dashboard"
+         onclick="navTo('dashboard')">
+      <div class="sidebar-icon-box">${_iconSvg("home")}</div>
+      <span>Inicio</span>
+    </div>
+  `;
+  const grupos = {};
+  for (const [tabId, m] of Object.entries(MODULES)) {
+    if (currentUser && !tieneAccesoModulo(tabId)) continue;
+    (grupos[m.categoria] ||= []).push({ tabId, ...m });
+  }
+  const cats = [...CATEGORIAS_ORDEN.filter(c => grupos[c]),
+                ...Object.keys(grupos).filter(c => !CATEGORIAS_ORDEN.includes(c))];
+  for (const cat of cats) {
+    html += `<div class="sidebar-group-header">${cat} <span class="sidebar-count">${grupos[cat].length}</span></div>`;
+    for (const m of grupos[cat]) {
+      const cls = activeTab === m.tabId ? "active" : "";
+      html += `
+        <div class="sidebar-item ${cls}" data-tab="${m.tabId}"
+             onclick="navTo('${m.tabId}')">
+          <div class="sidebar-icon-box">${_iconSvg(m.icon)}</div>
+          <span class="truncate">${m.label}</span>
+        </div>
+      `;
+    }
+  }
+  nav.innerHTML = html;
+};
+
+const _cmdkAllItems_orig = _cmdkAllItems;
+_cmdkAllItems = function() {
+  const inicio = { tabId: "dashboard", label: "Inicio", categoria: "Navegación", icon: "home", color: "brand" };
+  const modulos = Object.entries(MODULES)
+    .filter(([tabId]) => !currentUser || tieneAccesoModulo(tabId))
+    .map(([tabId, m]) => ({ tabId, label: m.label, categoria: m.categoria, icon: m.icon, color: m.color }));
+  return [inicio, ...modulos];
+};
+
+function filtrarCardsDashboard() {
+  document.querySelectorAll(".db-mod-card").forEach(card => {
+    const mod = card.dataset.mod;          // ej: "demanda_inducida"
+    if (!mod || !currentUser) return;
+    // Convertir tipoBackend → tabId buscando en MODULES
+    const m = Object.values(MODULES).find(x => x.tipoBackend === mod);
+    if (!m) return;
+    const tabId = Object.keys(MODULES).find(k => MODULES[k] === m);
+    card.classList.toggle("hidden", !tieneAccesoModulo(tabId));
+  });
+}
+
+// Hook para que cuando un fetch a un endpoint de módulo devuelva 403,
+// avise con toast en vez de mostrar pantalla muerta.
+async function _apiJson(url, opts = {}) {
+  const r = await fetch(url, { credentials: "same-origin", ...opts });
+  if (r.status === 403) {
+    let detail = "Sin permiso";
+    try { detail = (await r.json()).detail || detail; } catch {}
+    toast("Acceso denegado", detail, "error");
+    throw new Error("403: " + detail);
+  }
+  if (!r.ok) {
+    let detail = `HTTP ${r.status}`;
+    try { detail = (await r.json()).detail || detail; } catch {}
+    throw new Error(detail);
+  }
+  return r.json();
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// MODAL: Mi perfil
+// ═══════════════════════════════════════════════════════════════════
+function openProfileModal() {
+  $("user-menu").classList.add("hidden");
+  if (!currentUser) return;
+  $("pr-username").textContent = currentUser.username;
+  $("pr-nombre").textContent = currentUser.nombre || "—";
+  const rb = $("pr-rol");
+  rb.textContent = currentUser.rol;
+  rb.className = "rol-badge rol-" + currentUser.rol;
+  const mods = currentUser.modulos_efectivos || [];
+  $("pr-modulos").innerHTML = mods.length
+    ? mods.map(m => `<span class="modulo-chip">${MODULES[m]?.label || m}</span>`).join(" ")
+    : `<span class="text-slate-400 text-xs italic">Ningún módulo asignado</span>`;
+  $("pr-ultimo-login").textContent = currentUser.ultimo_login_en
+    ? new Date(currentUser.ultimo_login_en).toLocaleString()
+    : "Primera vez";
+  ["pr-pwd-actual", "pr-pwd-nueva", "pr-pwd-confirm"].forEach(id => $(id).value = "");
+  $("pr-err").classList.add("hidden");
+  $("pr-ok").classList.add("hidden");
+  $("profile-overlay").classList.add("open");
+}
+function closeProfileModal() { $("profile-overlay").classList.remove("open"); }
+
+async function submitProfilePwd() {
+  const actual  = $("pr-pwd-actual").value;
+  const nueva   = $("pr-pwd-nueva").value;
+  const confirm_ = $("pr-pwd-confirm").value;
+  const err = $("pr-err"); const ok = $("pr-ok");
+  err.classList.add("hidden"); ok.classList.add("hidden");
+  if (!actual || !nueva)        { err.textContent = "Completá ambos campos."; err.classList.remove("hidden"); return; }
+  if (nueva.length < 8)         { err.textContent = "La nueva password debe tener al menos 8 caracteres."; err.classList.remove("hidden"); return; }
+  if (nueva !== confirm_)       { err.textContent = "La confirmación no coincide."; err.classList.remove("hidden"); return; }
+  if (nueva === actual)         { err.textContent = "La password nueva debe ser distinta de la actual."; err.classList.remove("hidden"); return; }
+  const btn = $("pr-submit"); btn.disabled = true;
+  try {
+    const r = await fetch("/api/me/password", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ password_actual: actual, password_nueva: nueva }),
+    });
+    if (!r.ok) {
+      const d = await r.json().catch(() => ({}));
+      err.textContent = d.detail || `Error ${r.status}`;
+      err.classList.remove("hidden"); return;
+    }
+    ok.classList.remove("hidden");
+    ["pr-pwd-actual", "pr-pwd-nueva", "pr-pwd-confirm"].forEach(id => $(id).value = "");
+    toast("Password actualizada", "Tu contraseña se cambió correctamente.", "success");
+  } finally { btn.disabled = false; }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// MODAL: Gestionar usuarios (solo admin)
+// ═══════════════════════════════════════════════════════════════════
+async function openUsersModal() {
+  $("user-menu").classList.add("hidden");
+  if (!isAdmin()) { toast("Solo admin", "Esta sección requiere rol ADMIN.", "error"); return; }
+  $("users-overlay").classList.add("open");
+  await reloadUsersList();
+}
+function closeUsersModal() { $("users-overlay").classList.remove("open"); }
+
+async function reloadUsersList() {
+  const tbody = $("users-tbody");
+  const err = $("users-list-err");
+  err.classList.add("hidden");
+  tbody.innerHTML = `<tr><td colspan="7" class="text-center text-slate-400 py-6">Cargando…</td></tr>`;
+  try {
+    const users = await _apiJson("/api/users");
+    if (!users.length) {
+      tbody.innerHTML = `<tr><td colspan="7" class="text-center text-slate-400 py-6">Sin usuarios.</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = users.map(u => {
+      const modChips = u.modulos_efectivos.length
+        ? u.modulos_efectivos.map(m => `<span class="modulo-chip">${MODULES[m]?.badge || m}</span>`).join("")
+        : `<span class="text-slate-300 text-xs italic">—</span>`;
+      const ultimo = u.ultimo_login_en ? fmtRel(u.ultimo_login_en) : `<span class="text-slate-400">nunca</span>`;
+      const yo = currentUser?.id === u.id ? `<span class="text-[10px] font-bold text-brand-700 ml-1">(vos)</span>` : "";
+      return `
+        <tr data-uid="${u.id}">
+          <td><span class="font-mono text-xs">${u.username}</span>${yo}</td>
+          <td>${u.nombre || "<span class='text-slate-300'>—</span>"}</td>
+          <td><span class="rol-badge rol-${u.rol}">${u.rol}</span></td>
+          <td>${modChips}</td>
+          <td><span class="estado-dot ${u.activo ? 'activo' : 'inactivo'}"></span>${u.activo ? "Activo" : "Inactivo"}</td>
+          <td class="text-xs text-slate-500">${ultimo}</td>
+          <td>
+            <div class="acciones">
+              <button class="btn-icon" type="button" onclick='editUser(${JSON.stringify(u.id)})' title="Editar">✎</button>
+              <button class="btn-icon" type="button" onclick='openResetPwdModal(${JSON.stringify(u.id)}, ${JSON.stringify(u.username)})' title="Resetear password">🔑</button>
+              <button class="btn-danger" type="button" onclick='confirmDeleteUser(${JSON.stringify(u.id)}, ${JSON.stringify(u.username)})' title="Eliminar">🗑</button>
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join("");
+  } catch (e) {
+    err.textContent = e.message || "Error cargando usuarios";
+    err.classList.remove("hidden");
+    tbody.innerHTML = "";
+  }
+}
+
+async function confirmDeleteUser(uid, username) {
+  if (!confirm(`¿Eliminar al usuario "${username}"?\n\nEsto NO afecta las extracciones que haya creado.`)) return;
+  try {
+    const r = await fetch("/api/users/" + uid, { method: "DELETE", credentials: "same-origin" });
+    if (!r.ok) {
+      const d = await r.json().catch(() => ({}));
+      toast("No se pudo eliminar", d.detail || `Error ${r.status}`, "error");
+      return;
+    }
+    toast("Usuario eliminado", username, "success");
+    await reloadUsersList();
+  } catch (e) { toast("Error", e.message, "error"); }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// MODAL: Crear / Editar usuario
+// ═══════════════════════════════════════════════════════════════════
+let _editingUserId = null;
+
+function _renderModulosCheckboxes(seleccionados = []) {
+  const set = new Set(seleccionados);
+  const html = Object.entries(MODULES).map(([tabId, m]) => `
+    <label>
+      <input type="checkbox" name="uf-mod" value="${tabId}" ${set.has(tabId) ? "checked" : ""}>
+      ${m.label}
+    </label>
+  `).join("");
+  $("uf-modulos").innerHTML = html;
+}
+
+function openUserFormModal(uid /* null = crear */) {
+  _editingUserId = uid;
+  $("uf-title").textContent = uid ? "Editar usuario" : "Nuevo usuario";
+  $("uf-err").classList.add("hidden");
+  $("uf-ok").classList.add("hidden");
+  // En edición no permitimos cambiar username ni password (password va por reset).
+  $("uf-username").value = "";
+  $("uf-username").disabled = !!uid;
+  $("uf-nombre").value = "";
+  $("uf-email").value = "";
+  $("uf-password").value = "";
+  $("uf-password-row").classList.toggle("hidden", !!uid);
+  $("uf-rol").value = "viewer";
+  $("uf-activo").checked = true;
+  _renderModulosCheckboxes([]);
+
+  if (uid) {
+    // Cargar datos del user
+    fetch("/api/users/" + uid, { credentials: "same-origin" })
+      .then(r => r.ok ? r.json() : null)
+      .then(u => {
+        if (!u) return;
+        $("uf-username").value = u.username;
+        $("uf-nombre").value = u.nombre || "";
+        $("uf-email").value = u.email || "";
+        $("uf-rol").value = u.rol;
+        $("uf-activo").checked = u.activo;
+        _renderModulosCheckboxes(u.modulos);
+      });
+  }
+  $("user-form-overlay").classList.add("open");
+}
+function editUser(uid) { closeUsersModal(); $("users-overlay").classList.add("open"); openUserFormModal(uid); }
+function closeUserFormModal() { $("user-form-overlay").classList.remove("open"); _editingUserId = null; }
+
+async function submitUserForm() {
+  const err = $("uf-err"); const ok = $("uf-ok");
+  err.classList.add("hidden"); ok.classList.add("hidden");
+  const modulos = Array.from(document.querySelectorAll('input[name="uf-mod"]:checked')).map(i => i.value);
+  const payload = {
+    nombre: $("uf-nombre").value.trim() || null,
+    email: $("uf-email").value.trim() || null,
+    rol: $("uf-rol").value,
+    modulos: modulos,
+    activo: $("uf-activo").checked,
+  };
+  if (!_editingUserId) {
+    // Crear: username + password obligatorios
+    payload.username = $("uf-username").value.trim();
+    payload.password = $("uf-password").value;
+    if (!payload.username) { err.textContent = "Username requerido."; err.classList.remove("hidden"); return; }
+    if (!payload.password || payload.password.length < 8) {
+      err.textContent = "Password mínima 8 caracteres."; err.classList.remove("hidden"); return;
+    }
+  }
+  const btn = $("uf-submit"); btn.disabled = true;
+  try {
+    const url = _editingUserId ? ("/api/users/" + _editingUserId) : "/api/users";
+    const method = _editingUserId ? "PUT" : "POST";
+    const r = await fetch(url, {
+      method, headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify(payload),
+    });
+    if (!r.ok) {
+      const d = await r.json().catch(() => ({}));
+      err.textContent = (typeof d.detail === "string") ? d.detail
+                       : Array.isArray(d.detail) ? d.detail.map(x => x.msg).join("; ")
+                       : `Error ${r.status}`;
+      err.classList.remove("hidden"); return;
+    }
+    toast(_editingUserId ? "Usuario actualizado" : "Usuario creado", payload.username || payload.nombre || "OK", "success");
+    closeUserFormModal();
+    await reloadUsersList();
+  } finally { btn.disabled = false; }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// MODAL: Reset password
+// ═══════════════════════════════════════════════════════════════════
+let _resetUserId = null;
+function openResetPwdModal(uid, username) {
+  _resetUserId = uid;
+  $("rp-username").textContent = username;
+  $("rp-pwd").value = "";
+  $("rp-err").classList.add("hidden");
+  $("rp-ok").classList.add("hidden");
+  $("reset-pwd-overlay").classList.add("open");
+}
+function closeResetPwdModal() { $("reset-pwd-overlay").classList.remove("open"); _resetUserId = null; }
+async function submitResetPwd() {
+  const pwd = $("rp-pwd").value;
+  const err = $("rp-err"); const ok = $("rp-ok");
+  err.classList.add("hidden"); ok.classList.add("hidden");
+  if (!pwd || pwd.length < 8) {
+    err.textContent = "Password mínima 8 caracteres."; err.classList.remove("hidden"); return;
+  }
+  const btn = $("rp-submit"); btn.disabled = true;
+  try {
+    const r = await fetch("/api/users/" + _resetUserId + "/reset-password", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ password: pwd }),
+    });
+    if (!r.ok) {
+      const d = await r.json().catch(() => ({}));
+      err.textContent = d.detail || `Error ${r.status}`;
+      err.classList.remove("hidden"); return;
+    }
+    ok.classList.remove("hidden");
+    toast("Password reseteada", "Avisale al usuario.", "success");
+    setTimeout(closeResetPwdModal, 1200);
+  } finally { btn.disabled = false; }
+}
+
+(async function () {
   const hoy = new Date().toISOString().slice(0, 10);
   const mes  = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
   $("desde").value = mes; $("desde").max = hoy;
   $("hasta").value = hoy; $("hasta").max = hoy;
   updateLotePreview();
   loadHealth();
-  loadJobs();
   setInterval(loadHealth, 30000);
+  // 1. Cargar current user ANTES de pintar el sidebar/dashboard (para filtrar).
+  await loadCurrentUser();
+  updateUserMenuChrome();
+  // 2. Pintar nav + dashboard (ya con filtros de permisos).
+  renderAppSidebar();
+  loadJobs();
   // Boot del dashboard (activeTab="dashboard" por default)
   loadDashboard();
+  // 3. Al cargar las cards del dashboard, filtrar las que el user no puede ver.
+  setTimeout(filtrarCardsDashboard, 700);
 })();
 </script>
 </body>
