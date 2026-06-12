@@ -8,7 +8,9 @@ from efdi.domain.models import (
     AfiliadoConPlanFamiliar,
     AfiliadoConVacunas,
     Atencion,
+    FamiliaCaracterizada,
     RegistroCaptacion,
+    RegistroCaracterizacion,
     RegistroFindrisc,
     RegistroPlanFamiliar,
     RegistroVacuna,
@@ -169,3 +171,22 @@ def agrupar_por_afiliado_planfami(
             )
         )
     return sorted(resultado, key=lambda x: (x.doc_key, x.fecha_gestion))
+
+
+def agrupar_por_familia_caracterizacion(
+    registros: list[RegistroCaracterizacion],
+) -> list[FamiliaCaracterizada]:
+    """Agrupa registros de Caracterización Familiar por familia.
+
+    La llave es la jerarquía geográfica completa + vivienda + familia + ciuf
+    (RegistroCaracterizacion.familia_key). 1 PDF por familia con todos sus
+    integrantes, en el orden en que la query los devolvió.
+    """
+    grupos: dict[str, list[RegistroCaracterizacion]] = defaultdict(list)
+    for r in registros:
+        grupos[r.familia_key].append(r)
+
+    resultado: list[FamiliaCaracterizada] = []
+    for clave, grupo in grupos.items():
+        resultado.append(FamiliaCaracterizada(familia_key=clave, registros=grupo))
+    return sorted(resultado, key=lambda x: x.familia_key)

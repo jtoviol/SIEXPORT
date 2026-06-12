@@ -29,7 +29,7 @@
 
 **SIEDFASER** es una plataforma web para extracción y empaquetado masivo de datos clínicos de la base **Seragil** (SQL Server) con destino a facturación. Cada extracción agrupa los registros por afiliado y entrega un `.zip` con un PDF por paciente, listo para radicar como soporte de cuenta médica.
 
-**4 módulos activos** — cada uno con su consulta SQL, su modelo de dominio y su plantilla de PDF:
+**6 módulos activos** — cada uno con su consulta SQL, su modelo de dominio y su plantilla de PDF:
 
 | Módulo | Tabla origen | Filtro | API |
 |---|---|---|---|
@@ -37,6 +37,10 @@
 | FINDRISC | `SRG_FORMATO_FINDRISC` | `FLG_FORMATO_COLDRISC = 'SI'` + rango fechas | `/findrisc/...` |
 | Gestión Captación | `srg_captacion_afiliados` | rango `fec_captacion_afiliado` | `/gestion-captacion/...` |
 | Planificación Familiar | `SRG_POBLACION_RIESGO_REPRODUCTIVO` + `SRG_DETALLE_RIESGO_REPRODUCTIVO` | rango `fec_gestion_seguimiento` | `/planificacion-familiar/...` |
+| Vacunación | Excel `.xlsx` subido (sin SQL) | régimen del propio Excel | `/vacunacion/...` |
+| Caracterización Familiar | `SBW_PERSONA_CARACTERIZADA` + `SBW_UBICACION_FAMILIA` (**base sibacom**, servidor aparte) | rango `fecha_reg` — sin factura | `/caracterizacion-familiar/...` |
+
+> Caracterización Familiar agrupa **por familia** (jerarquía geográfica + vivienda + familia + ciuf): 1 PDF por familia con todos sus integrantes. Requiere las variables `DB_*_SIBACOM` en el `.env`.
 
 Vista inicial: **Dashboard** con KPIs cross-módulo y actividad reciente (no se aterriza en un módulo específico al loguearse).
 

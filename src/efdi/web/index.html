@@ -156,6 +156,13 @@
     }
     #sidebar-toggle svg { transition: transform .24s ease; }
 
+    /* Tabs con scroll horizontal (desktop y móvil): sin scrollbar visible,
+       centrados cuando caben y deslizables cuando no. */
+    .tabs-scroll { overflow-x: auto; scrollbar-width: none; -ms-overflow-style: none; }
+    .tabs-scroll::-webkit-scrollbar { display: none; }
+    .tabs-scroll > :first-child { margin-left: auto; }
+    .tabs-scroll > :last-child  { margin-right: auto; }
+
     /* ─── MOBILE ─── */
     @media (max-width: 639px) {
       /* Sidebar ocupa todo el ancho */
@@ -216,8 +223,8 @@
       <span style="color:#22a84a" class="font-semibold">Seragil</span>
     </span>
   </div>
-  <!-- Tabs centrados (solo desktop) -->
-  <nav class="flex-1 hidden sm:flex items-center justify-center gap-1">
+  <!-- Tabs centrados (solo desktop) — scroll horizontal cuando no caben -->
+  <nav class="tabs-scroll flex-1 hidden sm:flex items-center gap-1">
     <button data-tab="dashboard" onclick="switchTab('dashboard')"
             class="tab-btn active px-3.5 py-1.5 text-sm font-medium outline-none whitespace-nowrap rounded-full transition-all">
       Inicio
@@ -241,6 +248,10 @@
     <button data-tab="vacunacion" onclick="switchTab('vacunacion')"
             class="tab-btn px-3.5 py-1.5 text-sm font-medium outline-none whitespace-nowrap rounded-full transition-all">
       Vacunación
+    </button>
+    <button data-tab="caracterizacion-familiar" onclick="switchTab('caracterizacion-familiar')"
+            class="tab-btn px-3.5 py-1.5 text-sm font-medium outline-none whitespace-nowrap rounded-full transition-all">
+      Caracterización Familiar
     </button>
   </nav>
   <!-- Health badge + Logout -->
@@ -298,7 +309,7 @@
   </div>
 
   <!-- Cards por módulo -->
-  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mb-5">
     <div data-mod="demanda_inducida" class="db-mod-card bg-white rounded-xl border border-slate-200 p-4 cursor-pointer hover:border-brand-400 hover:shadow transition-all">
       <div class="flex items-center justify-between mb-2">
         <div class="font-semibold text-slate-800 text-sm">Demanda Inducida</div>
@@ -387,6 +398,27 @@
       <div class="flex items-center justify-between mb-2">
         <div class="font-semibold text-slate-800 text-sm">Vacunación</div>
         <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-cyan-100 text-cyan-700">VAC</span>
+      </div>
+      <div class="grid grid-cols-3 gap-2 text-center">
+        <div>
+          <div class="text-[9px] uppercase text-slate-400">En curso</div>
+          <div class="text-base font-bold text-amber-600 tabular-nums db-mod-curso">—</div>
+        </div>
+        <div>
+          <div class="text-[9px] uppercase text-slate-400">Completados</div>
+          <div class="text-base font-bold text-emerald-600 tabular-nums db-mod-ok">—</div>
+        </div>
+        <div>
+          <div class="text-[9px] uppercase text-slate-400">Fallidos</div>
+          <div class="text-base font-bold text-red-500 tabular-nums db-mod-fail">—</div>
+        </div>
+      </div>
+      <div class="text-[10px] text-slate-400 mt-2 db-mod-ultimo">—</div>
+    </div>
+    <div data-mod="caracterizacion_familiar" class="db-mod-card bg-white rounded-xl border border-slate-200 p-4 cursor-pointer hover:border-indigo-400 hover:shadow transition-all">
+      <div class="flex items-center justify-between mb-2">
+        <div class="font-semibold text-slate-800 text-sm">Caracterización Familiar</div>
+        <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700">CF</span>
       </div>
       <div class="grid grid-cols-3 gap-2 text-center">
         <div>
@@ -953,9 +985,9 @@
 <!-- ═══ MOBILE BOTTOM NAV ═══ -->
 <nav class="sm:hidden shrink-0 bg-white border-t border-slate-100 z-20"
      style="padding-bottom: env(safe-area-inset-bottom, 0px)">
-  <div class="flex">
+  <div class="tabs-scroll flex">
     <button data-mob-tab="dashboard" onclick="switchTab('dashboard')"
-            class="mob-tab active flex-1 flex flex-col items-center gap-0.5 py-2.5 transition-colors">
+            class="mob-tab active flex-1 min-w-[68px] flex flex-col items-center gap-0.5 py-2.5 transition-colors">
       <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
         <path stroke-linecap="round" stroke-linejoin="round"
               d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
@@ -963,7 +995,7 @@
       <span class="font-medium">Inicio</span>
     </button>
     <button data-mob-tab="demanda-inducida" onclick="switchTab('demanda-inducida')"
-            class="mob-tab flex-1 flex flex-col items-center gap-0.5 py-2.5 transition-colors">
+            class="mob-tab flex-1 min-w-[68px] flex flex-col items-center gap-0.5 py-2.5 transition-colors">
       <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
         <path stroke-linecap="round" stroke-linejoin="round"
               d="M9 12h6m-6 4h6M9 8h6m-3 12H7a2 2 0 01-2-2V6a2 2 0 012-2h7l5 5v9a2 2 0 01-2 2h-2"/>
@@ -971,7 +1003,7 @@
       <span class="font-medium">Demanda</span>
     </button>
     <button data-mob-tab="findrisc" onclick="switchTab('findrisc')"
-            class="mob-tab flex-1 flex flex-col items-center gap-0.5 py-2.5 transition-colors">
+            class="mob-tab flex-1 min-w-[68px] flex flex-col items-center gap-0.5 py-2.5 transition-colors">
       <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
         <path stroke-linecap="round" stroke-linejoin="round"
               d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
@@ -979,7 +1011,7 @@
       <span>FINDRISC</span>
     </button>
     <button data-mob-tab="gestion-captacion" onclick="switchTab('gestion-captacion')"
-            class="mob-tab flex-1 flex flex-col items-center gap-0.5 py-2.5 transition-colors">
+            class="mob-tab flex-1 min-w-[68px] flex flex-col items-center gap-0.5 py-2.5 transition-colors">
       <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
         <path stroke-linecap="round" stroke-linejoin="round"
               d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/>
@@ -987,7 +1019,7 @@
       <span>Captación</span>
     </button>
     <button data-mob-tab="planificacion-familiar" onclick="switchTab('planificacion-familiar')"
-            class="mob-tab flex-1 flex flex-col items-center gap-0.5 py-2.5 transition-colors">
+            class="mob-tab flex-1 min-w-[68px] flex flex-col items-center gap-0.5 py-2.5 transition-colors">
       <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
         <path stroke-linecap="round" stroke-linejoin="round"
               d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/>
@@ -995,12 +1027,20 @@
       <span>PlanFami</span>
     </button>
     <button data-mob-tab="vacunacion" onclick="switchTab('vacunacion')"
-            class="mob-tab flex-1 flex flex-col items-center gap-0.5 py-2.5 transition-colors">
+            class="mob-tab flex-1 min-w-[68px] flex flex-col items-center gap-0.5 py-2.5 transition-colors">
       <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
         <path stroke-linecap="round" stroke-linejoin="round"
               d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"/>
       </svg>
       <span>Vacunación</span>
+    </button>
+    <button data-mob-tab="caracterizacion-familiar" onclick="switchTab('caracterizacion-familiar')"
+            class="mob-tab flex-1 min-w-[68px] flex flex-col items-center gap-0.5 py-2.5 transition-colors">
+      <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+        <path stroke-linecap="round" stroke-linejoin="round"
+              d="M3 12l9-9 9 9M5 10v10a1 1 0 001 1h12a1 1 0 001-1V10M9 21v-6a1 1 0 011-1h4a1 1 0 011 1v6"/>
+      </svg>
+      <span>Caract. Fam.</span>
     </button>
   </div>
 </nav>
@@ -1019,14 +1059,21 @@ const API = "";
 const $ = id => document.getElementById(id);
 
 function getModuleApi() {
-  if (activeTab === "findrisc")               return "/findrisc/extractions";
-  if (activeTab === "gestion-captacion")      return "/gestion-captacion/extractions";
-  if (activeTab === "planificacion-familiar") return "/planificacion-familiar/extractions";
-  if (activeTab === "vacunacion")             return "/vacunacion/extractions";
+  if (activeTab === "findrisc")                 return "/findrisc/extractions";
+  if (activeTab === "gestion-captacion")        return "/gestion-captacion/extractions";
+  if (activeTab === "planificacion-familiar")   return "/planificacion-familiar/extractions";
+  if (activeTab === "vacunacion")               return "/vacunacion/extractions";
+  if (activeTab === "caracterizacion-familiar") return "/caracterizacion-familiar/extractions";
   return "/extractions";
 }
 // API base capturada al seleccionar un job — persiste en callbacks deferred
 let _selApiBase = "/extractions";
+
+// En Caracterización Familiar la unidad de agrupación es la familia (1 PDF
+// por familia); en el resto de módulos es el afiliado.
+function unidadAgrupacion() {
+  return _selApiBase.includes("caracterizacion-familiar") ? "familias" : "afiliados";
+}
 
 const DOC_COLORS = {
   CC: { pill: "bg-cyan-500 text-white",   soft: "bg-cyan-50 text-cyan-700"   },
@@ -1087,7 +1134,10 @@ function renderExpName(id, nombre) {
   const isCaptacion = _selApiBase.includes("gestion-captacion");
   const isPlanFami = _selApiBase.includes("planificacion-familiar");
   const isVacunacion = _selApiBase.includes("vacunacion");
-  const modBadge = isVacunacion
+  const isCaracterizacion = _selApiBase.includes("caracterizacion-familiar");
+  const modBadge = isCaracterizacion
+    ? `<span class="ml-2 text-xs font-semibold px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700">Caracterización Familiar</span>`
+    : isVacunacion
     ? `<span class="ml-2 text-xs font-semibold px-1.5 py-0.5 rounded-full bg-cyan-100 text-cyan-700">Vacunación</span>`
     : isPlanFami
     ? `<span class="ml-2 text-xs font-semibold px-1.5 py-0.5 rounded-full bg-rose-100 text-rose-700">Planificación Familiar</span>`
@@ -1348,8 +1398,9 @@ function renderDashboard(d) {
     demanda_inducida:       "bg-brand-100 text-brand-700",
     findrisc:               "bg-emerald-100 text-emerald-700",
     gestion_captacion:      "bg-amber-100 text-amber-700",
-    planificacion_familiar: "bg-rose-100 text-rose-700",
-    vacunacion:             "bg-cyan-100 text-cyan-700",
+    planificacion_familiar:   "bg-rose-100 text-rose-700",
+    vacunacion:               "bg-cyan-100 text-cyan-700",
+    caracterizacion_familiar: "bg-indigo-100 text-indigo-700",
   };
   ul.innerHTML = d.recientes.map(r => {
     const stCls = stColor[r.estado] || "text-slate-600 bg-slate-100";
@@ -1572,7 +1623,7 @@ function jobHtml(e) {
     ? `<span class="inline-block px-1.5 rounded-sm bg-emerald-50 text-emerald-700 text-[9px] font-bold uppercase tracking-wide mr-1 align-middle"
              title="Cruce por factura (${(e.facturas || []).join(', ')})">${e.regimen.slice(0,3)}</span>`
     : "";
-  const sub = ok ? `${regimenBadge}${e.total_afiliados} afil &middot; ${e.total_pdfs} PDFs`
+  const sub = ok ? `${regimenBadge}${e.total_afiliados} ${unidadAgrupacion() === "familias" ? "fam" : "afil"} &middot; ${e.total_pdfs} PDFs`
             : ko ? `${regimenBadge}<span class="text-red-400 truncate">${e.mensaje_error || "Error"}</span>`
             : `${regimenBadge}${s.label}`;
   const shortId    = e.id.slice(0, 8);
@@ -1762,7 +1813,7 @@ async function selJob(id) {
     $("exp-dl").classList.toggle("pointer-events-none", disabled);
 
     if (job.estado === "completed") {
-      $("exp-meta").textContent = `${job.total_afiliados} afiliados · ${job.total_pdfs} PDFs · ${fmtRel(job.creado_en)}`;
+      $("exp-meta").textContent = `${job.total_afiliados} ${unidadAgrupacion()} · ${job.total_pdfs} PDFs · ${fmtRel(job.creado_en)}`;
       await loadTreeWithSummary(id, job);
     } else if (job.estado === "failed") {
       $("exp-meta").textContent = STATUS.failed.label;
@@ -1796,7 +1847,7 @@ async function showProgress(job, apiBase) {
       try {
         const j = await apiGet(`${apiBase}/${job.id}`);
         if (j.estado === "completed") {
-          $("exp-meta").textContent = `${j.total_afiliados} afiliados · ${j.total_pdfs} PDFs · ${fmtRel(j.creado_en)}`;
+          $("exp-meta").textContent = `${j.total_afiliados} ${unidadAgrupacion()} · ${j.total_pdfs} PDFs · ${fmtRel(j.creado_en)}`;
           $("exp-dl").classList.remove("opacity-40", "pointer-events-none");
           toast("Extracción completada", `${j.total_pdfs.toLocaleString()} PDFs en ${j.total_lotes} lote${j.total_lotes > 1 ? "s" : ""}`, "success");
           loadTree(job.id);
@@ -2019,7 +2070,7 @@ function buildEventsFromState(job, lotes) {
     if (l.estado === "completed" && l.completado_en) {
       pushEvent(
         job.id, "ok",
-        `Lote #${String(l.numero).padStart(3, "0")} · ${l.total_atenciones.toLocaleString()} atenciones · ${l.total_afiliados.toLocaleString()} afiliados · ${l.total_pdfs.toLocaleString()} PDFs`,
+        `Lote #${String(l.numero).padStart(3, "0")} · ${l.total_atenciones.toLocaleString()} ${unidadAgrupacion() === "familias" ? "personas" : "atenciones"} · ${l.total_afiliados.toLocaleString()} ${unidadAgrupacion()} · ${l.total_pdfs.toLocaleString()} PDFs`,
         l.completado_en,
       );
     }
@@ -2329,7 +2380,7 @@ function renderJobSummary(job) {
         <div>
           <div class="text-slate-400 uppercase tracking-wider text-[10px] mb-0.5">Resultado</div>
           ${resultadoLine}
-          <div class="text-slate-500 tabular-nums">${job.total_afiliados.toLocaleString()} afiliados · ${job.total_atenciones.toLocaleString()} ${_selApiBase.includes("extractions") && !_selApiBase.includes("findrisc") && !_selApiBase.includes("gestion-captacion") ? "atenciones" : "registros"}</div>
+          <div class="text-slate-500 tabular-nums">${job.total_afiliados.toLocaleString()} ${unidadAgrupacion()} · ${job.total_atenciones.toLocaleString()} ${_selApiBase.includes("caracterizacion-familiar") ? "personas" : (_selApiBase.includes("extractions") && !_selApiBase.includes("findrisc") && !_selApiBase.includes("gestion-captacion") ? "atenciones" : "registros")}</div>
         </div>
         <div>
           <div class="text-slate-400 uppercase tracking-wider text-[10px] mb-0.5">Tiempos</div>
@@ -2425,8 +2476,8 @@ function applyFilters() {
   // Update count
   const total = treeData.folders.length;
   $("filter-count").textContent = filtered.length === total
-    ? `${total} afiliados`
-    : `${filtered.length} / ${total} afiliados`;
+    ? `${total} ${unidadAgrupacion()}`
+    : `${filtered.length} / ${total} ${unidadAgrupacion()}`;
 
   renderTree({ ...treeData, folders: filtered });
 }
@@ -2589,7 +2640,7 @@ function setAutoPreview(data) {
   const cap = "";
   box.className = "rounded-md px-2 py-1.5 text-[10px] leading-snug border bg-brand-50 border-brand-200 text-brand-700";
   txt.innerHTML =
-    `<span class="font-semibold">${data.limite_efectivo.toLocaleString()} registros</span>` +
+    `<span class="font-semibold">${data.limite_efectivo.toLocaleString()} ${unidadAgrupacion() === "familias" ? "familias" : "registros"}</span>` +
     ` · ${data.lotes_estimados} lote${data.lotes_estimados !== 1 ? "s" : ""}` +
     ` de ${data.tamano_lote.toLocaleString()}${cap}`;
 }

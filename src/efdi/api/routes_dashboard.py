@@ -17,6 +17,7 @@ _MOD_LABEL = {
     ExtraccionTipo.GESTION_CAPTACION:       "Gestión Captación",
     ExtraccionTipo.PLANIFICACION_FAMILIAR:  "Planificación Familiar",
     ExtraccionTipo.VACUNACION:              "Vacunación",
+    ExtraccionTipo.CARACTERIZACION_FAMILIAR: "Caracterización Familiar",
 }
 # Tab id de la web por tipo de módulo (para el deep-link "ver" desde el dashboard)
 _MOD_TAB = {
@@ -25,6 +26,7 @@ _MOD_TAB = {
     ExtraccionTipo.GESTION_CAPTACION:       "gestion-captacion",
     ExtraccionTipo.PLANIFICACION_FAMILIAR:  "planificacion-familiar",
     ExtraccionTipo.VACUNACION:              "vacunacion",
+    ExtraccionTipo.CARACTERIZACION_FAMILIAR: "caracterizacion-familiar",
 }
 
 

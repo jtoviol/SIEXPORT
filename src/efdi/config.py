@@ -21,6 +21,14 @@ class Settings(BaseSettings):
     db_password: str = ""
     db_driver: str = "ODBC Driver 17 for SQL Server"
 
+    # Segunda conexión: base sibacom (módulo Caracterización Familiar).
+    # Vive en otro servidor con credenciales propias — ver .env (DB_*_SIBACOM).
+    db_host_sibacom: str = "localhost"
+    db_port_sibacom: int = 1433
+    db_name_sibacom: str = "sibacom"
+    db_user_sibacom: str = ""
+    db_password_sibacom: str = ""
+
     data_dir: Path = Field(default=Path("./data"))
     templates_dir: Path = Field(default=Path("./src/efdi/templates"))
 
@@ -51,6 +59,16 @@ class Settings(BaseSettings):
             f"SERVER={self.db_host},{self.db_port};"
             f"DATABASE={self.db_name};"
             f"UID={self.db_user};PWD={self.db_password};"
+            "TrustServerCertificate=yes;Encrypt=no;"
+        )
+
+    @property
+    def db_dsn_sibacom(self) -> str:
+        return (
+            f"DRIVER={{{self.db_driver}}};"
+            f"SERVER={self.db_host_sibacom},{self.db_port_sibacom};"
+            f"DATABASE={self.db_name_sibacom};"
+            f"UID={self.db_user_sibacom};PWD={self.db_password_sibacom};"
             "TrustServerCertificate=yes;Encrypt=no;"
         )
 
