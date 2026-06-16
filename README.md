@@ -236,6 +236,24 @@ GET    /api/users/_meta/modulos        Catálogo de módulos válidos (para UI)
 
 **UI**: avatar con dropdown en el header → "Mi perfil" (todos), "Gestionar usuarios" (solo admin), "Cerrar sesión".
 
+### Auditoría — "quién hizo qué"
+
+Cada extracción guarda `created_by_username` (el usuario que disparó el POST) y la lista de jobs muestra **`… · por <usuario>`** en su detalle.
+
+Los eventos críticos sobre usuarios se persisten en la tabla `audit_log`:
+
+| Acción | Cuándo |
+|---|---|
+| `user.create` | ADMIN creó un usuario (incluye rol y módulos asignados) |
+| `user.update` | ADMIN editó un usuario (incluye diff de los campos cambiados antes/después) |
+| `user.delete` | ADMIN eliminó un usuario |
+| `user.reset_password` | ADMIN reseteó la password de un usuario |
+| `me.change_password` | Un usuario cambió su propia password (verificando la actual) |
+
+**Endpoint** (solo ADMIN): `GET /api/users/_audit/log?limit=200&actor=admin&target_id=<uuid>`
+
+Útil para responder "¿quién creó/borró/editó al usuario X?" y para cumplimiento (Habeas Data Colombia). Los registros incluyen `ts`, `actor_username`, `accion`, `target_type/id/label` y un `detalle` JSON con metadata extra (rol, módulos, cambios, etc.). El borrado de un usuario **no elimina** sus registros del audit log: el username se preserva como string histórico.
+
 ---
 
 ## Nombres custom en descargas
@@ -524,6 +542,7 @@ PUT    /api/users/{id}                          Actualizar (ADMIN)
 DELETE /api/users/{id}                          Eliminar (ADMIN)
 POST   /api/users/{id}/reset-password           Resetear password (ADMIN)
 GET    /api/users/_meta/modulos                 Catálogo módulos válidos
+GET    /api/users/_audit/log                    Audit log de eventos críticos
 ```
 
 ### Dashboard
@@ -660,7 +679,7 @@ D:\proyecto\
     │   │                               #   MODULOS_VALIDOS, AFILIADO_*
     │   └── services.py                 # agrupar_por_afiliado_* / agrupar_por_familia_caracterizacion
     ├── infrastructure/
-    │   ├── db.py                       # SQLite schema con migraciones (v6 — incluye tabla users)
+    │   ├── db.py                       # SQLite schema con migraciones (v7 — users + audit_log)
     │   ├── job_store.py                # Persistencia de extracciones y lotes
     │   ├── user_store.py               # Persistencia de usuarios (CRUD)
     │   ├── repository.py               # Consulta Demanda Inducida (SQL Server + mock)
@@ -722,12 +741,16 @@ asyncio_mode = "auto"     # tests async se marcan automáticamente
 
 | Archivo | Qué cubre |
 |---|---|
+| `tests/conftest.py` | Setup global: apunta `DATA_DIR` a un tmp único por sesión antes de cualquier import de `efdi.*` (resuelve DB readonly heredada de Docker en WSL). |
 | `tests/test_agrupacion.py` | `agrupar_por_afiliado` colapsa atenciones por `(documento, fecha)` correctamente. |
 | `tests/test_api.py` | Endpoints HTTP de Demanda Inducida via `TestClient`: `/health`, `/docs`, flow completo (crear → consultar → descargar → eliminar), multi-lote, errores 400/404, lote inexistente. |
 | `tests/test_facturas.py` | Cruce CAB+N/FAB+N de DI contra `AVS_REGISTROS_AP`. |
 | `tests/test_mock_data.py` | `MockRepository`: cantidad correcta, determinismo, fechas dentro del rango, OFFSET. |
 | `tests/test_pdf_parallel.py` | Generación paralela de PDFs (multiprocessing Pool). |
-| `tests/test_caracterizacion.py` | Mock de Caracterización Familiar: paginación por familia con `DENSE_RANK`, filtro por régimen del JEFE, generación de PDF, agrupación intacta entre lotes. |
+| `tests/test_caracterizacion.py` (8) | Mock de Caracterización Familiar: paginación por familia con `DENSE_RANK`, filtro por régimen del JEFE, generación de PDF, agrupación intacta entre lotes. |
+| `tests/test_findrisc.py` (6) | Mock FINDRISC: cantidad, determinismo, offset, agrupación, generación PDF, filtro facturas. |
+| `tests/test_planfami.py` (5) | Mock PlanFami: cantidad, determinismo, agrupación por `(doc, fecha_gestion)`, PDF con `regimen_override`. |
+| `tests/test_auth_rbac.py` (23) | **Críticos del sistema multi-user**: bcrypt hash/verify, bootstrap admin con creds del `.env`, login válido/inválido, `GET /api/me` sin auth → 401, RBAC por módulo (403 sin permiso), viewer no puede POST, no-admin no puede `/api/users`, anti self-lockout del último admin, cambio password / reset password, password < 8 chars → 422, audit log captura `user.create` / `user.delete` y es admin-only. |
 
 ### Smoke tests rápidos sin pytest
 
@@ -776,16 +799,12 @@ Esperado: `Estado: completed PDFs: ~50 Lotes: 2`. Requiere `USE_MOCK=true` en `.
 
 ### Tests pendientes (deuda técnica)
 
-Los tests actuales cubren bien Demanda Inducida pero **no** los 3 módulos nuevos (FINDRISC, Captación, PlanFami). A mediano plazo conviene replicar `test_api.py` y `test_mock_data.py` para cada uno:
+Cobertura actual buena en: DI, FINDRISC, PlanFami, Caracterización, auth/RBAC. Faltan tests propios de:
 
 ```
 tests/
-├── test_findrisc_api.py        # pendiente
-├── test_findrisc_mock.py       # pendiente
-├── test_captacion_api.py       # pendiente
-├── test_captacion_mock.py      # pendiente
-├── test_planfami_api.py        # pendiente
-└── test_planfami_mock.py       # pendiente
+├── test_captacion.py           # pendiente (smoke como findrisc/planfami)
+└── test_vacunacion.py          # pendiente (smoke + parsing Excel)
 ```
 
 ---
@@ -808,7 +827,7 @@ curl -I http://127.0.0.1:8765/
 # Debe responder HTTP 200 text/html
 ```
 
-**Migración de base de datos:** Al actualizar desde versiones anteriores, la BD SQLite se migra automáticamente al arrancar. El schema actual es **v6**:
+**Migración de base de datos:** Al actualizar desde versiones anteriores, la BD SQLite se migra automáticamente al arrancar. El schema actual es **v7**:
 
 | Versión | Cambio |
 |---|---|
@@ -817,6 +836,7 @@ curl -I http://127.0.0.1:8765/
 | v4 | `extracciones.nombre` (nombre custom del job) |
 | v5 | `extracciones.regimen` + `extracciones.facturas` (cruce CAB/FAB Fase 2 DI) |
 | v6 | tabla `users` (multi-user + RBAC con bcrypt) |
+| v7 | `extracciones.created_by_username` + tabla `audit_log` (auditoría "quién hizo qué") |
 
 **Una extracción falla con error SQL:**
 1. Mirá el job en la vista — al expandir, el `mensaje_error` muestra el detalle del fallo SQL Server.
