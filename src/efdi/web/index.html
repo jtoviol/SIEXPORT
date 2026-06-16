@@ -1934,7 +1934,10 @@ function renderDashboard(d) {
   $("db-pdfs-mes").textContent      = fmt(d.global.pdfs_mes);
   $("db-afiliados-mes").textContent = fmt(d.global.afiliados_mes);
 
-  // Cards por módulo
+  // Cards por módulo + reconstruir activeTabsSet desde el dashboard data.
+  // Esto cierra el bug: desde el dashboard, navegar a otro módulo cuando hay
+  // uno corriendo en cualquier parte de la app debe bloquearse.
+  const activosTabs = new Set();
   document.querySelectorAll(".db-mod-card").forEach(card => {
     const mod = card.dataset.mod;
     const m = d.modulos[mod];
@@ -1945,10 +1948,12 @@ function renderDashboard(d) {
     card.querySelector(".db-mod-ultimo").textContent =
       m.ultimo ? "Última: " + fmtRel(m.ultimo) : "Sin actividad";
     card.onclick = () => switchTab(m.tab);
-    // Guardamos el tab destino en dataset para que refrescarBloqueoCardsDashboard()
-    // pueda evaluar el bloqueo sin tener que recargar el dashboard completo.
     card.dataset.tab = m.tab;
+    if ((m.en_curso || 0) > 0) activosTabs.add(m.tab);
   });
+  // Sincronizar el set global y el flag — switchTab los usa para bloquear.
+  activeTabsSet = activosTabs;
+  _activosDashboard = activosTabs.size > 0;
   refrescarBloqueoCardsDashboard();  // aplicar estado de bloqueo inmediatamente
   filtrarCardsDashboard();           // ocultar cards de módulos sin permiso (RBAC)
 
@@ -2028,8 +2033,15 @@ async function loadQuickStats() {
 }
 
 
+// Visto desde el dashboard summary: módulos que tienen jobs pending/running
+// AHORA MISMO en TODA la app (no solo en el módulo activo). loadJobs() solo
+// llena prevSt con los del módulo actual; sin esto el bloqueo no funciona
+// al venir directo desde el dashboard sin haber visitado el módulo del job.
+let _activosDashboard = false;
+
 function hasActiveJobs() {
-  return Object.values(prevSt).some(s => s === "pending" || s === "running");
+  return _activosDashboard ||
+    Object.values(prevSt).some(s => s === "pending" || s === "running");
 }
 
 function refrescarBloqueoCardsDashboard() {
@@ -2359,12 +2371,16 @@ async function loadJobs() {
     prevSt = Object.fromEntries(data.map(e => [e.id, e.estado]));
     // Recalcular qué módulos tienen jobs activos — usado por switchTab para
     // permitir volver SOLO al módulo del job corriendo desde el dashboard.
-    activeTabsSet = new Set(
+    // OJO: loadJobs() solo trae los jobs del módulo activo; los activos de
+    // OTROS módulos vienen del dashboard summary (sincronizados en renderDashboard).
+    const tabsActivosEnEsteModulo = new Set(
       data
         .filter(e => e.estado === "pending" || e.estado === "running")
         .map(e => _tipoToTab(e.tipo))
         .filter(Boolean)
     );
+    // Mergeamos con lo que ya teníamos para no perder los activos de otros módulos.
+    tabsActivosEnEsteModulo.forEach(t => activeTabsSet.add(t));
     const active = data.some(e => e.estado === "pending" || e.estado === "running");
     updateGenButtons(active);  // ← bloquea/habilita botones según haya jobs activos
     refrescarBloqueoCardsDashboard();  // visual feedback en cards del dashboard
