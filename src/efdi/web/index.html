@@ -2424,7 +2424,8 @@ async function selJob(id) {
     $("exp-dl").classList.toggle("pointer-events-none", disabled);
 
     if (job.estado === "completed") {
-      $("exp-meta").textContent = `${job.total_afiliados} ${unidadAgrupacion()} · ${job.total_pdfs} PDFs · ${fmtRel(job.creado_en)}`;
+      const creador = job.created_by_username ? ` · por ${job.created_by_username}` : "";
+      $("exp-meta").textContent = `${job.total_afiliados} ${unidadAgrupacion()} · ${job.total_pdfs} PDFs · ${fmtRel(job.creado_en)}${creador}`;
       await loadTreeWithSummary(id, job);
     } else if (job.estado === "failed") {
       $("exp-meta").textContent = STATUS.failed.label;

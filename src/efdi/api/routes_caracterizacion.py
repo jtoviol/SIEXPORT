@@ -9,12 +9,12 @@ from pathlib import Path
 from uuid import UUID, uuid4
 
 from fastapi import Depends, APIRouter, BackgroundTasks, HTTPException, Query, status
-from efdi.api.dependencies import require_modulo, require_no_viewer
+from efdi.api.dependencies import current_user, require_modulo, require_no_viewer
 from fastapi.responses import FileResponse
 
 from efdi.api.schemas import CrearExtraccionReq, ExtraccionResp, RenombrarJobReq
 from efdi.config import settings
-from efdi.domain.models import EstadoExtraccion, Extraccion, ExtraccionTipo, Lote, ModoPdf, estado_label, safe_filename
+from efdi.domain.models import User, EstadoExtraccion, Extraccion, ExtraccionTipo, Lote, ModoPdf, estado_label, safe_filename
 from efdi.infrastructure.job_store import store
 from efdi.infrastructure.repository_caracterizacion import get_caracterizacion_repository
 from efdi.services.extraction_caracterizacion import ejecutar_extraccion_caracterizacion
@@ -78,6 +78,7 @@ async def contar_registros_caracterizacion(
 async def crear_extraccion_caracterizacion(
     req: CrearExtraccionReq,
     background: BackgroundTasks,
+    current: User = Depends(current_user)
 ) -> ExtraccionResp:
     """Crea una extracción de Caracterización Familiar.
 
@@ -126,6 +127,7 @@ async def crear_extraccion_caracterizacion(
         nombre=nombre_default,
         regimen=reg,
         creado_en=datetime.now(),
+        created_by_username=current.username,
     )
     store.save(job)
     background.add_task(ejecutar_extraccion_caracterizacion, job)

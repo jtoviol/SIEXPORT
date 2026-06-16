@@ -86,6 +86,7 @@ class ExtraccionResp(BaseModel):
     creado_en: datetime
     completado_en: datetime | None = None
     mensaje_error: str | None = None
+    created_by_username: str | None = None
 
 
 class RenombrarJobReq(BaseModel):

@@ -746,3 +746,6 @@ class Extraccion(BaseModel):
     completado_en: datetime | None = None
     zip_path: str | None = None
     mensaje_error: str | None = None
+    # Auditoría: username del usuario que disparó el POST de creación.
+    # Nullable: jobs anteriores a la introducción de auth multi-user no lo tienen.
+    created_by_username: str | None = None

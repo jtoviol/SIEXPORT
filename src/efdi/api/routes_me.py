@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from efdi.api.dependencies import current_user
 from efdi.api.schemas import CambiarPasswordReq, UserPublic
 from efdi.domain.models import Rol, User
+from efdi.infrastructure.audit_log import write_audit
 from efdi.services.auth_service import cambiar_password
 
 router = APIRouter(prefix="/api/me", tags=["me"])
@@ -44,4 +45,8 @@ async def cambiar_mi_password(
         raise HTTPException(status_code=400, detail=str(e)) from e
     if not ok:
         raise HTTPException(status_code=401, detail="Password actual incorrecta")
+    write_audit(
+        actor=user.username, accion="me.change_password",
+        target_type="user", target_id=str(user.id), target_label=user.username,
+    )
     return {"actualizada": True}

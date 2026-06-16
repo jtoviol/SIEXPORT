@@ -44,6 +44,7 @@ def _row_to_extraccion(row) -> Extraccion:
         completado_en=datetime.fromisoformat(row["completado_en"]) if row["completado_en"] else None,
         zip_path=row["zip_path"],
         mensaje_error=row["mensaje_error"],
+        created_by_username=row["created_by_username"] if "created_by_username" in cols else None,
     )
 
 
@@ -94,8 +95,9 @@ class JobStore:
                     id, desde, hasta, limite, tamano_lote, total_lotes,
                     tipo, modo_pdf, nombre, regimen, facturas, estado,
                     total_atenciones, total_afiliados, total_pdfs,
-                    creado_en, completado_en, mensaje_error, zip_path
-                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                    creado_en, completado_en, mensaje_error, zip_path,
+                    created_by_username
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 ON CONFLICT(id) DO UPDATE SET
                     total_lotes=excluded.total_lotes,
                     tipo=excluded.tipo,
@@ -120,6 +122,7 @@ class JobStore:
                     job.creado_en.isoformat(),
                     job.completado_en.isoformat() if job.completado_en else None,
                     job.mensaje_error, job.zip_path,
+                    job.created_by_username,
                 ),
             )
 

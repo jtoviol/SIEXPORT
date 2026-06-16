@@ -9,7 +9,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, s
 from fastapi.responses import FileResponse
 
 from efdi import __version__
-from efdi.api.dependencies import require_modulo, require_no_viewer
+from efdi.api.dependencies import current_user, require_modulo, require_no_viewer
 from efdi.api.schemas import (
     ConteoFacturasResp,
     CrearExtraccionReq,
@@ -20,7 +20,7 @@ from efdi.api.schemas import (
     RenombrarJobReq,
 )
 from efdi.config import settings
-from efdi.domain.models import Atencion, EstadoExtraccion, Extraccion, ExtraccionTipo, Lote, estado_label, safe_filename
+from efdi.domain.models import User, Atencion, EstadoExtraccion, Extraccion, ExtraccionTipo, Lote, estado_label, safe_filename
 from efdi.infrastructure.db import db
 from efdi.infrastructure.job_store import store
 from efdi.infrastructure.repository import SqlServerRepository, get_repository
@@ -313,6 +313,7 @@ async def contar_por_facturas(
 async def crear_extraccion(
     req: CrearExtraccionReq,
     background: BackgroundTasks,
+    current: User = Depends(current_user)
 ) -> ExtraccionResp:
     """Dispara la generación de PDFs en background.
 
@@ -354,6 +355,7 @@ async def crear_extraccion(
         regimen=req.regimen,
         facturas=facturas,
         creado_en=datetime.now(),
+        created_by_username=current.username,
     )
     store.save(job)
     background.add_task(ejecutar_extraccion, job)

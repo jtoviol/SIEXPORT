@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from efdi.api.dependencies import require_admin
 from efdi.api.schemas import ResetPasswordReq, UserCreateReq, UserPublic, UserUpdateReq
 from efdi.domain.models import MODULOS_VALIDOS, Rol, User
+from efdi.infrastructure.audit_log import write_audit
 from efdi.infrastructure.user_store import users_store
 from efdi.services.auth_service import hash_password, resetear_password
 
@@ -72,6 +73,11 @@ async def crear_usuario(
         creado_por=admin.username,
     )
     users_store.save(u)
+    write_audit(
+        actor=admin.username, accion="user.create",
+        target_type="user", target_id=str(u.id), target_label=u.username,
+        detalle={"rol": str(req.rol), "modulos": list(u.modulos), "activo": u.activo},
+    )
     return _to_public(u)
 
 
@@ -92,6 +98,10 @@ async def actualizar_usuario(
     u = users_store.get(user_id)
     if u is None:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+    # Snapshot del estado previo para el audit detalle
+    antes = {"rol": str(u.rol), "modulos": list(u.modulos), "activo": u.activo,
+             "nombre": u.nombre, "email": u.email}
 
     if req.nombre is not None:
         u.nombre = req.nombre or None
@@ -117,6 +127,17 @@ async def actualizar_usuario(
         u.activo = req.activo
     u.actualizado_en = datetime.now()
     users_store.save(u)
+
+    despues = {"rol": str(u.rol), "modulos": list(u.modulos), "activo": u.activo,
+               "nombre": u.nombre, "email": u.email}
+    cambios = {k: {"antes": antes[k], "despues": despues[k]}
+               for k in antes if antes[k] != despues[k]}
+    if cambios:
+        write_audit(
+            actor=admin.username, accion="user.update",
+            target_type="user", target_id=str(u.id), target_label=u.username,
+            detalle={"cambios": cambios},
+        )
     return _to_public(u)
 
 
@@ -142,17 +163,32 @@ async def borrar_usuario(
                 detail="No podés borrar al último admin activo del sistema",
             )
     users_store.delete(user_id)
+    write_audit(
+        actor=admin.username, accion="user.delete",
+        target_type="user", target_id=str(u.id), target_label=u.username,
+        detalle={"rol": str(u.rol), "modulos": list(u.modulos)},
+    )
     return {"id": str(user_id), "borrado": True}
 
 
 @router.post("/{user_id}/reset-password", summary="Resetear password de un usuario")
-async def reset_password(user_id: UUID, req: ResetPasswordReq) -> dict:
+async def reset_password(
+    user_id: UUID,
+    req: ResetPasswordReq,
+    admin: User = Depends(require_admin),
+) -> dict:
     try:
         ok = resetear_password(user_id, req.password)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     if not ok:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    u = users_store.get(user_id)
+    write_audit(
+        actor=admin.username, accion="user.reset_password",
+        target_type="user", target_id=str(user_id),
+        target_label=u.username if u else None,
+    )
     return {"id": str(user_id), "password_reseteado": True}
 
 
@@ -160,3 +196,19 @@ async def reset_password(user_id: UUID, req: ResetPasswordReq) -> dict:
 async def listar_modulos_validos() -> dict:
     """Útil para que el frontend pinte el grid de checkboxes de módulos."""
     return {"modulos": list(MODULOS_VALIDOS)}
+
+
+@router.get("/_audit/log", summary="Audit log de eventos críticos (solo ADMIN)")
+async def listar_audit_log(
+    limit: int = 200,
+    actor: str | None = None,
+    target_id: str | None = None,
+) -> dict:
+    """Devuelve los últimos N eventos del audit log.
+
+    Filtros opcionales: `actor` (username del que ejecutó la acción) y
+    `target_id` (UUID del usuario afectado). Útil para responder
+    'quién creó/borró/editó al usuario X' y para cumplimiento."""
+    from efdi.infrastructure.audit_log import list_audit
+    eventos = list_audit(limit=limit, actor=actor, target_id=target_id)
+    return {"total": len(eventos), "eventos": eventos}

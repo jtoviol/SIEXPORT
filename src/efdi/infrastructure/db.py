@@ -7,7 +7,7 @@ from threading import Lock
 
 from efdi.config import settings
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_version (version INTEGER PRIMARY KEY);
@@ -29,6 +29,23 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username);
 CREATE INDEX IF NOT EXISTS idx_users_activo ON users(activo);
 
+-- Audit log: eventos críticos sobre usuarios (create/update/delete/reset-pwd/etc.)
+-- `actor` y `target` se guardan como USERNAMES históricos (no FK) — sobreviven
+-- al borrado del user. `detalle` es JSON con cambios o metadata.
+CREATE TABLE IF NOT EXISTS audit_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts TEXT NOT NULL,
+    actor_username TEXT NOT NULL,
+    accion TEXT NOT NULL,
+    target_type TEXT,
+    target_id TEXT,
+    target_label TEXT,
+    detalle TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_audit_ts     ON audit_log(ts DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_actor  ON audit_log(actor_username);
+CREATE INDEX IF NOT EXISTS idx_audit_target ON audit_log(target_type, target_id);
+
 CREATE TABLE IF NOT EXISTS extracciones (
     id TEXT PRIMARY KEY,
     desde TEXT NOT NULL,
@@ -48,8 +65,10 @@ CREATE TABLE IF NOT EXISTS extracciones (
     creado_en TEXT NOT NULL,
     completado_en TEXT,
     mensaje_error TEXT,
-    zip_path TEXT
+    zip_path TEXT,
+    created_by_username TEXT
 );
+CREATE INDEX IF NOT EXISTS idx_extracciones_creador ON extracciones(created_by_username);
 
 CREATE TABLE IF NOT EXISTS lotes (
     job_id TEXT NOT NULL,
@@ -115,6 +134,24 @@ class Database:
             for ddl in (
                 "CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username)",
                 "CREATE INDEX IF NOT EXISTS idx_users_activo ON users(activo)",
+            ):
+                try:
+                    conn.execute(ddl)
+                except Exception:
+                    pass
+        if current_version < 7:
+            # Auditoría: quién creó cada extracción + tabla audit_log para eventos
+            # críticos sobre usuarios. Columna nullable: los jobs creados antes de v7
+            # quedan con NULL (no romper data histórica).
+            try:
+                conn.execute("ALTER TABLE extracciones ADD COLUMN created_by_username TEXT")
+            except Exception:
+                pass
+            for ddl in (
+                "CREATE INDEX IF NOT EXISTS idx_audit_ts     ON audit_log(ts DESC)",
+                "CREATE INDEX IF NOT EXISTS idx_audit_actor  ON audit_log(actor_username)",
+                "CREATE INDEX IF NOT EXISTS idx_audit_target ON audit_log(target_type, target_id)",
+                "CREATE INDEX IF NOT EXISTS idx_extracciones_creador ON extracciones(created_by_username)",
             ):
                 try:
                     conn.execute(ddl)

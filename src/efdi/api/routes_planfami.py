@@ -6,12 +6,12 @@ from pathlib import Path
 from uuid import UUID, uuid4
 
 from fastapi import Depends, APIRouter, BackgroundTasks, HTTPException, Query, status
-from efdi.api.dependencies import require_modulo, require_no_viewer
+from efdi.api.dependencies import current_user, require_modulo, require_no_viewer
 from fastapi.responses import FileResponse
 
 from efdi.api.schemas import CrearExtraccionReq, ExtraccionResp, RenombrarJobReq
 from efdi.config import settings
-from efdi.domain.models import EstadoExtraccion, Extraccion, ExtraccionTipo, Lote, ModoPdf, estado_label, safe_filename
+from efdi.domain.models import User, EstadoExtraccion, Extraccion, ExtraccionTipo, Lote, ModoPdf, estado_label, safe_filename
 from efdi.infrastructure.job_store import store
 from efdi.infrastructure.repository_planfami import get_planfami_repository
 from efdi.services.extraction_planfami import ejecutar_extraccion_planfami
@@ -77,6 +77,7 @@ async def contar_registros_planfami(
 async def crear_extraccion_planfami(
     req: CrearExtraccionReq,
     background: BackgroundTasks,
+    current: User = Depends(current_user)
 ) -> ExtraccionResp:
     # Mismo patrón que DI/FINDRISC/Captación: CAB+N / FAB+N es el código de régimen.
     facturas: list[str] | None = None
@@ -113,6 +114,7 @@ async def crear_extraccion_planfami(
         regimen=req.regimen,
         facturas=facturas,
         creado_en=datetime.now(),
+        created_by_username=current.username,
     )
     store.save(job)
     background.add_task(ejecutar_extraccion_planfami, job)

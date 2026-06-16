@@ -18,7 +18,7 @@ from pathlib import Path
 from uuid import UUID, uuid4
 
 from fastapi import Depends, APIRouter, BackgroundTasks, File, HTTPException, UploadFile, status
-from efdi.api.dependencies import require_modulo, require_no_viewer
+from efdi.api.dependencies import current_user, require_modulo, require_no_viewer
 from fastapi.responses import FileResponse
 
 from efdi.api.schemas import (
@@ -34,6 +34,7 @@ from efdi.domain.models import (
     ExtraccionTipo,
     Lote,
     ModoPdf,
+    User,
     estado_label,
     safe_filename,
 )
@@ -163,6 +164,7 @@ async def borrar_upload_vacunacion(upload_id: UUID) -> dict:
 async def crear_extraccion_vacunacion(
     req: CrearVacunacionReq,
     background: BackgroundTasks,
+    current: User = Depends(current_user),
 ) -> list[ExtraccionResp]:
     """Crea 1 job por cada régimen en `req.regimenes` (uno o ambos). Cada job
     procesa el mismo Excel filtrando por su régimen."""
@@ -198,6 +200,7 @@ async def crear_extraccion_vacunacion(
             regimen=regimen,
             excel_path=str(excel_path),
             creado_en=datetime.now(),
+            created_by_username=current.username,
         )
         store.save(job)
         background.add_task(ejecutar_extraccion_vacunacion, job)

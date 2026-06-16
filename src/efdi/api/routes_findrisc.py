@@ -6,12 +6,12 @@ from pathlib import Path
 from uuid import UUID, uuid4
 
 from fastapi import Depends, APIRouter, BackgroundTasks, HTTPException, Query, status
-from efdi.api.dependencies import require_modulo, require_no_viewer
+from efdi.api.dependencies import current_user, require_modulo, require_no_viewer
 from fastapi.responses import FileResponse
 
 from efdi.api.schemas import CrearExtraccionReq, ExtraccionResp, RenombrarJobReq
 from efdi.config import settings
-from efdi.domain.models import EstadoExtraccion, Extraccion, ExtraccionTipo, Lote, ModoPdf, estado_label, safe_filename
+from efdi.domain.models import User, EstadoExtraccion, Extraccion, ExtraccionTipo, Lote, ModoPdf, estado_label, safe_filename
 from efdi.infrastructure.job_store import store
 from efdi.infrastructure.repository_findrisc import get_findrisc_repository, SqlServerFindriscRepository
 from efdi.services.extraction_findrisc import ejecutar_extraccion_findrisc
@@ -77,6 +77,7 @@ async def contar_registros_findrisc(
 async def crear_extraccion_findrisc(
     req: CrearExtraccionReq,
     background: BackgroundTasks,
+    current: User = Depends(current_user)
 ) -> ExtraccionResp:
     # Mismo patrón que DI: si viene numero_factura armamos CABn+FABn — el código
     # completo (CAB+N o FAB+N) ES el régimen, y SUBSIDIADO/CONTRIBUTIVO declara
@@ -115,6 +116,7 @@ async def crear_extraccion_findrisc(
         regimen=req.regimen,
         facturas=facturas,
         creado_en=datetime.now(),
+        created_by_username=current.username,
     )
     store.save(job)
     background.add_task(ejecutar_extraccion_findrisc, job)
