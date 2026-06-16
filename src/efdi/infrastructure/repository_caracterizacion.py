@@ -18,13 +18,22 @@ log = logging.getLogger(__name__)
 
 
 class CaracterizacionRepository(Protocol):
-    """`limite` y `offset` se expresan en FAMILIAS (no en filas-persona)."""
+    """`limite` y `offset` se expresan en FAMILIAS (no en filas-persona).
+
+    `regimen` filtra por el régimen DEL JEFE DE FAMILIA (parentes='1'):
+      - 'SUBSIDIADO'   → solo familias cuyo jefe es 'S'
+      - 'CONTRIBUTIVO' → solo familias cuyo jefe es 'C'
+      - None           → todas las familias, sin filtro
+    Familias sin jefe explícito caen al primer integrante por orden natural BD.
+    Familias con jefe en régimen distinto de S/C (N, O, P) quedan fuera de ambos lotes.
+    """
 
     def obtener_registros(
         self, desde: date, hasta: date, limite: int, offset: int = 0,
+        regimen: str | None = None,
     ) -> list[RegistroCaracterizacion]: ...
 
-    def get_total(self, desde: date, hasta: date) -> int: ...
+    def get_total(self, desde: date, hasta: date, regimen: str | None = None) -> int: ...
 
 
 # === Query principal paginada POR FAMILIA =====================================
@@ -42,7 +51,25 @@ class CaracterizacionRepository(Protocol):
 # `_parentes_cod` se expone solo para ordenar dentro de cada familia (JEFE
 # DE FAMILIA primero, después cónyuge, hijos, etc.); no llega al modelo.
 QUERY_CARACTERIZACION = """
-WITH X AS (
+WITH regimen_familiar AS (
+    -- Régimen "representativo" de cada familia: el del JEFE DE FAMILIA
+    -- (parentes='1'). Si hay varios jefes, gana el de menor uid (orden BD).
+    -- Si NO hay ningún jefe, cae al primer integrante por uid.
+    SELECT ciuf, tipousua AS regimen_jefe
+    FROM (
+        SELECT
+            PC.ciuf, PC.tipousua,
+            ROW_NUMBER() OVER (
+                PARTITION BY PC.ciuf
+                ORDER BY
+                    CASE WHEN PC.parentes = '1' THEN 0 ELSE 1 END,
+                    PC.uid
+            ) AS rn
+        FROM SBW_PERSONA_CARACTERIZADA PC
+    ) X
+    WHERE rn = 1
+),
+X AS (
     SELECT
         DENSE_RANK() OVER (
             ORDER BY PC.[codniv1], PC.[codniv2], PC.[codniv3], PC.[codniv4],
@@ -106,8 +133,10 @@ WITH X AS (
     LEFT JOIN AVS_MUNICIPIO_SALUD     M  ON M.COD_MUNICIPIO    = PC.codniv1 + PC.codniv2
     LEFT JOIN AVS_TIPO_FAMILIA        TF ON TF.COD_TIPO_FAMILIA = UF.tipofami
     LEFT JOIN SBW_TIPO_DISCAPACIDAD   TD ON TD.COD_TIPO_DISCAPACIDAD = PC.discap
+    INNER JOIN regimen_familiar       RF ON RF.ciuf              = PC.ciuf
     WHERE UF.fecha_reg >= ?
       AND UF.fecha_reg <= ?
+      {regimen_filter}
 )
 SELECT *
 FROM X
@@ -119,6 +148,21 @@ ORDER BY X.FAM_NUM, X._parentes_cod, X.num_documento
 # paginación). El CONCAT replica exactamente las columnas del DENSE_RANK.
 # No incluye los joins de catálogos: no afectan la cantidad de familias.
 QUERY_CARACTERIZACION_COUNT = """
+WITH regimen_familiar AS (
+    SELECT ciuf, tipousua AS regimen_jefe
+    FROM (
+        SELECT
+            PC.ciuf, PC.tipousua,
+            ROW_NUMBER() OVER (
+                PARTITION BY PC.ciuf
+                ORDER BY
+                    CASE WHEN PC.parentes = '1' THEN 0 ELSE 1 END,
+                    PC.uid
+            ) AS rn
+        FROM SBW_PERSONA_CARACTERIZADA PC
+    ) X
+    WHERE rn = 1
+)
 SELECT COUNT(DISTINCT CONCAT(
     PC.[codniv1], '|', PC.[codniv2], '|', PC.[codniv3], '|', PC.[codniv4], '|',
     PC.[codniv5], '|', PC.[codniv6], '|', PC.[codvivi], '|', PC.[codfami], '|',
@@ -126,9 +170,24 @@ SELECT COUNT(DISTINCT CONCAT(
 )) AS total
 FROM SBW_PERSONA_CARACTERIZADA PC
 LEFT JOIN SBW_UBICACION_FAMILIA UF ON UF.UID = PC.uid AND UF.ciuf = PC.ciuf
+INNER JOIN regimen_familiar RF ON RF.ciuf = PC.ciuf
 WHERE UF.fecha_reg >= ?
   AND UF.fecha_reg <= ?
+  {regimen_filter}
 """
+
+# Mapeo régimen humano → código de PC.tipousua (catálogo SBW_TIPO_REGIMEN_SGSSS)
+_REGIMEN_TO_COD = {"SUBSIDIADO": "S", "CONTRIBUTIVO": "C"}
+
+
+def _regimen_filter(regimen: str | None) -> tuple[str, list]:
+    """Devuelve (sql_fragment, params_extra) para inyectar en la query."""
+    if regimen is None:
+        return "", []
+    cod = _REGIMEN_TO_COD.get(regimen.upper().strip())
+    if cod is None:
+        return "", []
+    return "AND RF.regimen_jefe = ?", [cod]
 
 
 # ─── helpers ──────────────────────────────────────────────────────────────────
@@ -168,84 +227,138 @@ def _fila_a_registro(r: dict) -> RegistroCaracterizacion:
 
 # ─── Mock para desarrollo ─────────────────────────────────────────────────────
 
+# Catálogos en descripción legible (igual que el repo real con los joins).
+_MOCK_NOMBRES = ["JOSE", "MARIA", "LUIS", "ANA", "CARLOS", "ROSA", "PEDRO", "LUZ"]
+_MOCK_APELLIDOS = ["GARCIA", "LOPEZ", "MARTINEZ", "RODRIGUEZ", "GONZALEZ", "PEREZ"]
+_MOCK_PARENTESCOS_OTROS = ["CONYUGE", "HIJO", "OTROS PARIENTES (Padres, Suegros, etc)",
+                           "OTROS MIEMBROS, NO PARIENTES"]
+_MOCK_OCUPACIONES = ["TRABAJANDO", "ESTUDIANDO", "OFICIOS DEL HOGAR",
+                     "JUBILADO,PENSIONADO", "NO APLICA, POR EDAD", "SIN OCUPACION/INGRESO"]
+_MOCK_ETNIAS = ["NINGUNO", "INDIGENA", "AFRODESCENDIENTES-NEGROS-RAIZALES"]
+_MOCK_PROGRAMAS = ["NO PERTENECE A NINGUN PROGRAMA", "MAS FAMILIAS EN ACCION",
+                   "JOVENES EN ACCION", "HOGAR DE BIENESTAR FAMILIAR"]
+_MOCK_DISCAPACIDADES = ["NINGUNA", "AUDITIVA:SORDA", "VISUAL:CIEGA TOTAL",
+                        "FISICA:AMPUTACION", "DISCAPACIDAD MENTAL"]
+_MOCK_TIPOS_FAMILIA = ["NUCLEAR", "EXTENSA - COMPUESTA", "MONOPARENTAL"]
+_MOCK_REGIMENES = ["SUBSIDIADO", "CONTRIBUTIVO", "POBRE NO ASEGURADO",
+                   "OTRO (Regimen especial)", "PARTICULAR"]
+_MOCK_REGIMENES_PESOS = [0.95, 0.04, 0.003, 0.002, 0.005]
+# Total simulado de familias en el mock — define el universo paginable.
+_MOCK_TOTAL_FAMILIAS = 200
+
+
+def _mock_regimen_jefe(n_familia: int) -> str:
+    """Régimen DEL JEFE (m==0) de una familia mock. Determinístico por n_familia.
+
+    Coincide con la regla de negocio del repo real: el jefe representa a toda
+    la familia. Usado para filtrar por régimen en el mock.
+    """
+    import random
+    seq_jefe = n_familia * 4 + 0
+    rng = random.Random(seq_jefe * 17)
+    return rng.choices(_MOCK_REGIMENES, weights=_MOCK_REGIMENES_PESOS, k=1)[0]
+
+
 class MockCaracterizacionRepository:
     def obtener_registros(
         self, desde: date, hasta: date, limite: int, offset: int = 0,
+        regimen: str | None = None,
     ) -> list[RegistroCaracterizacion]:
         import random
         from datetime import timedelta
 
-        # Catálogos en descripción legible (igual que el repo real con los joins).
-        nombres = ["JOSE", "MARIA", "LUIS", "ANA", "CARLOS", "ROSA", "PEDRO", "LUZ"]
-        apellidos = ["GARCIA", "LOPEZ", "MARTINEZ", "RODRIGUEZ", "GONZALEZ", "PEREZ"]
-        # Parentesco: el primero (m==0) siempre JEFE DE FAMILIA; el resto rota.
-        parentescos_otros = ["CONYUGE", "HIJO", "OTROS PARIENTES (Padres, Suegros, etc)",
-                             "OTROS MIEMBROS, NO PARIENTES"]
-        ocupaciones = ["TRABAJANDO", "ESTUDIANDO", "OFICIOS DEL HOGAR",
-                       "JUBILADO,PENSIONADO", "NO APLICA, POR EDAD", "SIN OCUPACION/INGRESO"]
-        etnias = ["NINGUNO", "INDIGENA", "AFRODESCENDIENTES-NEGROS-RAIZALES"]
-        programas_mock = ["NO PERTENECE A NINGUN PROGRAMA", "MAS FAMILIAS EN ACCION",
-                          "JOVENES EN ACCION", "HOGAR DE BIENESTAR FAMILIAR"]
-        discapacidades_mock = ["NINGUNA", "AUDITIVA:SORDA", "VISUAL:CIEGA TOTAL",
-                               "FISICA:AMPUTACION", "DISCAPACIDAD MENTAL"]
-        tipos_familia = ["NUCLEAR", "EXTENSA - COMPUESTA", "MONOPARENTAL"]
-        # Catálogo SBW_TIPO_REGIMEN_SGSSS — régimen a NIVEL PERSONA: cada
-        # integrante puede tener uno distinto (familias mixtas ~4% reales).
-        regimenes_desc = ["SUBSIDIADO", "CONTRIBUTIVO", "POBRE NO ASEGURADO",
-                          "OTRO (Regimen especial)", "PARTICULAR"]
-        regimenes_pesos = [0.95, 0.04, 0.003, 0.002, 0.005]
+        target_reg = regimen.upper().strip() if regimen else None
 
         regs: list[RegistroCaracterizacion] = []
-        # limite/offset en FAMILIAS (igual que el repo real): cada familia trae
-        # 4 integrantes completos — una familia nunca se parte entre lotes.
-        for f in range(limite):
-            n_familia = offset + f
-            for m in range(4):
-                seq = n_familia * 4 + m
-                # rng_fam: campos compartidos por la familia (geografía, ubicación).
-                # rng: campos propios de cada integrante.
-                rng_fam = random.Random(n_familia * 31)
-                rng = random.Random(seq * 17)
-                fecha_r = desde + timedelta(days=rng_fam.randint(0, max((hasta - desde).days, 0)))
-                des_reg = rng.choices(regimenes_desc, weights=regimenes_pesos, k=1)[0]
-                es_cabeza = m == 0
-                # Teléfonos: a veces vienen como N/A simulando datos sin teléfono.
-                tel1 = "N/A" if rng_fam.random() < 0.1 else f"30{rng_fam.randint(0, 9)}{rng_fam.randint(1000000, 9999999)}"
-                regs.append(RegistroCaracterizacion(
-                    # Descripciones ya legibles (como las devuelve el SQL real).
-                    departamento="BOLIVAR", municipio=f"MUNICIPIO {rng_fam.randint(1, 99):03d}",
-                    area=rng_fam.choice(["URBANA", "RURAL"]), corregimiento="00",
-                    barrio_vereda=f"{rng_fam.randint(1, 50):03d}", manzana=f"{rng_fam.randint(1, 20):02d}",
-                    vivienda=f"{n_familia % 999 + 1:04d}", familia=f"{n_familia % 9 + 1}",
-                    tipo_familia=rng_fam.choice(tipos_familia),
-                    ciuf=str(100000 + n_familia),
-                    tipo_documento=rng.choice(["CC", "TI", "RC"]) if not es_cabeza else "CC",
-                    num_documento=str(1_000_000_000 + seq),
-                    nombres_apellidos=f"{rng.choice(nombres)} {rng.choice(apellidos)} {rng.choice(apellidos)}",
-                    sexo=rng.choice(["M", "F"]),
-                    fecha_nacimiento=f"19{rng.randint(40, 99):02d}-{rng.randint(1, 12):02d}-{rng.randint(1, 28):02d}",
-                    edad=str(rng.randint(1, 90)), unidades="A",
-                    parentesco="JEFE DE FAMILIA" if es_cabeza else rng.choice(parentescos_otros),
-                    estudia=rng.choice(["SI", "NO"]), anos_aprobados=str(rng.randint(0, 11)),
-                    nombre_ocupacion=rng.choice(ocupaciones),
-                    nombre_institucion="ASOCIACION MUTUAL SER - EMPRESA SOLIDARIA DE SALUD E.S.S.",
-                    descripcion_regimen=des_reg,
-                    etnia=rng.choice(etnias), gae=rng.choice(["0", "1"]),
-                    programa=rng.choice(programas_mock),
-                    discapacidad=rng.choice(discapacidades_mock),
-                    fecha_registro=str(fecha_r),
-                    latitud=f"{rng_fam.randint(8, 10)} {rng_fam.randint(0, 59)} N",
-                    longitud=f"{rng_fam.randint(74, 76)} {rng_fam.randint(0, 59)} W",
-                    cohorte=str(rng_fam.randint(1, 5)), visita=str(rng_fam.randint(1, 3)),
-                    sisben_grupo=rng_fam.choice(["A", "B", "C"]), sisben_subgrupo=str(rng_fam.randint(1, 9)),
-                    direccion=f"CALLE {rng_fam.randint(1, 99)} # {rng_fam.randint(1, 99)}-{rng_fam.randint(1, 99)}",
-                    telefono_1=tel1,
-                    telefono_2="N/A", correo="N/A",
-                ))
+        familias_emitidas = 0           # familias agregadas a la salida
+        familias_filtradas_vistas = 0   # familias que cumplen el filtro (para offset)
+        n_familia = 0                   # índice global del universo mock
+
+        # Iteramos el universo hasta llenar `limite` familias post-filtro
+        # (o agotar el universo simulado).
+        while familias_emitidas < limite and n_familia < _MOCK_TOTAL_FAMILIAS:
+            # ¿La familia n_familia pasa el filtro por régimen del jefe?
+            pasa = target_reg is None or _mock_regimen_jefe(n_familia) == target_reg
+
+            if pasa:
+                # Saltamos las primeras `offset` familias filtradas
+                if familias_filtradas_vistas >= offset:
+                    self._emit_familia(regs, n_familia, desde, hasta)
+                    familias_emitidas += 1
+                familias_filtradas_vistas += 1
+
+            n_familia += 1
+
         return regs
 
-    def get_total(self, desde: date, hasta: date) -> int:
-        return 200   # familias (la unidad de paginación), no filas-persona
+    def _emit_familia(self, out: list, n_familia: int, desde: date, hasta: date) -> None:
+        """Agrega los 4 integrantes de la familia n al output."""
+        import random
+        from datetime import timedelta
+
+        rng_fam = random.Random(n_familia * 31)
+        fecha_r = desde + timedelta(days=rng_fam.randint(0, max((hasta - desde).days, 0)))
+        # Teléfonos: a veces vienen como N/A simulando datos sin teléfono.
+        tel1 = ("N/A" if rng_fam.random() < 0.1
+                else f"30{rng_fam.randint(0, 9)}{rng_fam.randint(1000000, 9999999)}")
+        # Campos compartidos por la familia
+        depto = "BOLIVAR"
+        muni = f"MUNICIPIO {rng_fam.randint(1, 99):03d}"
+        area = rng_fam.choice(["URBANA", "RURAL"])
+        barrio = f"{rng_fam.randint(1, 50):03d}"
+        manzana = f"{rng_fam.randint(1, 20):02d}"
+        viv = f"{n_familia % 999 + 1:04d}"
+        fam_num = f"{n_familia % 9 + 1}"
+        tipo_fam = rng_fam.choice(_MOCK_TIPOS_FAMILIA)
+        ciuf = str(100000 + n_familia)
+        lat = f"{rng_fam.randint(8, 10)} {rng_fam.randint(0, 59)} N"
+        lon = f"{rng_fam.randint(74, 76)} {rng_fam.randint(0, 59)} W"
+        cohorte = str(rng_fam.randint(1, 5))
+        visita = str(rng_fam.randint(1, 3))
+        sis_g = rng_fam.choice(["A", "B", "C"])
+        sis_sg = str(rng_fam.randint(1, 9))
+        dir_ = f"CALLE {rng_fam.randint(1, 99)} # {rng_fam.randint(1, 99)}-{rng_fam.randint(1, 99)}"
+
+        for m in range(4):
+            seq = n_familia * 4 + m
+            rng = random.Random(seq * 17)
+            des_reg = rng.choices(_MOCK_REGIMENES, weights=_MOCK_REGIMENES_PESOS, k=1)[0]
+            es_cabeza = m == 0
+            out.append(RegistroCaracterizacion(
+                departamento=depto, municipio=muni, area=area,
+                corregimiento="00", barrio_vereda=barrio, manzana=manzana,
+                vivienda=viv, familia=fam_num, tipo_familia=tipo_fam, ciuf=ciuf,
+                tipo_documento=rng.choice(["CC", "TI", "RC"]) if not es_cabeza else "CC",
+                num_documento=str(1_000_000_000 + seq),
+                nombres_apellidos=f"{rng.choice(_MOCK_NOMBRES)} {rng.choice(_MOCK_APELLIDOS)} {rng.choice(_MOCK_APELLIDOS)}",
+                sexo=rng.choice(["M", "F"]),
+                fecha_nacimiento=f"19{rng.randint(40, 99):02d}-{rng.randint(1, 12):02d}-{rng.randint(1, 28):02d}",
+                edad=str(rng.randint(1, 90)), unidades="A",
+                parentesco="JEFE DE FAMILIA" if es_cabeza else rng.choice(_MOCK_PARENTESCOS_OTROS),
+                estudia=rng.choice(["SI", "NO"]), anos_aprobados=str(rng.randint(0, 11)),
+                nombre_ocupacion=rng.choice(_MOCK_OCUPACIONES),
+                nombre_institucion="ASOCIACION MUTUAL SER - EMPRESA SOLIDARIA DE SALUD E.S.S.",
+                descripcion_regimen=des_reg,
+                etnia=rng.choice(_MOCK_ETNIAS), gae=rng.choice(["0", "1"]),
+                programa=rng.choice(_MOCK_PROGRAMAS),
+                discapacidad=rng.choice(_MOCK_DISCAPACIDADES),
+                fecha_registro=str(fecha_r), latitud=lat, longitud=lon,
+                cohorte=cohorte, visita=visita,
+                sisben_grupo=sis_g, sisben_subgrupo=sis_sg,
+                direccion=dir_, telefono_1=tel1,
+                telefono_2="N/A", correo="N/A",
+            ))
+
+    def get_total(self, desde: date, hasta: date, regimen: str | None = None) -> int:
+        """Total de familias en el mock filtradas por régimen del jefe."""
+        target_reg = regimen.upper().strip() if regimen else None
+        if target_reg is None:
+            return _MOCK_TOTAL_FAMILIAS
+        # Recorre el universo simulado y cuenta las que matchean
+        return sum(
+            1 for n in range(_MOCK_TOTAL_FAMILIAS)
+            if _mock_regimen_jefe(n) == target_reg
+        )
 
 
 # ─── SQL Server real (sibacom) ────────────────────────────────────────────────
@@ -253,6 +366,7 @@ class MockCaracterizacionRepository:
 class SqlServerCaracterizacionRepository:
     def obtener_registros(
         self, desde: date, hasta: date, limite: int, offset: int = 0,
+        regimen: str | None = None,
     ) -> list[RegistroCaracterizacion]:
         try:
             import pyodbc
@@ -260,13 +374,17 @@ class SqlServerCaracterizacionRepository:
             raise RuntimeError("pyodbc no instalado") from e
 
         fecha_inicio, fecha_final = _fechas_dt(desde, hasta)
+        reg_sql, reg_params = _regimen_filter(regimen)
+        sql = QUERY_CARACTERIZACION.format(regimen_filter=reg_sql)
         log.info("caracterizacion.query", extra={"desde": str(desde), "hasta": str(hasta),
-                                                 "familias": limite, "offset": offset})
+                                                 "familias": limite, "offset": offset,
+                                                 "regimen": regimen})
 
         with pyodbc.connect(settings.db_dsn_sibacom, timeout=60) as conn:
             cur = conn.cursor()
-            # Rango de familias: FAM_NUM en (offset, offset + limite]
-            cur.execute(QUERY_CARACTERIZACION, fecha_inicio, fecha_final, offset, offset + limite)
+            # Params orden: fecha_ini, fecha_fin, [cod_regimen?], offset_lo, offset_hi
+            params = [fecha_inicio, fecha_final, *reg_params, offset, offset + limite]
+            cur.execute(sql, *params)
             cols = [c[0] for c in cur.description]
             rows = [dict(zip(cols, r, strict=False)) for r in cur.fetchall()]
 
@@ -274,16 +392,18 @@ class SqlServerCaracterizacionRepository:
         log.info("caracterizacion.fetched", extra={"rows": len(registros)})
         return registros
 
-    def get_total(self, desde: date, hasta: date) -> int:
+    def get_total(self, desde: date, hasta: date, regimen: str | None = None) -> int:
         try:
             import pyodbc
         except ImportError:
             return 0
         fecha_inicio, fecha_final = _fechas_dt(desde, hasta)
+        reg_sql, reg_params = _regimen_filter(regimen)
+        sql = QUERY_CARACTERIZACION_COUNT.format(regimen_filter=reg_sql)
         try:
             with pyodbc.connect(settings.db_dsn_sibacom, timeout=30) as conn:
                 cur = conn.cursor()
-                cur.execute(QUERY_CARACTERIZACION_COUNT, fecha_inicio, fecha_final)
+                cur.execute(sql, fecha_inicio, fecha_final, *reg_params)
                 row = cur.fetchone()
                 return int(row[0]) if row else 0
         except Exception:

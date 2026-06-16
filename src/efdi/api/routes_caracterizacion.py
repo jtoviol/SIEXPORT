@@ -39,11 +39,21 @@ def _auto_tamano_lote(limite: int) -> int:
 async def contar_registros_caracterizacion(
     desde: date = Query(...),
     hasta: date = Query(...),
+    regimen: str | None = Query(
+        None,
+        description=(
+            "Si viene 'SUBSIDIADO' o 'CONTRIBUTIVO', cuenta solo familias cuyo "
+            "JEFE DE FAMILIA tenga ese régimen (regla de negocio del módulo)."
+        ),
+    ),
 ) -> dict:
     if hasta < desde:
         raise HTTPException(status_code=400, detail="hasta debe ser >= desde")
+    reg = (regimen or "").strip().upper() or None
+    if reg is not None and reg not in ("SUBSIDIADO", "CONTRIBUTIVO"):
+        raise HTTPException(status_code=400, detail="regimen debe ser SUBSIDIADO o CONTRIBUTIVO")
     repo = get_caracterizacion_repository()
-    total = repo.get_total(desde, hasta)
+    total = repo.get_total(desde, hasta, regimen=reg)
     if total <= 0:
         return {"total_en_db": 0, "limite_efectivo": 0, "tamano_lote": 0, "lotes_estimados": 0, "capeado": False}
     limite_efectivo = total
@@ -69,18 +79,29 @@ async def crear_extraccion_caracterizacion(
     req: CrearExtraccionReq,
     background: BackgroundTasks,
 ) -> ExtraccionResp:
-    # Este módulo NO usa factura ni régimen — solo rango de fechas.
-    # `limite` y `tamano_lote` se expresan en FAMILIAS (la unidad de PDF):
-    # el repositorio pagina con DENSE_RANK y nunca parte una familia entre lotes.
+    """Crea una extracción de Caracterización Familiar.
+
+    Acepta `regimen` ('SUBSIDIADO' o 'CONTRIBUTIVO') para filtrar familias
+    según el régimen del JEFE DE FAMILIA. Sin régimen, trae todas las familias.
+    Este módulo NO usa factura.
+
+    `limite` y `tamano_lote` se expresan en FAMILIAS: el repositorio pagina
+    con DENSE_RANK y nunca parte una familia entre lotes.
+    """
+    reg = (req.regimen or "").strip().upper() or None
+    if reg is not None and reg not in ("SUBSIDIADO", "CONTRIBUTIVO"):
+        raise HTTPException(status_code=400, detail="regimen debe ser SUBSIDIADO o CONTRIBUTIVO")
+
     limite = req.limite
     if limite is None:
         repo = get_caracterizacion_repository()
-        total = repo.get_total(req.desde, req.hasta)
+        total = repo.get_total(req.desde, req.hasta, regimen=reg)
         if total <= 0:
+            sufijo = f" con régimen {reg}" if reg else ""
             raise HTTPException(
                 status_code=400,
                 detail=(
-                    "No se encontraron registros de Caracterización Familiar para el rango indicado. "
+                    f"No se encontraron familias para el rango indicado{sufijo}. "
                     "Verifica el conteo previo y la conexión a la base de datos sibacom."
                 ),
             )
@@ -88,8 +109,11 @@ async def crear_extraccion_caracterizacion(
 
     tamano_lote = req.tamano_lote or _auto_tamano_lote(limite)
 
-    # Nombre default: este módulo no usa régimen, así que solo va el rango.
-    nombre_default = f"CARACT. FAM. {req.desde}—{req.hasta}"
+    nombre_default = (
+        f"CARACT. FAM. {req.desde}—{req.hasta} · {reg}"
+        if reg else
+        f"CARACT. FAM. {req.desde}—{req.hasta}"
+    )
 
     job = Extraccion(
         id=uuid4(),
@@ -100,6 +124,7 @@ async def crear_extraccion_caracterizacion(
         tipo=ExtraccionTipo.CARACTERIZACION_FAMILIAR,
         modo_pdf=ModoPdf.UNO_POR_ATENCION,
         nombre=nombre_default,
+        regimen=reg,
         creado_en=datetime.now(),
     )
     store.save(job)

@@ -54,6 +54,7 @@ def _procesar_lote_caracterizacion(job: Extraccion, lote: Lote, pool: "mp.pool.P
             hasta=job.hasta,
             limite=lote.tamano,
             offset=lote.offset_inicio,
+            regimen=job.regimen,        # filtro por régimen del JEFE DE FAMILIA
         )
         lote.total_atenciones = len(registros)
 
