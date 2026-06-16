@@ -150,7 +150,8 @@ def _area_geografica(reg: RegistroCaracterizacion, width: float) -> Table:
          ("MANZANA", _raw(reg.manzana)),
          ("VIVIENDA", _raw(reg.vivienda)),
          ("FAMILIA", _raw(reg.familia))],
-        [("CIUF", _raw(reg.ciuf))],
+        [("TIPO DE FAMILIA", _raw(reg.tipo_familia)),
+         ("CIUF", _raw(reg.ciuf))],
     ], width)
 
 
@@ -182,12 +183,9 @@ def _integrante(reg: RegistroCaracterizacion, width: float) -> Table:
          ("UNIDADES", _raw(reg.unidades))],
         [("ESTUDIA ACTUALMENTE", _raw(reg.estudia)),
          ("AÑOS APROBADOS", _raw(reg.anos_aprobados))],
-        [("COD OCUPACION", _raw(reg.cod_ocupacion)),
-         ("NOMBRE OCUPACION", _raw(reg.nombre_ocupacion))],
-        [("COD RÉGIMEN", _raw(reg.cod_regimen)),
-         ("DESCRIPCIÓN RÉGIMEN", _raw(reg.descripcion_regimen))],
-        [("EPS", _raw(reg.eps)),
-         ("NOMBRE INSTITUCION/EPS", _raw(reg.nombre_institucion))],
+        [("NOMBRE OCUPACION", _raw(reg.nombre_ocupacion))],
+        [("RÉGIMEN", _raw(reg.descripcion_regimen)),
+         ("INSTITUCIÓN / EPS", _raw(reg.nombre_institucion))],
         [("ETNIA", _raw(reg.etnia)),
          ("G.A.E", _raw(reg.gae))],
         [("PROGRAMA", _raw(reg.programa)),

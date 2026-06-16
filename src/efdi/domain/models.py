@@ -611,55 +611,50 @@ class RegistroCaracterizacion(BaseModel):
 
     model_config = ConfigDict(str_strip_whitespace=True)
 
-    # ── Área geográfica / familia ─────────────────────────────────────────
-    departamento: str | None = None        # codniv1
-    municipio: str | None = None           # codniv2
-    area: str | None = None                # codniv3
+    # ── Área geográfica / familia (departamento/municipio/area ya vienen
+    # como DESCRIPCIONES resueltas en SQL — no códigos crudos) ────────────
+    departamento: str | None = None        # DES_DEPARTAMENTO o codniv1 si no matchea
+    municipio: str | None = None           # DES_MUNICIPIO o codniv1+codniv2
+    area: str | None = None                # 'URBANA' / 'RURAL' / codniv3
     corregimiento: str | None = None       # codniv4
     barrio_vereda: str | None = None       # codniv5
     manzana: str | None = None             # codniv6
     vivienda: str | None = None            # codvivi
-    familia: str | None = None             # codfami
+    familia: str | None = None             # codfami (secuencial dentro de vivienda)
+    tipo_familia: str | None = None        # AVS_TIPO_FAMILIA: NUCLEAR/EXTENSA/MONOPARENTAL
     ciuf: str | None = None
 
-    # ── Persona ───────────────────────────────────────────────────────────
-    tipo_documento: str | None = None      # tipodocu
-    num_documento: str | None = None       # numdocu
+    # ── Persona ──────────────────────────────────────────────────────────
+    tipo_documento: str | None = None      # tipodocu (CC, TI, RC…)
+    num_documento: str | None = None
     nombres_apellidos: str | None = None
     sexo: str | None = None
     fecha_nacimiento: str | None = None
     edad: str | None = None
     unidades: str | None = None            # edaduni
-    parentesco: str | None = None          # parentes
+    parentesco: str | None = None          # P.parentesco (JEFE DE FAMILIA, CONYUGE…)
     estudia: str | None = None
     anos_aprobados: str | None = None      # grado
-    cod_ocupacion: str | None = None       # ocupacio
-    nombre_ocupacion: str | None = None    # O.DES_OCUPACION
-    tipo_seguridad_social: str | None = None  # tipousua
-    eps: str | None = None                 # instusua
-    nombre_institucion: str | None = None  # I.desc_ins
-    etnia: str | None = None
-    gae: str | None = None
-    programa: str | None = None            # programas
-    discapacidad: str | None = None        # discap
+    nombre_ocupacion: str | None = None    # OI.DES_OCUPACION_INGRESO
+    nombre_institucion: str | None = None  # I.desc_ins (EPS/Institución)
+    descripcion_regimen: str | None = None # R.DES_TIPO_REGIMEN
+    etnia: str | None = None               # E.etnia (NINGUNO, INDIGENA, AFRO…)
+    gae: str | None = None                 # crudo (catálogo pendiente)
+    programa: str | None = None            # PG.nombre
+    discapacidad: str | None = None        # TD.DES_TIPO_DISCAPACIDAD
 
-    # ── Ubicación familia (SBW_UBICACION_FAMILIA) ─────────────────────────
+    # ── Ubicación familia (SBW_UBICACION_FAMILIA) ────────────────────────
     fecha_registro: str | None = None      # UF.fecha_reg
     latitud: str | None = None
     longitud: str | None = None
     cohorte: str | None = None
     visita: str | None = None
-    # Régimen SGSSS — viene del catálogo SBW_TIPO_REGIMEN_SGSSS (LEFT JOIN R).
-    # cod_regimen == tipo_seguridad_social (misma columna PC.tipousua, query lo
-    # devuelve duplicado); el PDF muestra cod + descripción y omite el viejo.
-    cod_regimen: str | None = None         # PC.tipousua
-    descripcion_regimen: str | None = None # R.DES_TIPO_REGIMEN
     sisben_grupo: str | None = None
     sisben_subgrupo: str | None = None
     direccion: str | None = None
-    telefono_1: str | None = None
-    telefono_2: str | None = None
-    correo: str | None = None
+    telefono_1: str | None = None          # 'N/A' si vacío/-1
+    telefono_2: str | None = None          # 'N/A' si vacío/-1
+    correo: str | None = None              # 'N/A' si vacío
 
     @property
     def familia_key(self) -> str:

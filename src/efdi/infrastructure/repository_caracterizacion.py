@@ -28,11 +28,19 @@ class CaracterizacionRepository(Protocol):
 
 
 # === Query principal paginada POR FAMILIA =====================================
-# El SELECT interno es la consulta entregada por el usuario, sin cambios de
-# contenido. La paginación es por FAMILIA (DENSE_RANK sobre la jerarquía
-# completa), no por fila: cada lote trae familias COMPLETAS — una familia nunca
-# queda partida entre dos lotes (evita PDFs parciales/duplicados).
+# Paginación por FAMILIA (DENSE_RANK sobre la jerarquía completa): cada lote
+# trae familias COMPLETAS — una familia nunca queda partida entre dos lotes.
 # `limite` y `offset` se expresan en familias.
+#
+# Política de fidelidad legible:
+#   - Códigos crudos (parentes, programas, etnia, discap, codniv1/2, codniv3,
+#     tipousua, ocupacio, tipofami) se resuelven a su DESCRIPCIÓN vía LEFT JOIN
+#     a los catálogos correspondientes — con COALESCE al código por si la BD
+#     trae un valor no catalogado.
+#   - Teléfonos con '-1' o vacíos se normalizan a 'N/A' en el SQL.
+#   - Correo vacío también 'N/A'.
+# `_parentes_cod` se expone solo para ordenar dentro de cada familia (JEFE
+# DE FAMILIA primero, después cónyuge, hijos, etc.); no llega al modelo.
 QUERY_CARACTERIZACION = """
 WITH X AS (
     SELECT
@@ -41,77 +49,83 @@ WITH X AS (
                      PC.[codniv5], PC.[codniv6], PC.[codvivi], PC.[codfami],
                      PC.ciuf
         ) AS FAM_NUM,
-        --AREA GEOGRAFICA
-        PC.[codniv1] AS departamento,
-        PC.[codniv2] AS municipio,
-        PC.[codniv3] AS area,
-        PC.[codniv4] AS corregimiento,
-        PC.[codniv5] AS barrio_vereda,
-        PC.[codniv6] AS manzana,
-        PC.[codvivi] AS vivienda,
-        PC.[codfami] AS familia,
+        PC.parentes AS _parentes_cod,
+        --AREA GEOGRAFICA con descripciones
+        COALESCE(D.DES_DEPARTAMENTO, PC.codniv1)               AS departamento,
+        COALESCE(M.DES_MUNICIPIO, PC.codniv1 + PC.codniv2)     AS municipio,
+        CASE PC.codniv3 WHEN 'U' THEN 'URBANA'
+                        WHEN 'R' THEN 'RURAL'
+                        ELSE PC.codniv3 END                    AS area,
+        PC.codniv4 AS corregimiento,
+        PC.codniv5 AS barrio_vereda,
+        PC.codniv6 AS manzana,
+        PC.codvivi AS vivienda,
+        PC.codfami AS familia,
+        COALESCE(TF.DES_TIPO_FAMILIA, '')                      AS tipo_familia,
         PC.ciuf AS ciuf,
-        [tipodocu] AS tipo_documento,
-        [numdocu] AS num_documento,
-        CONCAT([primer_nombre],' '
-              ,[segundo_nombre],' '
-              ,[primer_apellido],' '
-              ,[segundo_apellido]) AS nombres_apellidos,
-        [sexo] AS sexo,
-        [fechanac] AS fecha_nacimiento,
-        [edad] AS edad,
-        [edaduni] AS unidades,
-        [parentes] AS parentesco,
-        [estudia] AS estudia,
-        [grado] AS anos_aprobados,
-        [ocupacio] AS cod_ocupacion,
-        O.DES_OCUPACION AS nombre_ocupacion,
-        [tipousua] AS tipo_seguridad_social,
-        [instusua] AS eps,
-        I.desc_ins AS nombre_institucion,
-        [etnia] AS etnia,
-        [gae] AS gae,
-        [programas] AS programa,
-        [discap] AS discapacidad,
+        PC.tipodocu  AS tipo_documento,
+        PC.numdocu   AS num_documento,
+        CONCAT(PC.primer_nombre,' ',PC.segundo_nombre,' ',
+               PC.primer_apellido,' ',PC.segundo_apellido)     AS nombres_apellidos,
+        PC.sexo      AS sexo,
+        PC.fechanac  AS fecha_nacimiento,
+        PC.edad      AS edad,
+        PC.edaduni   AS unidades,
+        COALESCE(P.parentesco, PC.parentes)                    AS parentesco,
+        PC.estudia   AS estudia,
+        PC.grado     AS anos_aprobados,
+        COALESCE(OI.DES_OCUPACION_INGRESO, PC.ocupacio)        AS nombre_ocupacion,
+        R.DES_TIPO_REGIMEN                                     AS descripcion_regimen,
+        I.desc_ins                                             AS nombre_institucion,
+        COALESCE(E.etnia, PC.etnia)                            AS etnia,
+        PC.gae       AS gae,
+        COALESCE(PG.nombre, PC.programas)                      AS programa,
+        COALESCE(TD.DES_TIPO_DISCAPACIDAD, PC.discap)          AS discapacidad,
         UF.fecha_reg AS fecha_registro,
-        CONCAT(UF.LAT_GRA,' ',UF.LAT_MIN,' ',UF.LAT_SEN) AS latitud,
-        CONCAT(UF.LON_GRA,' ',UF.LON_MIN,' ',UF.LON_SEG) AS longitud,
-        UF.cohorte AS cohorte,
-        UF.visita AS visita,
-        PC.tipousua AS cod_regimen,
-        R.DES_TIPO_REGIMEN AS descripcion_regimen,
+        CONCAT(UF.LAT_GRA,' ',UF.LAT_MIN,' ',UF.LAT_SEN)       AS latitud,
+        CONCAT(UF.LON_GRA,' ',UF.LON_MIN,' ',UF.LON_SEG)       AS longitud,
+        UF.cohorte   AS cohorte,
+        UF.visita    AS visita,
         UF.sisb_grupo AS sisben_grupo,
         UF.sisb_subgr AS sisben_subgrupo,
-        UF.direccion AS direccion,
-        UF.telefono AS telefono_1,
-        UF.telefono2 AS telefono_2,
-        UF.correo AS correo
-    FROM [SBW_PERSONA_CARACTERIZADA] PC
-    LEFT JOIN SBW_UBICACION_FAMILIA UF ON (UF.UID = PC.uid AND UF.ciuf = PC.ciuf)
-    LEFT JOIN SBW_OCUPACION O ON O.COD_OCUPACION = PC.ocupacio
-    LEFT JOIN tabla_institucion I ON I.cod_inst = PC.instusua
-    LEFT JOIN SBW_TIPO_REGIMEN_SGSSS R ON R.COD_TIPO_REGIMEN = PC.tipousua
+        UF.direccion  AS direccion,
+        CASE WHEN UF.telefono  IN ('-1','') OR UF.telefono  IS NULL
+             THEN 'N/A' ELSE UF.telefono  END                  AS telefono_1,
+        CASE WHEN UF.telefono2 IN ('-1','') OR UF.telefono2 IS NULL
+             THEN 'N/A' ELSE UF.telefono2 END                  AS telefono_2,
+        COALESCE(NULLIF(UF.correo,''), 'N/A')                  AS correo
+    FROM SBW_PERSONA_CARACTERIZADA PC
+    LEFT JOIN SBW_UBICACION_FAMILIA   UF ON UF.UID = PC.uid AND UF.ciuf = PC.ciuf
+    LEFT JOIN AVS_OCUPACION_INGRESO   OI ON OI.COD_OCUPACION_INGRESO = PC.ocupacio
+    LEFT JOIN tabla_institucion       I  ON I.cod_inst         = PC.instusua
+    LEFT JOIN SBW_TIPO_REGIMEN_SGSSS  R  ON R.COD_TIPO_REGIMEN = PC.tipousua
+    LEFT JOIN parentes                P  ON P.codigo           = PC.parentes
+    LEFT JOIN programas               PG ON PG.codigo          = PC.programas
+    LEFT JOIN etnia                   E  ON E.codigo           = PC.etnia
+    LEFT JOIN AVS_DEPARTAMENTO_SALUD  D  ON D.COD_DEPARTAMENTO = PC.codniv1
+    LEFT JOIN AVS_MUNICIPIO_SALUD     M  ON M.COD_MUNICIPIO    = PC.codniv1 + PC.codniv2
+    LEFT JOIN AVS_TIPO_FAMILIA        TF ON TF.COD_TIPO_FAMILIA = UF.tipofami
+    LEFT JOIN SBW_TIPO_DISCAPACIDAD   TD ON TD.COD_TIPO_DISCAPACIDAD = PC.discap
     WHERE UF.fecha_reg >= ?
       AND UF.fecha_reg <= ?
 )
 SELECT *
 FROM X
 WHERE X.FAM_NUM > ? AND X.FAM_NUM <= ?
-ORDER BY X.FAM_NUM, X.num_documento
+ORDER BY X.FAM_NUM, X._parentes_cod, X.num_documento
 """
 
 # Mismo universo que el FETCH pero contando FAMILIAS (la unidad de PDF y de
 # paginación). El CONCAT replica exactamente las columnas del DENSE_RANK.
+# No incluye los joins de catálogos: no afectan la cantidad de familias.
 QUERY_CARACTERIZACION_COUNT = """
 SELECT COUNT(DISTINCT CONCAT(
     PC.[codniv1], '|', PC.[codniv2], '|', PC.[codniv3], '|', PC.[codniv4], '|',
     PC.[codniv5], '|', PC.[codniv6], '|', PC.[codvivi], '|', PC.[codfami], '|',
     PC.ciuf
 )) AS total
-FROM [SBW_PERSONA_CARACTERIZADA] PC
-LEFT JOIN SBW_UBICACION_FAMILIA UF ON (UF.UID = PC.uid AND UF.ciuf = PC.ciuf)
-LEFT JOIN SBW_OCUPACION O ON O.COD_OCUPACION = PC.ocupacio
-LEFT JOIN tabla_institucion I ON I.cod_inst = PC.instusua
+FROM SBW_PERSONA_CARACTERIZADA PC
+LEFT JOIN SBW_UBICACION_FAMILIA UF ON UF.UID = PC.uid AND UF.ciuf = PC.ciuf
 WHERE UF.fecha_reg >= ?
   AND UF.fecha_reg <= ?
 """
@@ -136,14 +150,13 @@ def _fechas_dt(desde: date, hasta: date):
 
 _CAMPOS = [
     "departamento", "municipio", "area", "corregimiento", "barrio_vereda",
-    "manzana", "vivienda", "familia", "ciuf",
+    "manzana", "vivienda", "familia", "tipo_familia", "ciuf",
     "tipo_documento", "num_documento", "nombres_apellidos", "sexo",
     "fecha_nacimiento", "edad", "unidades", "parentesco", "estudia",
-    "anos_aprobados", "cod_ocupacion", "nombre_ocupacion",
-    "tipo_seguridad_social", "eps", "nombre_institucion", "etnia", "gae",
-    "programa", "discapacidad",
+    "anos_aprobados", "nombre_ocupacion",
+    "nombre_institucion", "descripcion_regimen",
+    "etnia", "gae", "programa", "discapacidad",
     "fecha_registro", "latitud", "longitud", "cohorte", "visita",
-    "cod_regimen", "descripcion_regimen",
     "sisben_grupo", "sisben_subgrupo", "direccion", "telefono_1",
     "telefono_2", "correo",
 ]
@@ -162,18 +175,25 @@ class MockCaracterizacionRepository:
         import random
         from datetime import timedelta
 
+        # Catálogos en descripción legible (igual que el repo real con los joins).
         nombres = ["JOSE", "MARIA", "LUIS", "ANA", "CARLOS", "ROSA", "PEDRO", "LUZ"]
         apellidos = ["GARCIA", "LOPEZ", "MARTINEZ", "RODRIGUEZ", "GONZALEZ", "PEREZ"]
-        parentescos = ["CABEZA DE FAMILIA", "CONYUGE", "HIJO(A)", "NIETO(A)", "OTRO"]
-        ocupaciones = [("001", "AGRICULTOR"), ("002", "AMA DE CASA"), ("003", "ESTUDIANTE"),
-                       ("004", "COMERCIANTE"), ("005", "DOCENTE")]
-        etnias = ["NINGUNA", "AFRODESCENDIENTE", "INDIGENA"]
-        # Catálogo SBW_TIPO_REGIMEN_SGSSS (5 filas reales). El régimen es a NIVEL
-        # PERSONA: cada integrante elige el suyo, por eso pueden existir familias
-        # mixtas (cabeza C + hijo S, etc.) — pasa en ~4% de los casos reales.
-        regimenes = [("S", "SUBSIDIADO"), ("C", "CONTRIBUTIVO"), ("N", "POBRE NO ASEGURADO"),
-                     ("O", "OTRO (Regimen especial)"), ("P", "PARTICULAR")]
-        regimenes_pesos = [0.95, 0.04, 0.003, 0.002, 0.005]  # mismo skew que sibacom
+        # Parentesco: el primero (m==0) siempre JEFE DE FAMILIA; el resto rota.
+        parentescos_otros = ["CONYUGE", "HIJO", "OTROS PARIENTES (Padres, Suegros, etc)",
+                             "OTROS MIEMBROS, NO PARIENTES"]
+        ocupaciones = ["TRABAJANDO", "ESTUDIANDO", "OFICIOS DEL HOGAR",
+                       "JUBILADO,PENSIONADO", "NO APLICA, POR EDAD", "SIN OCUPACION/INGRESO"]
+        etnias = ["NINGUNO", "INDIGENA", "AFRODESCENDIENTES-NEGROS-RAIZALES"]
+        programas_mock = ["NO PERTENECE A NINGUN PROGRAMA", "MAS FAMILIAS EN ACCION",
+                          "JOVENES EN ACCION", "HOGAR DE BIENESTAR FAMILIAR"]
+        discapacidades_mock = ["NINGUNA", "AUDITIVA:SORDA", "VISUAL:CIEGA TOTAL",
+                               "FISICA:AMPUTACION", "DISCAPACIDAD MENTAL"]
+        tipos_familia = ["NUCLEAR", "EXTENSA - COMPUESTA", "MONOPARENTAL"]
+        # Catálogo SBW_TIPO_REGIMEN_SGSSS — régimen a NIVEL PERSONA: cada
+        # integrante puede tener uno distinto (familias mixtas ~4% reales).
+        regimenes_desc = ["SUBSIDIADO", "CONTRIBUTIVO", "POBRE NO ASEGURADO",
+                          "OTRO (Regimen especial)", "PARTICULAR"]
+        regimenes_pesos = [0.95, 0.04, 0.003, 0.002, 0.005]
 
         regs: list[RegistroCaracterizacion] = []
         # limite/offset en FAMILIAS (igual que el repo real): cada familia trae
@@ -187,40 +207,40 @@ class MockCaracterizacionRepository:
                 rng_fam = random.Random(n_familia * 31)
                 rng = random.Random(seq * 17)
                 fecha_r = desde + timedelta(days=rng_fam.randint(0, max((hasta - desde).days, 0)))
-                cod_ocu, nom_ocu = rng.choice(ocupaciones)
-                # Una sola elección: código y descripción siempre coherentes
-                cod_reg, des_reg = rng.choices(regimenes, weights=regimenes_pesos, k=1)[0]
+                des_reg = rng.choices(regimenes_desc, weights=regimenes_pesos, k=1)[0]
                 es_cabeza = m == 0
+                # Teléfonos: a veces vienen como N/A simulando datos sin teléfono.
+                tel1 = "N/A" if rng_fam.random() < 0.1 else f"30{rng_fam.randint(0, 9)}{rng_fam.randint(1000000, 9999999)}"
                 regs.append(RegistroCaracterizacion(
-                    departamento="13", municipio=f"{rng_fam.randint(1, 99):03d}",
-                    area=rng_fam.choice(["1", "2"]), corregimiento="00",
+                    # Descripciones ya legibles (como las devuelve el SQL real).
+                    departamento="BOLIVAR", municipio=f"MUNICIPIO {rng_fam.randint(1, 99):03d}",
+                    area=rng_fam.choice(["URBANA", "RURAL"]), corregimiento="00",
                     barrio_vereda=f"{rng_fam.randint(1, 50):03d}", manzana=f"{rng_fam.randint(1, 20):02d}",
                     vivienda=f"{n_familia % 999 + 1:04d}", familia=f"{n_familia % 9 + 1}",
+                    tipo_familia=rng_fam.choice(tipos_familia),
                     ciuf=str(100000 + n_familia),
                     tipo_documento=rng.choice(["CC", "TI", "RC"]) if not es_cabeza else "CC",
                     num_documento=str(1_000_000_000 + seq),
                     nombres_apellidos=f"{rng.choice(nombres)} {rng.choice(apellidos)} {rng.choice(apellidos)}",
                     sexo=rng.choice(["M", "F"]),
                     fecha_nacimiento=f"19{rng.randint(40, 99):02d}-{rng.randint(1, 12):02d}-{rng.randint(1, 28):02d}",
-                    edad=str(rng.randint(1, 90)), unidades="1",
-                    parentesco="CABEZA DE FAMILIA" if es_cabeza else rng.choice(parentescos[1:]),
+                    edad=str(rng.randint(1, 90)), unidades="A",
+                    parentesco="JEFE DE FAMILIA" if es_cabeza else rng.choice(parentescos_otros),
                     estudia=rng.choice(["SI", "NO"]), anos_aprobados=str(rng.randint(0, 11)),
-                    cod_ocupacion=cod_ocu, nombre_ocupacion=nom_ocu,
-                    tipo_seguridad_social=rng.choice(["S", "C"]),
-                    eps="EPS025", nombre_institucion="MUTUAL SER",
-                    etnia=rng.choice(etnias), gae=rng.choice(["", "1"]),
-                    programa=rng.choice(["", "GESTANTES", "HTA"]),
-                    discapacidad=rng.choice(["", "NINGUNA", "FISICA"]),
+                    nombre_ocupacion=rng.choice(ocupaciones),
+                    nombre_institucion="ASOCIACION MUTUAL SER - EMPRESA SOLIDARIA DE SALUD E.S.S.",
+                    descripcion_regimen=des_reg,
+                    etnia=rng.choice(etnias), gae=rng.choice(["0", "1"]),
+                    programa=rng.choice(programas_mock),
+                    discapacidad=rng.choice(discapacidades_mock),
                     fecha_registro=str(fecha_r),
                     latitud=f"{rng_fam.randint(8, 10)} {rng_fam.randint(0, 59)} N",
                     longitud=f"{rng_fam.randint(74, 76)} {rng_fam.randint(0, 59)} W",
                     cohorte=str(rng_fam.randint(1, 5)), visita=str(rng_fam.randint(1, 3)),
-                    # Régimen por persona (rng, no rng_fam) → simula mezcla intrafamiliar
-                    cod_regimen=cod_reg, descripcion_regimen=des_reg,
                     sisben_grupo=rng_fam.choice(["A", "B", "C"]), sisben_subgrupo=str(rng_fam.randint(1, 9)),
                     direccion=f"CALLE {rng_fam.randint(1, 99)} # {rng_fam.randint(1, 99)}-{rng_fam.randint(1, 99)}",
-                    telefono_1=f"30{rng_fam.randint(0, 9)}{rng_fam.randint(1000000, 9999999)}",
-                    telefono_2="", correo="",
+                    telefono_1=tel1,
+                    telefono_2="N/A", correo="N/A",
                 ))
         return regs
 
