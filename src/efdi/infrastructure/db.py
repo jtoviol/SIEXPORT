@@ -68,7 +68,9 @@ CREATE TABLE IF NOT EXISTS extracciones (
     zip_path TEXT,
     created_by_username TEXT
 );
-CREATE INDEX IF NOT EXISTS idx_extracciones_creador ON extracciones(created_by_username);
+-- Nota: el índice idx_extracciones_creador se crea en _migrate() v7.
+-- Si lo declaramos acá, falla en DBs viejas (≤v6) porque CREATE TABLE IF NOT
+-- EXISTS no agrega la columna nueva y el index no encuentra `created_by_username`.
 
 CREATE TABLE IF NOT EXISTS lotes (
     job_id TEXT NOT NULL,

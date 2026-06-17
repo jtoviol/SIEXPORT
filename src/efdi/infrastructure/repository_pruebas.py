@@ -42,10 +42,11 @@ QUERY_PRUEBAS = """
 WITH X AS (
     SELECT ROW_NUMBER() OVER (
                ORDER BY B.FEC_REGISTRO_INFORMACION DESC,
-                        O.SEQ_RESPUESTA_PRUEBA_RAPIDA ASC
+                        O.SEQ_SERAGIL ASC,
+                        O.SEQ_PRUEBA_RAPIDA ASC
            ) AS NUM_REGISTRO,
            A.COD_TIPO_IDENTIFICACION, A.NRO_TIPO_IDENTIFICACION, B.SEQ_SERAGIL,
-           O.SEQ_RESPUESTA_PRUEBA_RAPIDA, O.SEQ_PRUEBA_RAPIDA,
+           O.SEQ_PRUEBA_RAPIDA,
            A.AFL_PRIMER_NOMBRE, ISNULL(A.AFL_SEGUNDO_NOMBRE,'') AS AFL_SEGUNDO_NOMBRE,
            ISNULL(A.AFL_PRIMER_APELLIDO,'') AS AFL_PRIMER_APELLIDO,
            ISNULL(A.AFL_SEGUNDO_APELLIDO,'') AS AFL_SEGUNDO_APELLIDO,
@@ -94,7 +95,6 @@ WITH X AS (
 )
 SELECT
     X.SEQ_SERAGIL,
-    X.SEQ_RESPUESTA_PRUEBA_RAPIDA,
     X.SEQ_PRUEBA_RAPIDA,
     X.COD_TIPO_IDENTIFICACION,
     X.NRO_TIPO_IDENTIFICACION                                                AS [Numero de identificacion],
@@ -360,15 +360,22 @@ class SqlServerPruebasRapidasRepository:
         out: list[RespuestaPruebaRapida] = []
         for r in rows:
             fec_real = _parse_date(r.get("FEC_REALIZACION"))
+            seq_seragil = _to_int(r.get("SEQ_SERAGIL"))
+            seq_prueba = _to_int(r.get("SEQ_PRUEBA_RAPIDA"))
+            # Identidad sintética: la tabla no tiene PK simple, la unicidad real
+            # es la pareja (SEQ_SERAGIL, SEQ_PRUEBA_RAPIDA). Empaquetamos en un
+            # int para mantener compat con services.agrupar_por_afiliado_pruebas
+            # (sort por seq_respuesta) y con la desambiguación de nombre de PDF.
+            seq_resp_sintetico = seq_seragil * 1_000_000 + seq_prueba
             if not fec_real:
                 log.warning("pruebas: respuesta descartada por fecha realización inválida: seq=%s",
-                            r.get("SEQ_RESPUESTA_PRUEBA_RAPIDA"))
+                            seq_resp_sintetico)
                 continue
             num_doc = str(r.get("Numero de identificacion") or "").strip()
             out.append(RespuestaPruebaRapida(
-                seq_seragil=_to_int(r.get("SEQ_SERAGIL")),
-                seq_respuesta=_to_int(r.get("SEQ_RESPUESTA_PRUEBA_RAPIDA")),
-                seq_prueba_rapida=_to_int(r.get("SEQ_PRUEBA_RAPIDA")),
+                seq_seragil=seq_seragil,
+                seq_respuesta=seq_resp_sintetico,
+                seq_prueba_rapida=seq_prueba,
                 tipo_documento=_normalizar_tipo_doc(r.get("COD_TIPO_IDENTIFICACION")),
                 fecha_realizacion=fec_real,
                 fecha_registro=_parse_date(r.get("FEC_REGISTRO_INFORMACION")),

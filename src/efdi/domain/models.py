@@ -336,7 +336,7 @@ class RespuestaPruebaRapida(BaseModel):
 
     # ── Metadata interna ─────────────────────────────────────────────────────
     seq_seragil: int
-    seq_respuesta: int                                  # PK srg_respuesta_prueba_rapida
+    seq_respuesta: int                                  # id sintético = seq_seragil*1M + seq_prueba_rapida (la tabla no tiene PK simple)
     seq_prueba_rapida: int                              # FK al catálogo
     tipo_documento: TipoDocumento
     fecha_realizacion: date
