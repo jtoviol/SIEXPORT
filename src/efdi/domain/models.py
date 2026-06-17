@@ -30,6 +30,7 @@ MODULOS_VALIDOS: list[str] = [
     "planificacion-familiar",
     "vacunacion",
     "caracterizacion-familiar",
+    "pruebas-rapidas",
 ]
 
 
@@ -221,6 +222,7 @@ class ExtraccionTipo(str, Enum):
     PLANIFICACION_FAMILIAR = "planificacion_familiar"
     VACUNACION = "vacunacion"
     CARACTERIZACION_FAMILIAR = "caracterizacion_familiar"
+    PRUEBAS_RAPIDAS = "pruebas_rapidas"
 
 
 # ─── Factores Clínicos del módulo Seguimiento Planificación Familiar ────────
@@ -319,6 +321,79 @@ class AfiliadoConFindrisc(BaseModel):
     @property
     def pdf_key(self) -> str:
         return f"{self.doc_key}_{self.fecha_registro}"
+
+
+class RespuestaPruebaRapida(BaseModel):
+    """Una respuesta de prueba rápida — 1 PDF por instancia.
+
+    Pivote: `srg_respuesta_prueba_rapida` (1 respuesta = 1 fila AP en el SP
+    `prGeneraRips` cursor `cuPruebaRapida`). El CIEX y CUPS NO son fijos por
+    módulo: vienen del catálogo `srg_prueba_rapida` (varían por prueba — VIH,
+    Sífilis, Embarazo, etc.). Ver memoria `reference-ciex-por-modulo` §PR.
+    """
+
+    model_config = ConfigDict(use_enum_values=True, str_strip_whitespace=True)
+
+    # ── Metadata interna ─────────────────────────────────────────────────────
+    seq_seragil: int
+    seq_respuesta: int                                  # PK srg_respuesta_prueba_rapida
+    seq_prueba_rapida: int                              # FK al catálogo
+    tipo_documento: TipoDocumento
+    fecha_realizacion: date
+    fecha_registro: date | None = None
+
+    # ── Afiliado ─────────────────────────────────────────────────────────────
+    nombre_completo: str
+    primer_nombre: str | None = None
+    segundo_nombre: str | None = None
+    primer_apellido: str | None = None
+    segundo_apellido: str | None = None
+    sexo: str | None = None
+    edad: int = Field(default=0, ge=0, le=120)
+    fec_nacimiento: date | None = None
+    tipo_identificacion_desc: str | None = None
+    num_documento: str
+    departamento: str | None = None
+    municipio: str | None = None
+    direccion: str | None = None
+    telefono_1: str | None = None
+    telefono_2: str | None = None
+    correo: str | None = None
+    flg_gestante: bool = False
+
+    # ── Encuesta / encuestador ───────────────────────────────────────────────
+    encuestador: str | None = None
+    cargo_encuestador: str | None = None
+    presion_arterial: str | None = None
+
+    # ── Prueba ───────────────────────────────────────────────────────────────
+    des_prueba_rapida: str
+    resultado_prueba: str | None = None                 # "NEGATIVA" / "POSITIVA" / texto crudo
+    nro_lote: str | None = None
+    observacion: str | None = None
+
+    @property
+    def doc_key(self) -> str:
+        return f"{self.tipo_documento}_{self.num_documento}"
+
+
+class AfiliadoConPruebasRapidas(BaseModel):
+    """Un afiliado con TODAS sus pruebas del lote — carpeta por afiliado en el ZIP.
+
+    A diferencia de FINDRISC (1 carpeta por afiliado/fecha), acá vamos por
+    afiliado solo: si Juan se hizo 5 pruebas en 3 días distintos del periodo,
+    las 5 caen en la misma carpeta `CC_1067839405_PEREZ_JUAN/`.
+    """
+
+    doc_key: str
+    tipo_documento: TipoDocumento
+    num_documento: str
+    nombre_completo: str
+    primer_nombre: str | None = None
+    segundo_nombre: str | None = None
+    primer_apellido: str | None = None
+    segundo_apellido: str | None = None
+    respuestas: list[RespuestaPruebaRapida]
 
 
 class RegistroCaptacion(BaseModel):

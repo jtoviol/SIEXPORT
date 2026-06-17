@@ -427,6 +427,30 @@
     }
     .users-table td { padding: 10px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
     .users-table tr:hover { background: #f8fafc; }
+
+    /* Audit log */
+    .accion-badge {
+      display: inline-block; padding: 2px 8px; border-radius: 99px;
+      font-size: 10px; font-weight: 700; font-family: ui-monospace, monospace;
+      letter-spacing: .02em;
+    }
+    .accion-badge.ac-create { background: #ecfdf5; color: #047857; }
+    .accion-badge.ac-delete { background: #fef2f2; color: #b91c1c; }
+    .accion-badge.ac-update { background: #fffbeb; color: #b45309; }
+    .accion-badge.ac-reset  { background: #f5f3ff; color: #6d28d9; }
+    .accion-badge.ac-pw     { background: #eff6ff; color: #1e40af; }
+    .accion-badge.ac-default{ background: #f1f5f9; color: #475569; }
+    .audit-detalle {
+      font-family: ui-monospace, monospace; font-size: 11px;
+      background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 4px;
+      padding: 6px 8px; margin-top: 4px; max-width: 360px;
+      white-space: pre-wrap; word-break: break-word; color: #334155;
+    }
+    .audit-filtros {
+      display: flex; gap: 8px; align-items: flex-end;
+      margin-bottom: 12px; flex-wrap: wrap;
+    }
+    .audit-filtros .form-row { margin-bottom: 0; flex: 1 1 180px; }
     .users-table .acciones { display: flex; gap: 4px; justify-content: flex-end; }
     .modulo-chip {
       display: inline-block; font-size: 10px; padding: 1px 6px;
@@ -560,6 +584,12 @@
             <path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
           </svg>
           Gestionar usuarios
+        </button>
+        <button type="button" id="um-audit-btn" onclick="openAuditModal()" class="hidden">
+          <svg class="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
+          </svg>
+          Audit log
         </button>
         <div class="um-divider"></div>
         <form method="POST" action="/auth/logout" class="m-0">
@@ -720,6 +750,27 @@
       <div class="flex items-center justify-between mb-2">
         <div class="font-semibold text-slate-800 text-sm">Caracterización Familiar</div>
         <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700">CF</span>
+      </div>
+      <div class="grid grid-cols-3 gap-2 text-center">
+        <div>
+          <div class="text-[9px] uppercase text-slate-400">En curso</div>
+          <div class="text-base font-bold text-amber-600 tabular-nums db-mod-curso">—</div>
+        </div>
+        <div>
+          <div class="text-[9px] uppercase text-slate-400">Completados</div>
+          <div class="text-base font-bold text-emerald-600 tabular-nums db-mod-ok">—</div>
+        </div>
+        <div>
+          <div class="text-[9px] uppercase text-slate-400">Fallidos</div>
+          <div class="text-base font-bold text-red-500 tabular-nums db-mod-fail">—</div>
+        </div>
+      </div>
+      <div class="text-[10px] text-slate-400 mt-2 db-mod-ultimo">—</div>
+    </div>
+    <div data-mod="pruebas_rapidas" class="db-mod-card bg-white rounded-xl border border-slate-200 p-4 cursor-pointer hover:border-violet-400 hover:shadow transition-all">
+      <div class="flex items-center justify-between mb-2">
+        <div class="font-semibold text-slate-800 text-sm">Pruebas Rápidas</div>
+        <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-700">PR</span>
       </div>
       <div class="grid grid-cols-3 gap-2 text-center">
         <div>
@@ -1363,6 +1414,14 @@
       </svg>
       <span>Caract. Fam.</span>
     </button>
+    <button data-mob-tab="pruebas-rapidas" onclick="switchTab('pruebas-rapidas')"
+            class="mob-tab flex-1 min-w-[68px] flex flex-col items-center gap-0.5 py-2.5 transition-colors">
+      <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+        <path stroke-linecap="round" stroke-linejoin="round"
+              d="M9 3h6l-1 4h-4L9 3zm1 4v3a4 4 0 11-1.999 7.535L8 17l-2-4V7m6 0v3a4 4 0 102 7.535L14 17l2-4V7"/>
+      </svg>
+      <span>Pruebas R.</span>
+    </button>
   </div>
 </nav>
 
@@ -1549,6 +1608,50 @@
   </div>
 </div>
 
+<!-- ═══ MODAL: Audit log (solo ADMIN) ═══ -->
+<div id="audit-overlay" class="modal-overlay" onclick="if(event.target===this) closeAuditModal()">
+  <div class="modal-box modal-xl">
+    <div class="modal-header">
+      <h2>Audit log</h2>
+      <div class="flex items-center gap-2">
+        <span id="audit-meta" class="text-xs text-slate-500"></span>
+        <button class="modal-close" type="button" onclick="closeAuditModal()" title="Cerrar">
+          <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="modal-body">
+      <div class="audit-filtros">
+        <div class="form-row">
+          <label>Actor (username)</label>
+          <input id="al-actor" type="text" placeholder="admin" onkeydown="if(event.key==='Enter')reloadAuditLog()">
+        </div>
+        <div class="form-row">
+          <label>Target ID</label>
+          <input id="al-target" type="text" placeholder="UUID del usuario afectado" onkeydown="if(event.key==='Enter')reloadAuditLog()">
+        </div>
+        <button class="btn-primary" type="button" onclick="reloadAuditLog()">Aplicar</button>
+        <button class="btn-secondary" type="button" onclick="$('al-actor').value='';$('al-target').value='';reloadAuditLog()">Limpiar</button>
+      </div>
+      <div id="audit-err" class="form-error hidden"></div>
+      <table class="users-table">
+        <thead>
+          <tr>
+            <th style="width:120px">Cuándo</th>
+            <th style="width:120px">Actor</th>
+            <th style="width:180px">Acción</th>
+            <th>Target</th>
+            <th>Detalle</th>
+          </tr>
+        </thead>
+        <tbody id="audit-tbody">
+          <tr><td colspan="5" class="text-center text-slate-400 py-6">Cargando…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
 <!-- ═══ CMD+K PALETTE ═══ -->
 <div id="cmdk-overlay" onclick="if(event.target===this) closeCmdK()">
   <div id="cmdk-modal">
@@ -1632,6 +1735,12 @@ const MODULES = {
     api: "/caracterizacion-familiar/extractions", color: "indigo", icon: "house",
     categoria: "Caracterización", badge: "CF",
     usaFactura: false, usaRegimen: true, usaExcel: false, unidad: "familias",
+  },
+  "pruebas-rapidas": {
+    tipoBackend: "pruebas_rapidas", label: "Pruebas Rápidas",
+    api: "/pruebas/extractions", color: "violet", icon: "beaker",
+    categoria: "Tamizajes", badge: "PR",
+    usaFactura: true, usaRegimen: true, usaExcel: false, unidad: "afiliados",
   },
 };
 
@@ -3837,6 +3946,7 @@ function updateUserMenuChrome() {
   badge.textContent = currentUser.rol;
   badge.className = "rol-badge rol-" + currentUser.rol;
   $("um-users-btn").classList.toggle("hidden", !isAdmin());
+  $("um-audit-btn").classList.toggle("hidden", !isAdmin());
 }
 
 function toggleUserMenu(ev) {
@@ -4052,6 +4162,88 @@ async function confirmDeleteUser(uid, username) {
     toast("Usuario eliminado", username, "success");
     await reloadUsersList();
   } catch (e) { toast("Error", e.message, "error"); }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// MODAL: Audit log (solo admin)
+// ═══════════════════════════════════════════════════════════════════
+function _escAudit(s) {
+  return String(s ?? "").replace(/[&<>"']/g, c => ({
+    "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
+  }[c]));
+}
+function _accionClass(accion) {
+  if (!accion) return "ac-default";
+  if (accion.endsWith(".create")) return "ac-create";
+  if (accion.endsWith(".delete")) return "ac-delete";
+  if (accion.endsWith(".update")) return "ac-update";
+  if (accion.endsWith("reset_password")) return "ac-reset";
+  if (accion.endsWith("change_password")) return "ac-pw";
+  return "ac-default";
+}
+
+async function openAuditModal() {
+  $("user-menu").classList.add("hidden");
+  if (!isAdmin()) { toast("Solo admin", "Esta sección requiere rol ADMIN.", "error"); return; }
+  $("al-actor").value = "";
+  $("al-target").value = "";
+  $("audit-overlay").classList.add("open");
+  await reloadAuditLog();
+}
+function closeAuditModal() { $("audit-overlay").classList.remove("open"); }
+
+async function reloadAuditLog() {
+  const tbody = $("audit-tbody");
+  const err = $("audit-err");
+  const meta = $("audit-meta");
+  err.classList.add("hidden");
+  meta.textContent = "";
+  tbody.innerHTML = `<tr><td colspan="5" class="text-center text-slate-400 py-6">Cargando…</td></tr>`;
+
+  const qs = new URLSearchParams({ limit: "200" });
+  const actor = $("al-actor").value.trim();
+  const target = $("al-target").value.trim();
+  if (actor) qs.set("actor", actor);
+  if (target) qs.set("target_id", target);
+
+  try {
+    const data = await _apiJson("/api/users/_audit/log?" + qs.toString());
+    meta.textContent = `${data.total} evento${data.total === 1 ? "" : "s"}`;
+    if (!data.eventos.length) {
+      tbody.innerHTML = `<tr><td colspan="5" class="text-center text-slate-400 py-6">Sin eventos para esos filtros.</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = data.eventos.map(e => {
+      let detalleHtml;
+      if (e.detalle && typeof e.detalle === "object") {
+        const json = _escAudit(JSON.stringify(e.detalle, null, 2));
+        detalleHtml = `<details><summary class="cursor-pointer text-xs text-brand-700">ver JSON</summary><pre class="audit-detalle">${json}</pre></details>`;
+      } else if (e.detalle) {
+        detalleHtml = `<span class="text-xs text-slate-600">${_escAudit(e.detalle)}</span>`;
+      } else {
+        detalleHtml = `<span class="text-slate-300 text-xs">—</span>`;
+      }
+      const targetHtml = e.target_label
+        ? `<span class="font-mono text-xs">${_escAudit(e.target_label)}</span>${e.target_type ? `<span class="text-[10px] text-slate-400 ml-1">${_escAudit(e.target_type)}</span>` : ""}`
+        : (e.target_id
+            ? `<span class="font-mono text-[10px] text-slate-500" title="${_escAudit(e.target_id)}">${_escAudit(e.target_id.slice(0, 8))}…</span>`
+            : `<span class="text-slate-300">—</span>`);
+      const tsAbs = new Date(e.ts).toLocaleString("es-CO");
+      return `
+        <tr>
+          <td class="text-xs text-slate-500 whitespace-nowrap" title="${_escAudit(tsAbs)}">${fmtRel(e.ts)}</td>
+          <td><span class="font-mono text-xs">${_escAudit(e.actor_username)}</span></td>
+          <td><span class="accion-badge ${_accionClass(e.accion)}">${_escAudit(e.accion)}</span></td>
+          <td>${targetHtml}</td>
+          <td>${detalleHtml}</td>
+        </tr>
+      `;
+    }).join("");
+  } catch (e) {
+    err.textContent = e.message || "Error cargando audit log";
+    err.classList.remove("hidden");
+    tbody.innerHTML = "";
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════

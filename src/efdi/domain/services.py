@@ -6,6 +6,7 @@ from efdi.domain.models import (
     AfiliadoConCaptacion,
     AfiliadoConFindrisc,
     AfiliadoConPlanFamiliar,
+    AfiliadoConPruebasRapidas,
     AfiliadoConVacunas,
     Atencion,
     FamiliaCaracterizada,
@@ -14,6 +15,7 @@ from efdi.domain.models import (
     RegistroFindrisc,
     RegistroPlanFamiliar,
     RegistroVacuna,
+    RespuestaPruebaRapida,
 )
 
 
@@ -171,6 +173,40 @@ def agrupar_por_afiliado_planfami(
             )
         )
     return sorted(resultado, key=lambda x: (x.doc_key, x.fecha_gestion))
+
+
+def agrupar_por_afiliado_pruebas(
+    respuestas: list[RespuestaPruebaRapida],
+) -> list[AfiliadoConPruebasRapidas]:
+    """Agrupa respuestas de Pruebas Rápidas por afiliado (doc_key).
+
+    1 carpeta = 1 afiliado. Si la persona se hizo N pruebas (en una o varias
+    fechas) → todas caen en la misma carpeta del ZIP. El PDF individual
+    representa cada prueba por separado.
+    """
+    grupos: dict[str, list[RespuestaPruebaRapida]] = defaultdict(list)
+    for r in respuestas:
+        grupos[r.doc_key].append(r)
+
+    resultado: list[AfiliadoConPruebasRapidas] = []
+    for _, grupo in grupos.items():
+        primero = grupo[0]
+        # Ordenar respuestas por fecha realización + seq para reproducibilidad
+        grupo.sort(key=lambda x: (x.fecha_realizacion, x.seq_respuesta))
+        resultado.append(
+            AfiliadoConPruebasRapidas(
+                doc_key=primero.doc_key,
+                tipo_documento=primero.tipo_documento,
+                num_documento=primero.num_documento,
+                nombre_completo=primero.nombre_completo,
+                primer_nombre=primero.primer_nombre,
+                segundo_nombre=primero.segundo_nombre,
+                primer_apellido=primero.primer_apellido,
+                segundo_apellido=primero.segundo_apellido,
+                respuestas=grupo,
+            )
+        )
+    return sorted(resultado, key=lambda x: x.doc_key)
 
 
 def agrupar_por_familia_caracterizacion(

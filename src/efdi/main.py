@@ -17,6 +17,7 @@ from efdi.api.routes_dashboard import router as router_dashboard
 from efdi.api.routes_findrisc import router as router_findrisc
 from efdi.api.routes_me import router as router_me
 from efdi.api.routes_planfami import router as router_planfami
+from efdi.api.routes_pruebas import router as router_pruebas
 from efdi.api.routes_users import router as router_users
 from efdi.api.routes_vacunacion import router as router_vacunacion
 from efdi.config import settings
@@ -129,6 +130,7 @@ app.include_router(router_di)
 app.include_router(router_findrisc)
 app.include_router(router_captacion)
 app.include_router(router_planfami)
+app.include_router(router_pruebas)
 app.include_router(router_vacunacion)
 app.include_router(router_caracterizacion)
 app.include_router(router_dashboard)
