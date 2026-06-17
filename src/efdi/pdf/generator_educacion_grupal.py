@@ -81,6 +81,8 @@ def generar_pdf_educacion_grupal(
     output_path: Path,
     regimen_override: str | None = None,
 ) -> None:
+    from datetime import date as _date
+
     doc = SimpleDocTemplate(
         str(output_path),
         pagesize=letter,
@@ -91,30 +93,57 @@ def generar_pdf_educacion_grupal(
     )
     story: list = []
 
-    # Logo + título
+    # ── Derivados del lote de sesiones (periodo, conteos) ─────────────────
+    fechas = [r.fec_educacion_grupal for r in afiliado.registros if r.fec_educacion_grupal]
+    periodo_txt = ""
+    if fechas:
+        fmin, fmax = min(fechas), max(fechas)
+        periodo_txt = f"Período: {fmin} al {fmax}" if fmin != fmax else f"Sesión del {fmin}"
+
+    mod_counter: dict[str, int] = {}
+    for r in afiliado.registros:
+        m = (r.des_modalidad or "OTROS").upper()
+        mod_counter[m] = mod_counter.get(m, 0) + 1
+    mod_breakdown = " · ".join(f"{m.capitalize()}: {n}" for m, n in sorted(mod_counter.items()))
+
+    eje_counter: dict[str, int] = {}
+    for r in afiliado.registros:
+        e = (r.des_eje_tematico or "—").upper()
+        eje_counter[e] = eje_counter.get(e, 0) + 1
+
+    regimen = afiliado.registros[0].regimen if afiliado.registros else None
+    regimen_final = regimen or regimen_override or "—"
+
+    # ── Header: logo + título + fecha de emisión ──────────────────────────
+    emitido_txt = f"Generado: {_date.today().strftime('%d/%m/%Y')}"
     logo_exists = LOGO_MUTUALSER.exists()
-    if logo_exists:
-        img = Image(str(LOGO_MUTUALSER), width=1.8*cm, height=1.2*cm)
-    else:
-        img = Paragraph("", STYLE_VALUE)
+    img = Image(str(LOGO_MUTUALSER), width=1.8*cm, height=1.2*cm) if logo_exists else Paragraph("", STYLE_VALUE)
     header_table = Table(
-        [[img, Paragraph("SOPORTE EDUCACIÓN GRUPAL", STYLE_TITLE)]],
-        colWidths=[2.2*cm, 470],
+        [[img, Paragraph("SOPORTE EDUCACIÓN GRUPAL", STYLE_TITLE), Paragraph(emitido_txt, STYLE_LABEL)]],
+        colWidths=[2.2*cm, 370, 100],
         style=TableStyle([
             ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
             ("LEFTPADDING", (0, 0), (0, 0), 0),
+            ("ALIGN", (2, 0), (2, 0), "RIGHT"),
         ]),
     )
     story.append(header_table)
-    story.append(Spacer(1, 4))
+    if periodo_txt:
+        story.append(Spacer(1, 2))
+        story.append(Paragraph(periodo_txt, STYLE_LABEL))
+    story.append(Spacer(1, 6))
 
-    # Datos del afiliado
+    # ── Datos del afiliado ───────────────────────────────────────────────
     story.append(_section_header("DATOS DEL AFILIADO"))
     story.append(Spacer(1, 2))
+    total_breakdown = f"{afiliado.total_sesiones}"
+    if mod_breakdown:
+        total_breakdown += f" ({mod_breakdown})"
     datos = [
         _label_value_row("Documento", f"{afiliado.tipo_documento} {afiliado.num_documento}"),
         _label_value_row("Nombre", afiliado.nombre_completo),
-        _label_value_row("Total sesiones", str(afiliado.total_sesiones)),
+        _label_value_row("Régimen", regimen_final),
+        _label_value_row("Total sesiones", total_breakdown),
     ]
     for row in datos:
         t = Table([row], colWidths=[100, 380])
@@ -124,58 +153,93 @@ def generar_pdf_educacion_grupal(
             ("BOTTOMPADDING", (0, 0), (-1, -1), 1),
         ]))
         story.append(t)
-    story.append(Spacer(1, 6))
+    story.append(Spacer(1, 8))
 
-    # Tabla de sesiones educativas
-    story.append(_section_header("SESIONES EDUCATIVAS ASISTIDAS"))
+    # ── Ficha por sesión ──────────────────────────────────────────────────
+    total = afiliado.total_sesiones
+    for i, reg in enumerate(afiliado.registros, 1):
+        story.append(_section_header(f"SESIÓN {i} DE {total}"))
+        story.append(Spacer(1, 2))
+
+        depto_muni = " / ".join([p for p in [reg.departamento, reg.municipio] if p]) or "—"
+        ficha_rows = [
+            [
+                Paragraph("<b>Fecha sesión:</b>", STYLE_LABEL),
+                Paragraph(reg.fec_educacion_grupal or "—", STYLE_VALUE),
+                Paragraph("<b>Registrado:</b>", STYLE_LABEL),
+                Paragraph(reg.fec_registro_educacion or "—", STYLE_VALUE),
+            ],
+            [
+                Paragraph("<b>Curso de vida:</b>", STYLE_LABEL),
+                Paragraph(reg.des_curso_vida_asociado or "—", STYLE_VALUE),
+                "", "",
+            ],
+            [
+                Paragraph("<b>Eje temático:</b>", STYLE_LABEL),
+                Paragraph(reg.des_eje_tematico or "—", STYLE_VALUE),
+                Paragraph("<b>Modalidad:</b>", STYLE_LABEL),
+                Paragraph(reg.des_modalidad or "—", STYLE_VALUE),
+            ],
+            [
+                Paragraph("<b>Facilitador:</b>", STYLE_LABEL),
+                Paragraph(reg.facilitador or "—", STYLE_VALUE),
+                "", "",
+            ],
+            [
+                Paragraph("<b>Ubicación:</b>", STYLE_LABEL),
+                Paragraph(reg.txt_ubicacion_fisica or "—", STYLE_VALUE),
+                "", "",
+            ],
+            [
+                Paragraph("<b>Depto / Mpio:</b>", STYLE_LABEL),
+                Paragraph(depto_muni, STYLE_VALUE),
+                "", "",
+            ],
+        ]
+        ficha_tbl = Table(
+            ficha_rows,
+            colWidths=[90, 200, 70, 120],
+            style=TableStyle([
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("BOX", (0, 0), (-1, -1), 0.4, COLOR_BORDER),
+                ("LINEBELOW", (0, 0), (-1, -2), 0.2, COLOR_ALT_ROW),
+                ("TOPPADDING", (0, 0), (-1, -1), 3),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+                ("LEFTPADDING", (0, 0), (-1, -1), 6),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+                ("SPAN", (1, 1), (3, 1)),
+                ("SPAN", (1, 3), (3, 3)),
+                ("SPAN", (1, 4), (3, 4)),
+                ("SPAN", (1, 5), (3, 5)),
+            ]),
+        )
+        story.append(ficha_tbl)
+        story.append(Spacer(1, 6))
+
+    # ── Resumen ───────────────────────────────────────────────────────────
+    story.append(Spacer(1, 4))
+    story.append(_section_header("RESUMEN"))
     story.append(Spacer(1, 2))
 
-    header_row = [
-        Paragraph("<b>#</b>", STYLE_CELL),
-        Paragraph("<b>Fecha</b>", STYLE_CELL),
-        Paragraph("<b>Curso de Vida</b>", STYLE_CELL),
-        Paragraph("<b>Eje Temático</b>", STYLE_CELL),
-        Paragraph("<b>Modalidad</b>", STYLE_CELL),
-        Paragraph("<b>Facilitador</b>", STYLE_CELL),
-        Paragraph("<b>Ubicación</b>", STYLE_CELL),
-    ]
-    data_rows = [header_row]
-    for i, reg in enumerate(afiliado.registros, 1):
-        data_rows.append([
-            Paragraph(str(i), STYLE_CELL),
-            Paragraph(reg.fec_educacion_grupal or "—", STYLE_CELL),
-            Paragraph(reg.des_curso_vida_asociado or "—", STYLE_CELL),
-            Paragraph(reg.des_eje_tematico or "—", STYLE_CELL),
-            Paragraph(reg.des_modalidad or "—", STYLE_CELL),
-            Paragraph(reg.facilitador or "—", STYLE_CELL),
-            Paragraph(f"{reg.departamento or ''} / {reg.municipio or ''}".strip(" / ") or "—", STYLE_CELL),
-        ])
+    mod_txt = " · ".join(f"{m.capitalize()} {n}" for m, n in sorted(mod_counter.items())) or "—"
+    eje_txt = " · ".join(f"{e} {n}" for e, n in sorted(eje_counter.items(), key=lambda x: -x[1])) or "—"
+    periodo_resumen = periodo_txt.replace("Período: ", "").replace("Sesión del ", "") if periodo_txt else "—"
 
-    col_widths = [20, 55, 90, 90, 60, 90, 95]
-    table = Table(data_rows, colWidths=col_widths, repeatRows=1)
-    table_style = [
-        ("BACKGROUND", (0, 0), (-1, 0), COLOR_HEADER_BG),
-        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-        ("ALIGN", (0, 0), (0, -1), "CENTER"),
-        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("GRID", (0, 0), (-1, -1), 0.4, COLOR_BORDER),
-        ("TOPPADDING", (0, 0), (-1, -1), 2),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
-        ("LEFTPADDING", (0, 0), (-1, -1), 2),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 2),
+    resumen_rows = [
+        _label_value_row("Por modalidad", mod_txt),
+        _label_value_row("Por eje temático", eje_txt),
+        _label_value_row("Período cubierto", periodo_resumen),
     ]
-    for idx in range(1, len(data_rows)):
-        if idx % 2 == 0:
-            table_style.append(("BACKGROUND", (0, idx), (-1, idx), COLOR_ALT_ROW))
-    table.setStyle(TableStyle(table_style))
-    story.append(table)
-
+    for row in resumen_rows:
+        t = Table([row], colWidths=[110, 370])
+        t.setStyle(TableStyle([
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("TOPPADDING", (0, 0), (-1, -1), 1),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 1),
+        ]))
+        story.append(t)
     story.append(Spacer(1, 10))
-    story.append(Paragraph(
-        f"Total de sesiones educativas asistidas: {afiliado.total_sesiones}",
-        STYLE_VALUE,
-    ))
-    story.append(Spacer(1, 6))
+
     story.append(Paragraph(
         "Sistema Inteligente de Exportación de Datos para Facturación — SIEDFASER",
         STYLE_FOOTER,

@@ -909,12 +909,12 @@
               <label class="flex items-center gap-2 cursor-pointer text-xs text-slate-700">
                 <input id="reg-only-sub" type="checkbox" class="accent-brand-600 h-4 w-4">
                 <span class="font-semibold uppercase tracking-wide">Subsidiado</span>
-                <span class="text-[10px] text-slate-400 font-normal">— familias cuyo JEFE es subsidiado</span>
+                <span class="text-[10px] text-slate-400 font-normal">— afiliados del régimen subsidiado</span>
               </label>
               <label class="flex items-center gap-2 cursor-pointer text-xs text-slate-700">
                 <input id="reg-only-cont" type="checkbox" class="accent-brand-600 h-4 w-4">
                 <span class="font-semibold uppercase tracking-wide">Contributivo</span>
-                <span class="text-[10px] text-slate-400 font-normal">— familias cuyo JEFE es contributivo</span>
+                <span class="text-[10px] text-slate-400 font-normal">— afiliados del régimen contributivo</span>
               </label>
               <p class="text-[10px] text-slate-500 leading-snug">
                 Marcá uno o ambos. Con los 2 marcados se crean 2 jobs separados.
@@ -2285,10 +2285,11 @@ function switchTab(tabId) {
   if (!aceptaFiltroRegimen) {
     if (fSub)  fSub.value  = "";
     if (fCont) fCont.value = "";
+    // Solo limpiar checkboxes si el módulo destino NO acepta régimen.
+    // Si acepta, conservar selección previa (mejor UX entre tabs).
+    if (rSub)  rSub.checked  = false;
+    if (rCont) rCont.checked = false;
   }
-  // Reset siempre los checkboxes cuando se cambia de tab
-  if (rSub)  rSub.checked  = false;
-  if (rCont) rCont.checked = false;
 
   // ── Form SQL ↔ form de upload Excel (módulos con usaExcel=true, ej: Vacunación) ──
   const usaExcel = modByTab(tabId)?.usaExcel || false;
@@ -3350,9 +3351,19 @@ function fetchAutoPreview() {
   const subN  = _facturaFormSufijo($("fac-form-sub")?.value || "");
   const contN = _facturaFormSufijo($("fac-form-cont")?.value || "");
   const facN  = subN || contN || "";
-  const url = facN
-    ? `${getModuleApi()}/count?desde=${desde}&hasta=${hasta}&numero_factura=${encodeURIComponent(facN)}`
-    : `${getModuleApi()}/count?desde=${desde}&hasta=${hasta}`;
+  // Variante B (módulos con régimen sin factura, ej Educación Grupal):
+  // si hay EXACTAMENTE 1 checkbox marcado, filtramos el preview por ese
+  // régimen. Con 0 o 2 marcados mostramos el universo (con los 2 marcados se
+  // crean 2 jobs separados, así que el universo refleja bien la suma).
+  const subOn  = $("reg-only-sub")?.checked  || false;
+  const contOn = $("reg-only-cont")?.checked || false;
+  let regimenParam = "";
+  if (!facN && subOn && !contOn)      regimenParam = "SUBSIDIADO";
+  else if (!facN && contOn && !subOn) regimenParam = "CONTRIBUTIVO";
+  const params = new URLSearchParams({desde, hasta});
+  if (facN)         params.set("numero_factura", facN);
+  if (regimenParam) params.set("regimen", regimenParam);
+  const url = `${getModuleApi()}/count?${params.toString()}`;
   setAutoPreview("loading");
   setBtnGenDisabled(true);
   clearTimeout(_previewTimer);
@@ -3498,6 +3509,9 @@ function setGenLoading(on) {
 
 $("desde").addEventListener("change", fetchAutoPreview);
 $("hasta").addEventListener("change", fetchAutoPreview);
+// Checkboxes de régimen (variante B): refrescan el preview al cambiar.
+$("reg-only-sub")?.addEventListener("change", fetchAutoPreview);
+$("reg-only-cont")?.addEventListener("change", fetchAutoPreview);
 
 // ─── Filtro por factura en form (DI Fase 2) ───
 function _facturaFormSufijo(raw) {
