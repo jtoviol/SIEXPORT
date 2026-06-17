@@ -788,6 +788,27 @@
       </div>
       <div class="text-[10px] text-slate-400 mt-2 db-mod-ultimo">—</div>
     </div>
+    <div data-mod="educacion_grupal" class="db-mod-card bg-white rounded-xl border border-slate-200 p-4 cursor-pointer hover:border-teal-400 hover:shadow transition-all">
+      <div class="flex items-center justify-between mb-2">
+        <div class="font-semibold text-slate-800 text-sm">Educación Grupal</div>
+        <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-teal-100 text-teal-700">EG</span>
+      </div>
+      <div class="grid grid-cols-3 gap-2 text-center">
+        <div>
+          <div class="text-[9px] uppercase text-slate-400">En curso</div>
+          <div class="text-base font-bold text-amber-600 tabular-nums db-mod-curso">—</div>
+        </div>
+        <div>
+          <div class="text-[9px] uppercase text-slate-400">Completados</div>
+          <div class="text-base font-bold text-emerald-600 tabular-nums db-mod-ok">—</div>
+        </div>
+        <div>
+          <div class="text-[9px] uppercase text-slate-400">Fallidos</div>
+          <div class="text-base font-bold text-red-500 tabular-nums db-mod-fail">—</div>
+        </div>
+      </div>
+      <div class="text-[10px] text-slate-400 mt-2 db-mod-ultimo">—</div>
+    </div>
   </div>
 
   <!-- Actividad reciente -->
@@ -1422,6 +1443,14 @@
       </svg>
       <span>Pruebas R.</span>
     </button>
+    <button data-mob-tab="educacion-grupal" onclick="switchTab('educacion-grupal')"
+            class="mob-tab flex-1 min-w-[68px] flex flex-col items-center gap-0.5 py-2.5 transition-colors">
+      <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+        <path stroke-linecap="round" stroke-linejoin="round"
+              d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/>
+      </svg>
+      <span>Educac.</span>
+    </button>
   </div>
 </nav>
 
@@ -1741,6 +1770,12 @@ const MODULES = {
     api: "/pruebas/extractions", color: "violet", icon: "beaker",
     categoria: "Tamizajes", badge: "PR",
     usaFactura: true, usaRegimen: true, usaExcel: false, unidad: "afiliados",
+  },
+  "educacion-grupal": {
+    tipoBackend: "educacion_grupal", label: "Educación Grupal",
+    api: "/educacion-grupal/extractions", color: "teal", icon: "users",
+    categoria: "Seguimiento", badge: "EG",
+    usaFactura: false, usaRegimen: true, usaExcel: false, unidad: "afiliados",
   },
 };
 
@@ -2237,7 +2272,9 @@ function switchTab(tabId) {
       hint.textContent  = "(requerido · cruza con AVS_REGISTROS_AP)";
     } else {
       label.textContent = "Régimen";
-      hint.textContent  = "(opcional · filtra por régimen del JEFE DE FAMILIA)";
+      hint.textContent  = tabId === "educacion-grupal"
+        ? "(opcional · filtra por régimen del afiliado)"
+        : "(opcional · filtra por régimen del JEFE DE FAMILIA)";
     }
   }
   // Reset al cambiar de tab si el destino NO soporta filtro

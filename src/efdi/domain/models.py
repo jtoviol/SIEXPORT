@@ -31,6 +31,7 @@ MODULOS_VALIDOS: list[str] = [
     "vacunacion",
     "caracterizacion-familiar",
     "pruebas-rapidas",
+    "educacion-grupal",
 ]
 
 
@@ -223,6 +224,7 @@ class ExtraccionTipo(str, Enum):
     VACUNACION = "vacunacion"
     CARACTERIZACION_FAMILIAR = "caracterizacion_familiar"
     PRUEBAS_RAPIDAS = "pruebas_rapidas"
+    EDUCACION_GRUPAL = "educacion_grupal"
 
 
 # ─── Factores Clínicos del módulo Seguimiento Planificación Familiar ────────
@@ -671,6 +673,58 @@ class AfiliadoConVacunas(BaseModel):
     @property
     def pdf_key(self) -> str:
         """Nombre del PDF: tipo_documento_numero. Sin fecha — es el carné completo."""
+        return self.doc_key
+
+
+# ─── Educación Grupal ─────────────────────────────────────────────────────
+# 1 fila = 1 asistente a 1 sesión educativa grupal. El PDF agrupa por
+# afiliado: 1 PDF por persona con todas las sesiones a las que asistió.
+
+
+class RegistroEducacionGrupal(BaseModel):
+    """Una fila del SELECT contra SRG_EDUCACION_GRUPAL + asistentes."""
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    seq_educacion_grupal: int = Field(description="seq_educacion_grupal — id de la sesión")
+    consecutivo: int = Field(description="NUM_REGISTRO")
+
+    facilitador: str | None = Field(default=None, description="Nombre del facilitador")
+    des_curso_vida_asociado: str | None = Field(default=None, description="Curso de vida asociado")
+    des_eje_tematico: str | None = Field(default=None, description="Eje temático")
+    des_modalidad: str | None = Field(default=None, description="PRESENCIAL / VIRTUAL / OTROS")
+    fec_educacion_grupal: str | None = Field(default=None, description="Fecha de la sesión")
+    fec_registro_educacion: str | None = Field(default=None, description="Fecha de registro")
+
+    departamento: str | None = None
+    municipio: str | None = None
+    txt_ubicacion_fisica: str | None = Field(default=None, description="Lugar físico")
+
+    cod_tipo_identificacion: str | None = None
+    nro_tipo_identificacion: str | None = None
+    nombre_afiliado: str | None = None
+    regimen: str | None = Field(default=None, description="SUBSIDIADO / CONTRIBUTIVO")
+
+    @property
+    def doc_key(self) -> str:
+        return f"{self.cod_tipo_identificacion or 'CC'}_{self.nro_tipo_identificacion or '0'}"
+
+
+class AfiliadoConEducacionGrupal(BaseModel):
+    """Un afiliado con todas las sesiones educativas a las que asistió."""
+
+    doc_key: str
+    tipo_documento: str
+    num_documento: str
+    nombre_completo: str
+    registros: list[RegistroEducacionGrupal]
+
+    @property
+    def total_sesiones(self) -> int:
+        return len(self.registros)
+
+    @property
+    def pdf_key(self) -> str:
         return self.doc_key
 
 

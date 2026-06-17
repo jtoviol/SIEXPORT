@@ -4,6 +4,7 @@ from collections import defaultdict
 from efdi.domain.models import (
     AfiliadoConAtenciones,
     AfiliadoConCaptacion,
+    AfiliadoConEducacionGrupal,
     AfiliadoConFindrisc,
     AfiliadoConPlanFamiliar,
     AfiliadoConPruebasRapidas,
@@ -12,6 +13,7 @@ from efdi.domain.models import (
     FamiliaCaracterizada,
     RegistroCaptacion,
     RegistroCaracterizacion,
+    RegistroEducacionGrupal,
     RegistroFindrisc,
     RegistroPlanFamiliar,
     RegistroVacuna,
@@ -204,6 +206,35 @@ def agrupar_por_afiliado_pruebas(
                 primer_apellido=primero.primer_apellido,
                 segundo_apellido=primero.segundo_apellido,
                 respuestas=grupo,
+            )
+        )
+    return sorted(resultado, key=lambda x: x.doc_key)
+
+
+def agrupar_por_afiliado_educacion_grupal(
+    registros: list[RegistroEducacionGrupal],
+) -> list[AfiliadoConEducacionGrupal]:
+    """Agrupa registros de Educación Grupal por afiliado (doc_key).
+
+    1 PDF por persona con todas las sesiones educativas a las que asistió.
+    """
+    from collections import defaultdict
+    grupos: dict[str, list[RegistroEducacionGrupal]] = defaultdict(list)
+    for r in registros:
+        grupos[r.doc_key].append(r)
+
+    resultado: list[AfiliadoConEducacionGrupal] = []
+    for _, grupo in grupos.items():
+        # Orden estable por fecha + seq de sesión: reproducibilidad de PDFs
+        grupo.sort(key=lambda x: (x.fec_educacion_grupal or "", x.seq_educacion_grupal))
+        primero = grupo[0]
+        resultado.append(
+            AfiliadoConEducacionGrupal(
+                doc_key=primero.doc_key,
+                tipo_documento=primero.cod_tipo_identificacion or "CC",
+                num_documento=primero.nro_tipo_identificacion or "0",
+                nombre_completo=primero.nombre_afiliado or "—",
+                registros=grupo,
             )
         )
     return sorted(resultado, key=lambda x: x.doc_key)

@@ -15,7 +15,7 @@
 [![ReportLab](https://img.shields.io/badge/PDF-ReportLab-1a2f6e?style=for-the-badge)](https://www.reportlab.com)
 
 [![Status](https://img.shields.io/badge/status-production-22a84a?style=flat-square)](#)
-[![Multi-module](https://img.shields.io/badge/m%C3%B3dulos-6-1a2f6e?style=flat-square)](#módulos-disponibles)
+[![Multi-module](https://img.shields.io/badge/m%C3%B3dulos-7-1a2f6e?style=flat-square)](#módulos-disponibles)
 [![Persistence](https://img.shields.io/badge/persistencia-SQLite%20WAL-234674?style=flat-square)](#stack)
 [![Concurrency](https://img.shields.io/badge/concurrencia-Pool%20%2B%20Threads-22a84a?style=flat-square)](#procesamiento-por-lotes)
 [![Auth](https://img.shields.io/badge/auth-RBAC%20multi--user-234674?style=flat-square)](#autenticación-y-roles)
@@ -30,18 +30,21 @@
 
 **SIEDFASER** es una plataforma web para extracción y empaquetado masivo de datos clínicos de la base **Seragil** (SQL Server) con destino a facturación. Cada extracción agrupa los registros por afiliado y entrega un `.zip` con un PDF por paciente, listo para radicar como soporte de cuenta médica.
 
-**6 módulos activos** — cada uno con su consulta SQL, su modelo de dominio y su plantilla de PDF:
+**7 módulos activos** — cada uno con su consulta SQL, su modelo de dominio y su plantilla de PDF:
 
 | Módulo | Tabla origen | Filtro | API |
-|---|---|---|---|
+|---|---|---|---|---|
 | Demanda Inducida | `AVS_REGISTRO_SERAGIL` + `AVS_PROGRAMA_ASOCIADO_DEMIND` | `FLG_REGIND_DEMIND = 'SI'` + rango fechas | `/extractions/...` |
 | FINDRISC | `SRG_FORMATO_FINDRISC` | `FLG_FORMATO_COLDRISC = 'SI'` + rango fechas | `/findrisc/...` |
 | Gestión Captación | `srg_captacion_afiliados` | rango `fec_captacion_afiliado` | `/gestion-captacion/...` |
 | Planificación Familiar | `SRG_POBLACION_RIESGO_REPRODUCTIVO` + `SRG_DETALLE_RIESGO_REPRODUCTIVO` | rango `fec_gestion_seguimiento` | `/planificacion-familiar/...` |
 | Vacunación | Excel `.xlsx` subido (sin SQL) | régimen del propio Excel | `/vacunacion/...` |
 | Caracterización Familiar | `SBW_PERSONA_CARACTERIZADA` + `SBW_UBICACION_FAMILIA` (**base sibacom**, servidor aparte) | rango `fecha_reg` — sin factura | `/caracterizacion-familiar/...` |
+| Educación Grupal | `SRG_EDUCACION_GRUPAL` + `SRG_ASISTENTE_EDUCACION_GRUPAL` | rango `fec_educacion_grupal` — sin factura | `/educacion-grupal/...` |
 
 > Caracterización Familiar agrupa **por familia** (jerarquía geográfica + vivienda + familia + ciuf): 1 PDF por familia con todos sus integrantes. Requiere las variables `DB_*_SIBACOM` en el `.env`.
+
+> Educación Grupal agrupa **por afiliado** (1 PDF por persona con todas las sesiones educativas a las que asistió). Sin factura. Sin Excel.
 
 Vista inicial: **Dashboard** con KPIs cross-módulo y actividad reciente (no se aterriza en un módulo específico al loguearse).
 
@@ -186,6 +189,27 @@ Apunta a la base **`sibacom`** (servidor distinto: `DB_*_SIBACOM` en `.env`), no
 **Filtro fuente:** rango de `UF.fecha_reg`. Opcional `regimen` (SUBSIDIADO/CONTRIBUTIVO) que filtra familias por el régimen del jefe.
 **API:** `/caracterizacion-familiar/...`
 
+### Educación Grupal
+
+Extrae sesiones educativas grupales de `SRG_EDUCACION_GRUPAL` + asistentes de `SRG_ASISTENTE_EDUCACION_GRUPAL`, cruzando con `AVS_AFILIADO_MUTUALSER_HIS` para obtener los datos del afiliado. Genera **1 PDF por afiliado** con todas las sesiones a las que asistió (formato "SOPORTE EDUCACIÓN GRUPAL"):
+
+- **Header**: logo Mutualser + título centrado en azul institucional.
+- **Datos del afiliado**: documento, nombre, total de sesiones asistidas.
+- **Tabla de sesiones educativas**: # consecutivo, fecha, curso de vida, eje temático, modalidad (PRESENCIAL / VIRTUAL / OTROS), facilitador, ubicación (depto / municipio).
+- **Total de sesiones** al pie de la tabla.
+
+```
+lote_001.zip
+├── CC_12345678/
+│   └── CC_12345678_2026-05-15.pdf
+├── TI_98765432/
+│   └── TI_98765432_2026-05-10.pdf
+└── …
+```
+
+**Filtro fuente:** rango de `a.fec_educacion_grupal`. Opcional `regimen` (SUBSIDIADO/CONTRIBUTIVO) que filtra por `h.AFIC_REGIMEN`.
+**API:** `/educacion-grupal/extractions/...`
+
 ---
 
 ## Vista de Inicio (Dashboard)
@@ -193,7 +217,7 @@ Apunta a la base **`sibacom`** (servidor distinto: `DB_*_SIBACOM` en `.env`), no
 Al loguearte aterrizás en la pestaña **Inicio** (no en un módulo específico). Muestra:
 
 - **4 KPIs grandes**: PDFs generados hoy / últimos 7 días / último mes y afiliados procesados último mes.
-- **6 cards por módulo** (DI, FINDRISC, Captación, Planificación Familiar, Vacunación, Caracterización Familiar) con: en curso · completados · fallidos · timestamp de la última extracción. Click → cambia a esa pestaña.
+- **7 cards por módulo** (DI, FINDRISC, Captación, Planificación Familiar, Vacunación, Caracterización Familiar, Educación Grupal) con: en curso · completados · fallidos · timestamp de la última extracción. Click → cambia a esa pestaña.
 - **Actividad reciente**: lista de las 8 últimas extracciones de cualquier módulo con badge del módulo, estado coloreado y nº de PDFs. Click → abre el job en su módulo.
 
 Mientras trabajás en cualquier módulo, una **franja de chips** queda visible arriba con: `N en curso · M fallidas 24h · X PDFs hoy · Y PDFs mes · Modo: SQL Server/MOCK`. Se refresca cada 15s.
@@ -430,6 +454,7 @@ uvicorn efdi.main:app --host 0.0.0.0 --port 8765 --workers 4
    - **Planificación Familiar**
    - **Vacunación** — usa dropzone Excel, no SQL
    - **Caracterización Familiar** — sibacom, 1 PDF por familia
+   - **Educación Grupal** — sesiones educativas grupales
 5. Dentro de un módulo: clic en **Nueva extracción** → elegir rango de fechas → (opcional) régimen → Generar.
 6. La vista muestra en tiempo real el progreso de cada lote con su fase actual.
 7. Al completar → explorar archivos del árbol o descargar el `.zip`.
@@ -443,6 +468,7 @@ El badge superior derecho indica si la conexión es **SQL Server** o **Mock**.
 |---|---|---|
 | DI, FINDRISC, Captación, PlanFami | Inputs CAB/FAB **requeridos** | Cruza contra `AVS_REGISTROS_AP`. El usuario ingresa el sufijo del código (ej. `11502`) y el backend arma `CAB11502` + `FAB11502`. Genera 1 o 2 jobs (uno por cada régimen ingresado). |
 | Caracterización Familiar | Checkboxes SUB/CONT **opcionales** | No usa factura. Filtra familias por el régimen del **JEFE DE FAMILIA** (ver sección del módulo). Sin marcar nada → trae el universo completo. |
+| Educación Grupal | Checkboxes SUB/CONT **opcionales** | Filtra sesiones por régimen del afiliado (`h.AFIC_REGIMEN`). Sin marcar nada → trae el universo completo. |
 | Vacunación | Checkboxes SUB/CONT **requeridos** | Régimen viene del propio Excel subido. |
 
 ---
@@ -526,6 +552,22 @@ curl -X POST -b cookie.txt \
   http://127.0.0.1:8765/caracterizacion-familiar/extractions
 ```
 
+### Módulo Educación Grupal
+
+Bajo el prefijo `/educacion-grupal/`. Mismos 11 endpoints que FINDRISC. El `count` y `POST extractions` aceptan opcionalmente `regimen=SUBSIDIADO|CONTRIBUTIVO` que filtra por `h.AFIC_REGIMEN`.
+
+```bash
+# Conteo previo filtrado por régimen
+curl -b cookie.txt "http://127.0.0.1:8765/educacion-grupal/extractions/count?desde=2026-05-01&hasta=2026-05-31&regimen=SUBSIDIADO"
+# → {"total_en_db":1200,"limite_efectivo":1200,"tamano_lote":...}
+
+# Crear extracción solo de sesiones educativas subsidiadas
+curl -X POST -b cookie.txt \
+  -H "Content-Type: application/json" \
+  -d '{"desde":"2026-05-01","hasta":"2026-05-31","regimen":"SUBSIDIADO"}' \
+  http://127.0.0.1:8765/educacion-grupal/extractions
+```
+
 ### Autenticación / Usuarios
 
 ```
@@ -551,7 +593,7 @@ GET    /api/users/_audit/log                    Audit log de eventos críticos
 GET    /api/dashboard/summary    KPIs cross-módulo + cards + actividad reciente
 ```
 
-Devuelve JSON con `global`, `modulos` (6 módulos) y `recientes` (últimas 8 extracciones de cualquier módulo).
+Devuelve JSON con `global`, `modulos` (7 módulos) y `recientes` (últimas 8 extracciones de cualquier módulo).
 
 ### Ejemplo: crear extracción
 
@@ -657,7 +699,7 @@ D:\proyecto\
 ├── Dockerfile / docker-compose.yml     # Imagen siedfaser con ODBC Driver 17 preinstalado
 ├── tests/                              # Tests con pytest (ver sección Testing)
 └── src/efdi/
-    ├── main.py                         # FastAPI app — registra 6 routers + auth/users + dashboard
+    ├── main.py                         # FastAPI app — registra 7 routers + auth/users + dashboard
     ├── config.py                       # Settings desde .env (incluye DB_*_SIBACOM para Caracterización)
     ├── api/
     │   ├── dependencies.py             # Auth/RBAC: current_user, require_admin, require_modulo, …
@@ -667,6 +709,7 @@ D:\proyecto\
     │   ├── routes_planfami.py          # Endpoints PlanFami
     │   ├── routes_vacunacion.py        # Endpoints Vacunación (incluye upload .xlsx)
     │   ├── routes_caracterizacion.py   # Endpoints Caracterización Familiar (sibacom)
+    │   ├── routes_educacion_grupal.py  # Endpoints Educación Grupal
     │   ├── routes_dashboard.py         # GET /api/dashboard/summary
     │   ├── routes_users.py             # /api/users — CRUD (solo ADMIN)
     │   ├── routes_me.py                # /api/me — perfil + cambiar password
@@ -687,6 +730,7 @@ D:\proyecto\
     │   ├── repository_captacion.py     # Consulta Captación
     │   ├── repository_planfami.py      # Consulta Planificación Familiar
     │   ├── repository_vacunacion.py    # Lectura .xlsx de Vacunación
+    │   ├── repository_educacion_grupal.py # Consulta SRG_EDUCACION_GRUPAL + asistentes
     │   └── repository_caracterizacion.py  # Consulta sibacom — paginación por familia + filtro régimen jefe
     ├── pdf/
     │   ├── generator.py                # PDF Demanda Inducida
@@ -695,6 +739,7 @@ D:\proyecto\
     │   ├── generator_planfami.py       # PDF PlanFami
     │   ├── generator_vacunacion.py     # PDF Vacunación — carné por persona
     │   ├── generator_caracterizacion.py # PDF Caracterización Familiar — 1 por familia con N integrantes
+    │   ├── generator_educacion_grupal.py # PDF Educación Grupal — 1 por afiliado con todas sus sesiones
     │   ├── parallel*.py                # Workers multiprocessing (uno por módulo)
     │   └── programas_catalogo.py       # Carga programas.txt (124 programas DI)
     ├── services/
@@ -704,12 +749,13 @@ D:\proyecto\
     │   ├── extraction_planfami.py      # Orquestador PlanFami
     │   ├── extraction_vacunacion.py    # Orquestador Vacunación
     │   ├── extraction_caracterizacion.py # Orquestador Caracterización Familiar
+    │   ├── extraction_educacion_grupal.py # Orquestador Educación Grupal
     │   └── auth_service.py             # bcrypt hash/verify + bootstrap admin + login
     ├── templates/
     │   ├── logo.png                    # Logo Mutualser (usado en headers de los PDFs)
     │   └── programas.txt               # 124 códigos + descripciones de programas DI
     └── web/
-        ├── index.html                  # SPA — sidebar + 6 módulos + Cmd+K + modales de usuarios
+        ├── index.html                  # SPA — sidebar + 7 módulos + Cmd+K + modales de usuarios
         ├── login.html                  # Pantalla de acceso
         └── siedfaser_logo.png          # Logo del producto
 ```
@@ -804,7 +850,8 @@ Cobertura actual buena en: DI, FINDRISC, PlanFami, Caracterización, auth/RBAC. 
 ```
 tests/
 ├── test_captacion.py           # pendiente (smoke como findrisc/planfami)
-└── test_vacunacion.py          # pendiente (smoke + parsing Excel)
+├── test_vacunacion.py          # pendiente (smoke + parsing Excel)
+└── test_educacion_grupal.py    # pendiente (smoke + filtro régimen)
 ```
 
 ---
