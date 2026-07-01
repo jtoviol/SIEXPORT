@@ -21,6 +21,14 @@ class Settings(BaseSettings):
     db_password: str = ""
     db_driver: str = "ODBC Driver 17 for SQL Server"
 
+    # Segunda conexión: base sibacom (módulo Caracterización Familiar).
+    # Vive en otro servidor con credenciales propias — ver .env (DB_*_SIBACOM).
+    db_host_sibacom: str = "localhost"
+    db_port_sibacom: int = 1433
+    db_name_sibacom: str = "sibacom"
+    db_user_sibacom: str = ""
+    db_password_sibacom: str = ""
+
     data_dir: Path = Field(default=Path("./data"))
     templates_dir: Path = Field(default=Path("./src/efdi/templates"))
 
@@ -33,8 +41,11 @@ class Settings(BaseSettings):
     # Umbral mínimo de atenciones por lote para activar Pool (debajo de eso, secuencial)
     pdf_parallel_threshold: int = 100
 
-    # Lotes en paralelo: cuántos lotes se procesan simultáneamente (1 = secuencial)
-    lote_workers: int = 2
+    # Lotes en paralelo: cuántos lotes se procesan simultáneamente (1 = secuencial).
+    # NOTA: cuando lote_workers > 1, el pool interno de PDFs por lote se desactiva
+    # (el paralelismo viene del nivel de lote). Para jobs grandes (~45k afiliados),
+    # 4 lotes paralelos × ~12k filas/lote da mejor throughput que 2 × 6k.
+    lote_workers: int = 4
 
     # Autenticación básica
     auth_user: str = Field(default="admin")
@@ -48,6 +59,16 @@ class Settings(BaseSettings):
             f"SERVER={self.db_host},{self.db_port};"
             f"DATABASE={self.db_name};"
             f"UID={self.db_user};PWD={self.db_password};"
+            "TrustServerCertificate=yes;Encrypt=no;"
+        )
+
+    @property
+    def db_dsn_sibacom(self) -> str:
+        return (
+            f"DRIVER={{{self.db_driver}}};"
+            f"SERVER={self.db_host_sibacom},{self.db_port_sibacom};"
+            f"DATABASE={self.db_name_sibacom};"
+            f"UID={self.db_user_sibacom};PWD={self.db_password_sibacom};"
             "TrustServerCertificate=yes;Encrypt=no;"
         )
 

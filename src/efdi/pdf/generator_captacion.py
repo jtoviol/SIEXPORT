@@ -155,11 +155,23 @@ def _label_value_grid(rows: list[list[tuple[str, str]]], width: float) -> Table:
     return contenedor
 
 
-def _datos_afiliado(reg: RegistroCaptacion, width: float) -> Table:
+def _datos_afiliado(
+    reg: RegistroCaptacion,
+    width: float,
+    regimen_override: str | None = None,
+) -> Table:
+    """Bloque de datos demográficos del afiliado.
+
+    `regimen_override` viene seteado cuando la extracción se filtró por código
+    de régimen (CAB/FAB vía AVS_REGISTROS_AP) — se pinta como una celda extra
+    junto al sexo para garantizar consistencia con el filtro de la query.
+    """
     doc_full = f"{_raw(reg.tipo_identificacion_desc)}: {_raw(reg.num_documento)}"
+    regimen_str = (regimen_override or "").strip() or "—"
     return _label_value_grid([
         [("Nombre del afiliado", _raw(reg.nombre_completo)),
-         ("Sexo", _raw(reg.genero))],
+         ("Sexo", _raw(reg.genero)),
+         ("Régimen", regimen_str)],
         [("Edad", _raw(reg.edad)),
          ("Documento", doc_full),
          ("Fecha de nacimiento", _raw(reg.fec_nacimiento))],
@@ -234,7 +246,10 @@ def _programas_grid(reg: RegistroCaptacion, width: float) -> Table:
 
 # ─── Composición del documento ────────────────────────────────────────────────
 
-def _construir_pagina_captacion(afiliado: AfiliadoConCaptacion) -> list:
+def _construir_pagina_captacion(
+    afiliado: AfiliadoConCaptacion,
+    regimen_override: str | None = None,
+) -> list:
     reg = afiliado.registros[0]
     width = letter[0] - 20 * mm
 
@@ -243,7 +258,7 @@ def _construir_pagina_captacion(afiliado: AfiliadoConCaptacion) -> list:
     elems.append(Spacer(1, 4))
 
     elems.append(_section_header("DATOS DEL AFILIADO", width))
-    elems.append(_datos_afiliado(reg, width))
+    elems.append(_datos_afiliado(reg, width, regimen_override=regimen_override))
     elems.append(Spacer(1, 4))
 
     elems.append(_section_header("CAPTACIÓN", width))
@@ -282,7 +297,13 @@ def _construir_pagina_captacion(afiliado: AfiliadoConCaptacion) -> list:
     return elems
 
 
-def generar_pdf_captacion(afiliado: AfiliadoConCaptacion, output_path: Path) -> Path:
+def generar_pdf_captacion(
+    afiliado: AfiliadoConCaptacion,
+    output_path: Path,
+    regimen_override: str | None = None,
+) -> Path:
+    """`regimen_override` se imprime en el bloque DATOS DEL AFILIADO cuando la
+    extracción se filtró por código CAB/FAB."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
     doc = SimpleDocTemplate(
         str(output_path),
@@ -292,7 +313,7 @@ def generar_pdf_captacion(afiliado: AfiliadoConCaptacion, output_path: Path) -> 
         title=f"Gestión Captación — {afiliado.pdf_key}",
         author="SIEDFASER",
     )
-    elems = _construir_pagina_captacion(afiliado)
+    elems = _construir_pagina_captacion(afiliado, regimen_override=regimen_override)
     elems.append(Spacer(1, 6))
     elems.append(Paragraph(
         "Documento generado automáticamente por SIEDFASER — Gestión Captación Afiliados",

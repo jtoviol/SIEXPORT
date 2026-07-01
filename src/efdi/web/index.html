@@ -156,6 +156,13 @@
     }
     #sidebar-toggle svg { transition: transform .24s ease; }
 
+    /* Tabs con scroll horizontal (desktop y móvil): sin scrollbar visible,
+       centrados cuando caben y deslizables cuando no. */
+    .tabs-scroll { overflow-x: auto; scrollbar-width: none; -ms-overflow-style: none; }
+    .tabs-scroll::-webkit-scrollbar { display: none; }
+    .tabs-scroll > :first-child { margin-left: auto; }
+    .tabs-scroll > :last-child  { margin-right: auto; }
+
     /* ─── MOBILE ─── */
     @media (max-width: 639px) {
       /* Sidebar ocupa todo el ancho */
@@ -192,22 +199,340 @@
     .qs-chip.qs-danger { background: #fef2f2; border-color: #fecaca; color: #dc2626; }
     .qs-chip.qs-ok { background: #ecfdf5; border-color: #bbf7d0; color: #047857; }
     #quick-stats::-webkit-scrollbar { display: none; }
+
+    /* ═══ Sidebar nav (lateral) ══════════════════════════════════════════════ */
+    /* Desktop ≥1024: sticky, ancho fijo 244px. Mobile: drawer overlay. */
+    #app-sidebar {
+      width: 244px; flex-shrink: 0;
+      display: flex; flex-direction: column;
+      background: #fff; border-right: 1px solid #e2e8f0;
+      transition: transform .25s ease;
+    }
+    @media (max-width: 1023.98px) {
+      #app-sidebar {
+        position: fixed; top: 0; bottom: 0; left: 0; z-index: 60;
+        transform: translateX(-100%); box-shadow: 0 12px 32px rgba(0,0,0,.2);
+      }
+      #app-sidebar.open { transform: translateX(0); }
+      #app-sidebar-backdrop {
+        position: fixed; inset: 0; background: rgba(15,23,42,.45);
+        z-index: 55; opacity: 0; pointer-events: none; transition: opacity .2s;
+      }
+      #app-sidebar-backdrop.open { opacity: 1; pointer-events: auto; }
+    }
+    .sidebar-item {
+      display: flex; align-items: center; gap: .6rem;
+      padding: .5rem .65rem; border-radius: .5rem;
+      font-size: 13px; color: #475569; font-weight: 500;
+      cursor: pointer; transition: background .12s, color .12s;
+    }
+    .sidebar-item:hover { background: #f1f5f9; color: #0f172a; }
+    .sidebar-item.active { background: #eef2ff; color: #1a2f6e; font-weight: 600; }
+    .sidebar-item.active .sidebar-icon-box {
+      background: rgba(26,47,110,.08); color: #1a2f6e;
+    }
+    .sidebar-icon-box {
+      width: 26px; height: 26px; border-radius: .45rem;
+      display: flex; align-items: center; justify-content: center;
+      background: #f1f5f9; color: #64748b; flex-shrink: 0;
+    }
+    .sidebar-icon-box svg { width: 15px; height: 15px; }
+    .sidebar-group-header {
+      padding: .8rem .65rem .35rem; font-size: 10px;
+      text-transform: uppercase; letter-spacing: .08em;
+      color: #94a3b8; font-weight: 700;
+    }
+    .sidebar-count {
+      margin-left: auto; font-size: 10px; color: #94a3b8;
+      background: #f1f5f9; padding: 1px 6px; border-radius: 99px;
+      font-weight: 600;
+    }
+
+    /* ═══ Cmd+K palette ════════════════════════════════════════════════════ */
+    #cmdk-overlay {
+      position: fixed; inset: 0; z-index: 80;
+      background: rgba(15,23,42,.5); backdrop-filter: blur(4px);
+      display: none; align-items: flex-start; justify-content: center;
+      padding-top: 12vh;
+    }
+    #cmdk-overlay.open { display: flex; }
+    #cmdk-modal {
+      width: min(560px, calc(100vw - 32px));
+      background: #fff; border-radius: 12px;
+      box-shadow: 0 20px 48px rgba(0,0,0,.25);
+      overflow: hidden; display: flex; flex-direction: column;
+      max-height: 70vh;
+    }
+    #cmdk-input {
+      padding: 14px 18px; border: 0; outline: none;
+      font-size: 15px; border-bottom: 1px solid #e2e8f0;
+      font-family: inherit;
+    }
+    #cmdk-results { padding: 6px; overflow-y: auto; }
+    .cmdk-item {
+      display: flex; align-items: center; gap: .65rem;
+      padding: 9px 12px; border-radius: 8px;
+      cursor: pointer; font-size: 13.5px; color: #1e293b;
+    }
+    .cmdk-item:hover, .cmdk-item.cmdk-active { background: #f1f5f9; }
+    .cmdk-item .cmdk-cat {
+      margin-left: auto; font-size: 10px; color: #94a3b8;
+      text-transform: uppercase; letter-spacing: .06em;
+    }
+    .cmdk-empty {
+      padding: 24px; text-align: center; color: #94a3b8; font-size: 13px;
+    }
+    .cmdk-trigger {
+      display: flex; align-items: center; gap: .5rem;
+      padding: 6px 10px; border-radius: 8px;
+      background: #f1f5f9; border: 1px solid #e2e8f0;
+      color: #64748b; font-size: 12px; cursor: pointer;
+      transition: background .15s, border-color .15s;
+    }
+    .cmdk-trigger:hover { background: #e2e8f0; border-color: #cbd5e1; }
+    .cmdk-trigger kbd {
+      font-family: ui-monospace, "SF Mono", monospace;
+      background: #fff; border: 1px solid #cbd5e1; border-radius: 4px;
+      padding: 1px 5px; font-size: 10px; color: #475569;
+    }
+
+    /* ═══ User menu (avatar + dropdown) ════════════════════════════════════ */
+    .user-avatar {
+      width: 32px; height: 32px; border-radius: 50%;
+      background: linear-gradient(135deg, #1a2f6e 0%, #22a84a 100%);
+      color: #fff; font-weight: 700; font-size: 12px;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; user-select: none;
+    }
+    #user-menu {
+      position: absolute; top: calc(100% + 6px); right: 0;
+      min-width: 220px; background: #fff; border: 1px solid #e2e8f0;
+      border-radius: 10px; box-shadow: 0 12px 32px rgba(0,0,0,.12);
+      z-index: 50; overflow: hidden;
+    }
+    #user-menu button, #user-menu a {
+      display: flex; align-items: center; gap: .55rem;
+      width: 100%; padding: 9px 12px;
+      font-size: 13px; color: #1e293b; text-align: left;
+      background: #fff; border: 0; cursor: pointer;
+    }
+    #user-menu button:hover, #user-menu a:hover { background: #f1f5f9; }
+    #user-menu .um-logout { color: #dc2626; }
+    #user-menu .um-logout:hover { background: #fef2f2; }
+    .um-divider { height: 1px; background: #e2e8f0; }
+    .um-header {
+      padding: 10px 12px; border-bottom: 1px solid #e2e8f0;
+      background: #f8fafc;
+    }
+    .rol-badge {
+      display: inline-block; padding: 1px 7px; border-radius: 99px;
+      font-size: 9px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+    .rol-badge.rol-admin    { background: #fef2f2; color: #b91c1c; }
+    .rol-badge.rol-operador { background: #eff6ff; color: #1e40af; }
+    .rol-badge.rol-viewer   { background: #f1f5f9; color: #475569; }
+
+    /* ═══ Generic modal (perfil, usuarios, user-form) ═══════════════════════ */
+    .modal-overlay {
+      position: fixed; inset: 0; z-index: 70;
+      background: rgba(15,23,42,.5); backdrop-filter: blur(3px);
+      display: none; align-items: flex-start; justify-content: center;
+      padding: 6vh 16px; overflow-y: auto;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal-box {
+      background: #fff; border-radius: 12px;
+      box-shadow: 0 20px 48px rgba(0,0,0,.25);
+      width: 100%; max-width: 480px;
+      display: flex; flex-direction: column; max-height: 90vh;
+    }
+    .modal-box.modal-lg  { max-width: 760px; }
+    .modal-box.modal-xl  { max-width: 920px; }
+    .modal-header {
+      padding: 14px 18px; border-bottom: 1px solid #e2e8f0;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .modal-header h2 { font-size: 15px; font-weight: 700; color: #0f172a; }
+    .modal-body { padding: 16px 18px; overflow-y: auto; }
+    .modal-footer {
+      padding: 12px 18px; border-top: 1px solid #e2e8f0;
+      display: flex; justify-content: flex-end; gap: 8px;
+      background: #fafbfc;
+    }
+    .modal-close {
+      width: 28px; height: 28px; border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+      color: #94a3b8; background: transparent; border: 0; cursor: pointer;
+    }
+    .modal-close:hover { background: #f1f5f9; color: #1e293b; }
+    .form-row {
+      display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px;
+    }
+    .form-row label {
+      font-size: 11px; font-weight: 600; color: #475569;
+      text-transform: uppercase; letter-spacing: .04em;
+    }
+    .form-row input, .form-row select {
+      padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px;
+      font-size: 13px; font-family: inherit; outline: none;
+      transition: border-color .15s, box-shadow .15s;
+    }
+    .form-row input:focus, .form-row select:focus {
+      border-color: #1a2f6e; box-shadow: 0 0 0 3px rgba(26,47,110,.15);
+    }
+    .form-row .hint { font-size: 10.5px; color: #94a3b8; }
+    .form-error {
+      padding: 8px 10px; border-radius: 6px;
+      background: #fef2f2; color: #b91c1c; font-size: 12px;
+      border: 1px solid #fecaca; margin-bottom: 12px;
+    }
+    .form-ok {
+      padding: 8px 10px; border-radius: 6px;
+      background: #ecfdf5; color: #047857; font-size: 12px;
+      border: 1px solid #bbf7d0; margin-bottom: 12px;
+    }
+    .btn-primary {
+      padding: 8px 14px; background: #1a2f6e; color: #fff;
+      border: 0; border-radius: 6px; font-size: 13px; font-weight: 600;
+      cursor: pointer;
+    }
+    .btn-primary:hover { background: #15265a; }
+    .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
+    .btn-secondary {
+      padding: 8px 14px; background: #fff; color: #475569;
+      border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;
+      cursor: pointer;
+    }
+    .btn-secondary:hover { background: #f8fafc; }
+    .btn-danger {
+      padding: 6px 10px; background: #fff; color: #dc2626;
+      border: 1px solid #fecaca; border-radius: 6px; font-size: 12px;
+      cursor: pointer;
+    }
+    .btn-danger:hover { background: #fef2f2; }
+    .btn-icon {
+      padding: 5px 8px; background: transparent; color: #475569;
+      border: 1px solid #e2e8f0; border-radius: 6px; font-size: 11.5px;
+      cursor: pointer; transition: background .15s;
+    }
+    .btn-icon:hover { background: #f1f5f9; }
+
+    /* Tabla users */
+    .users-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .users-table th {
+      text-align: left; font-size: 10.5px; font-weight: 700;
+      color: #64748b; text-transform: uppercase; letter-spacing: .05em;
+      padding: 8px 10px; border-bottom: 1px solid #e2e8f0; background: #f8fafc;
+    }
+    .users-table td { padding: 10px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+    .users-table tr:hover { background: #f8fafc; }
+
+    /* Audit log */
+    .accion-badge {
+      display: inline-block; padding: 2px 8px; border-radius: 99px;
+      font-size: 10px; font-weight: 700; font-family: ui-monospace, monospace;
+      letter-spacing: .02em;
+    }
+    .accion-badge.ac-create { background: #ecfdf5; color: #047857; }
+    .accion-badge.ac-delete { background: #fef2f2; color: #b91c1c; }
+    .accion-badge.ac-update { background: #fffbeb; color: #b45309; }
+    .accion-badge.ac-reset  { background: #f5f3ff; color: #6d28d9; }
+    .accion-badge.ac-pw     { background: #eff6ff; color: #1e40af; }
+    .accion-badge.ac-default{ background: #f1f5f9; color: #475569; }
+    .audit-detalle {
+      font-family: ui-monospace, monospace; font-size: 11px;
+      background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 4px;
+      padding: 6px 8px; margin-top: 4px; max-width: 360px;
+      white-space: pre-wrap; word-break: break-word; color: #334155;
+    }
+    .audit-filtros {
+      display: flex; gap: 8px; align-items: flex-end;
+      margin-bottom: 12px; flex-wrap: wrap;
+    }
+    .audit-filtros .form-row { margin-bottom: 0; flex: 1 1 180px; }
+    .users-table .acciones { display: flex; gap: 4px; justify-content: flex-end; }
+    .modulo-chip {
+      display: inline-block; font-size: 10px; padding: 1px 6px;
+      border-radius: 99px; margin: 1px 2px;
+      background: #f1f5f9; color: #475569;
+    }
+    .checkbox-grid {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 6px 12px;
+      padding: 10px; border: 1px solid #e2e8f0; border-radius: 6px;
+      background: #f8fafc;
+    }
+    .checkbox-grid label {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 12.5px; color: #1e293b; cursor: pointer;
+      text-transform: none; letter-spacing: 0; font-weight: 500;
+    }
+    .checkbox-grid input[type="checkbox"] { accent-color: #1a2f6e; }
+    .estado-dot {
+      display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+      margin-right: 4px;
+    }
+    .estado-dot.activo    { background: #22c55e; }
+    .estado-dot.inactivo  { background: #cbd5e1; }
   </style>
 </head>
 
-<body class="h-screen flex flex-col overflow-hidden text-slate-900 antialiased"
+<body class="h-screen flex overflow-hidden text-slate-900 antialiased"
       style="font-family: system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
              background: linear-gradient(145deg, #e4eef8 0%, #eef3f9 35%, #f1f5f9 65%, #e8f0f7 100%)">
+
+<!-- ═══ APP SIDEBAR (navegación principal) ═══ -->
+<div id="app-sidebar-backdrop" onclick="closeAppSidebar()"></div>
+<aside id="app-sidebar">
+  <!-- Logo + cerrar (mobile) -->
+  <div class="flex items-center justify-between px-3.5 pt-3.5 pb-2">
+    <div class="flex items-center gap-2">
+      <img src="/static/siedfaser_logo.png" alt="SIEDFASER" style="height:34px;width:auto" />
+    </div>
+    <button class="lg:hidden h-7 w-7 rounded hover:bg-slate-100 flex items-center justify-center text-slate-400"
+            onclick="closeAppSidebar()" title="Cerrar">
+      <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+      </svg>
+    </button>
+  </div>
+  <!-- Trigger Cmd+K -->
+  <div class="px-3 py-2">
+    <button class="cmdk-trigger w-full justify-between" onclick="openCmdK()">
+      <span class="flex items-center gap-1.5">
+        <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+        </svg>
+        Buscar módulo…
+      </span>
+      <kbd>⌘K</kbd>
+    </button>
+  </div>
+  <!-- Lista de navegación (renderizada desde MODULES) -->
+  <nav id="app-sidebar-nav" class="flex-1 overflow-y-auto px-2 pb-3"></nav>
+  <!-- Footer del sidebar -->
+  <div class="px-3 py-2.5 border-t border-slate-100 text-[10px] text-slate-400">
+    SIEDFASER · v0.1
+  </div>
+</aside>
+
+<!-- ═══ Contenido principal (header + main) ═══ -->
+<div class="flex-1 flex flex-col overflow-hidden">
 
 <!-- ═══ HEADER ═══ -->
 <header class="h-24 shrink-0 bg-white border-b border-slate-200 flex items-center px-4 gap-3 z-20"
         style="box-shadow:0 1px 4px rgba(0,0,0,.05)">
-  <!-- Logo -->
-  <div class="flex items-center gap-3 shrink-0">
-    <img src="/static/siedfaser_logo.png"
-         alt="SIEDFASER · Sistema Inteligente de Exportación de Datos para Facturación de Seragil"
-         style="height:3rem;width:auto" class="object-contain" />
-    <span class="hidden md:block text-[12px] font-medium leading-snug" style="color:#64748b">
+  <!-- Botón hamburguesa (mobile) -->
+  <button class="lg:hidden h-9 w-9 rounded-lg border border-slate-200 hover:bg-slate-50 flex items-center justify-center text-slate-600 shrink-0"
+          onclick="openAppSidebar()" title="Menú">
+    <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/>
+    </svg>
+  </button>
+  <!-- Frase (sin logo — está solo en el drawer/sidebar) -->
+  <div class="hidden lg:flex items-center shrink-0">
+    <span class="text-[12px] font-medium leading-snug" style="color:#64748b">
       Sistema inteligente de exportación de
       <span style="color:#22a84a" class="font-semibold">datos</span><br/>
       para
@@ -216,46 +541,67 @@
       <span style="color:#22a84a" class="font-semibold">Seragil</span>
     </span>
   </div>
-  <!-- Tabs centrados (solo desktop) -->
-  <nav class="flex-1 hidden sm:flex items-center justify-center gap-1">
-    <button data-tab="dashboard" onclick="switchTab('dashboard')"
-            class="tab-btn active px-3.5 py-1.5 text-sm font-medium outline-none whitespace-nowrap rounded-full transition-all">
-      Inicio
+  <!-- Trigger Cmd+K (desktop, en el header) -->
+  <div class="hidden lg:flex flex-1 justify-center">
+    <button class="cmdk-trigger" onclick="openCmdK()" style="min-width:280px">
+      <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+      </svg>
+      <span>Buscar módulo…</span>
+      <kbd class="ml-auto">⌘K</kbd>
     </button>
-    <button data-tab="demanda-inducida" onclick="switchTab('demanda-inducida')"
-            class="tab-btn px-3.5 py-1.5 text-sm font-medium outline-none whitespace-nowrap rounded-full transition-all">
-      Demanda Inducida
-    </button>
-    <button data-tab="findrisc" onclick="switchTab('findrisc')"
-            class="tab-btn px-3.5 py-1.5 text-sm font-medium outline-none whitespace-nowrap rounded-full transition-all">
-      FINDRISC
-    </button>
-    <button data-tab="gestion-captacion" onclick="switchTab('gestion-captacion')"
-            class="tab-btn px-3.5 py-1.5 text-sm font-medium outline-none whitespace-nowrap rounded-full transition-all">
-      Gestión Captación
-    </button>
-    <button data-tab="planificacion-familiar" onclick="switchTab('planificacion-familiar')"
-            class="tab-btn px-3.5 py-1.5 text-sm font-medium outline-none whitespace-nowrap rounded-full transition-all">
-      Planificación Familiar
-    </button>
-  </nav>
-  <!-- Health badge + Logout -->
+  </div>
+  <div class="flex-1 lg:hidden"></div>
+  <!-- Health badge + User menu (avatar + dropdown) -->
   <div class="shrink-0 flex items-center gap-2">
     <div id="health-badge"></div>
-    <form method="POST" action="/auth/logout">
-      <button type="submit"
-              title="Cerrar sesión"
-              class="h-8 px-3 rounded-lg border border-slate-200 bg-white hover:bg-red-50
-                     hover:border-red-200 hover:text-red-600 text-slate-500
-                     text-xs font-medium flex items-center gap-1.5 transition-colors">
-        <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24"
-             stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round"
-                d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
+    <div class="relative">
+      <button id="user-menu-btn" type="button" onclick="toggleUserMenu(event)"
+              class="h-9 pl-1 pr-2.5 rounded-full border border-slate-200 hover:border-slate-300 bg-white
+                     flex items-center gap-2 transition-colors">
+        <div class="user-avatar" id="user-avatar-iniciales">·</div>
+        <span class="hidden md:block text-xs font-semibold text-slate-700" id="user-menu-username">…</span>
+        <svg class="h-3 w-3 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
         </svg>
-        <span class="hidden sm:inline">Salir</span>
       </button>
-    </form>
+      <div id="user-menu" class="hidden">
+        <div class="um-header">
+          <div class="text-sm font-semibold text-slate-800" id="um-nombre">…</div>
+          <div class="text-[11px] text-slate-500 flex items-center gap-1.5 mt-0.5">
+            <span id="um-username-text">…</span>
+            <span class="rol-badge" id="um-rol-badge">…</span>
+          </div>
+        </div>
+        <button type="button" onclick="openProfileModal()">
+          <svg class="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+          </svg>
+          Mi perfil
+        </button>
+        <button type="button" id="um-users-btn" onclick="openUsersModal()" class="hidden">
+          <svg class="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
+          </svg>
+          Gestionar usuarios
+        </button>
+        <button type="button" id="um-audit-btn" onclick="openAuditModal()" class="hidden">
+          <svg class="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
+          </svg>
+          Audit log
+        </button>
+        <div class="um-divider"></div>
+        <form method="POST" action="/auth/logout" class="m-0">
+          <button type="submit" class="um-logout">
+            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
+            </svg>
+            Cerrar sesión
+          </button>
+        </form>
+      </div>
+    </div>
   </div>
 </header>
 
@@ -294,7 +640,7 @@
   </div>
 
   <!-- Cards por módulo -->
-  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mb-5">
     <div data-mod="demanda_inducida" class="db-mod-card bg-white rounded-xl border border-slate-200 p-4 cursor-pointer hover:border-brand-400 hover:shadow transition-all">
       <div class="flex items-center justify-between mb-2">
         <div class="font-semibold text-slate-800 text-sm">Demanda Inducida</div>
@@ -379,6 +725,90 @@
       </div>
       <div class="text-[10px] text-slate-400 mt-2 db-mod-ultimo">—</div>
     </div>
+    <div data-mod="vacunacion" class="db-mod-card bg-white rounded-xl border border-slate-200 p-4 cursor-pointer hover:border-cyan-400 hover:shadow transition-all">
+      <div class="flex items-center justify-between mb-2">
+        <div class="font-semibold text-slate-800 text-sm">Vacunación</div>
+        <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-cyan-100 text-cyan-700">VAC</span>
+      </div>
+      <div class="grid grid-cols-3 gap-2 text-center">
+        <div>
+          <div class="text-[9px] uppercase text-slate-400">En curso</div>
+          <div class="text-base font-bold text-amber-600 tabular-nums db-mod-curso">—</div>
+        </div>
+        <div>
+          <div class="text-[9px] uppercase text-slate-400">Completados</div>
+          <div class="text-base font-bold text-emerald-600 tabular-nums db-mod-ok">—</div>
+        </div>
+        <div>
+          <div class="text-[9px] uppercase text-slate-400">Fallidos</div>
+          <div class="text-base font-bold text-red-500 tabular-nums db-mod-fail">—</div>
+        </div>
+      </div>
+      <div class="text-[10px] text-slate-400 mt-2 db-mod-ultimo">—</div>
+    </div>
+    <div data-mod="caracterizacion_familiar" class="db-mod-card bg-white rounded-xl border border-slate-200 p-4 cursor-pointer hover:border-indigo-400 hover:shadow transition-all">
+      <div class="flex items-center justify-between mb-2">
+        <div class="font-semibold text-slate-800 text-sm">Caracterización Familiar</div>
+        <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700">CF</span>
+      </div>
+      <div class="grid grid-cols-3 gap-2 text-center">
+        <div>
+          <div class="text-[9px] uppercase text-slate-400">En curso</div>
+          <div class="text-base font-bold text-amber-600 tabular-nums db-mod-curso">—</div>
+        </div>
+        <div>
+          <div class="text-[9px] uppercase text-slate-400">Completados</div>
+          <div class="text-base font-bold text-emerald-600 tabular-nums db-mod-ok">—</div>
+        </div>
+        <div>
+          <div class="text-[9px] uppercase text-slate-400">Fallidos</div>
+          <div class="text-base font-bold text-red-500 tabular-nums db-mod-fail">—</div>
+        </div>
+      </div>
+      <div class="text-[10px] text-slate-400 mt-2 db-mod-ultimo">—</div>
+    </div>
+    <div data-mod="pruebas_rapidas" class="db-mod-card bg-white rounded-xl border border-slate-200 p-4 cursor-pointer hover:border-violet-400 hover:shadow transition-all">
+      <div class="flex items-center justify-between mb-2">
+        <div class="font-semibold text-slate-800 text-sm">Pruebas Rápidas</div>
+        <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-700">PR</span>
+      </div>
+      <div class="grid grid-cols-3 gap-2 text-center">
+        <div>
+          <div class="text-[9px] uppercase text-slate-400">En curso</div>
+          <div class="text-base font-bold text-amber-600 tabular-nums db-mod-curso">—</div>
+        </div>
+        <div>
+          <div class="text-[9px] uppercase text-slate-400">Completados</div>
+          <div class="text-base font-bold text-emerald-600 tabular-nums db-mod-ok">—</div>
+        </div>
+        <div>
+          <div class="text-[9px] uppercase text-slate-400">Fallidos</div>
+          <div class="text-base font-bold text-red-500 tabular-nums db-mod-fail">—</div>
+        </div>
+      </div>
+      <div class="text-[10px] text-slate-400 mt-2 db-mod-ultimo">—</div>
+    </div>
+    <div data-mod="educacion_grupal" class="db-mod-card bg-white rounded-xl border border-slate-200 p-4 cursor-pointer hover:border-teal-400 hover:shadow transition-all">
+      <div class="flex items-center justify-between mb-2">
+        <div class="font-semibold text-slate-800 text-sm">Educación Grupal</div>
+        <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-teal-100 text-teal-700">EG</span>
+      </div>
+      <div class="grid grid-cols-3 gap-2 text-center">
+        <div>
+          <div class="text-[9px] uppercase text-slate-400">En curso</div>
+          <div class="text-base font-bold text-amber-600 tabular-nums db-mod-curso">—</div>
+        </div>
+        <div>
+          <div class="text-[9px] uppercase text-slate-400">Completados</div>
+          <div class="text-base font-bold text-emerald-600 tabular-nums db-mod-ok">—</div>
+        </div>
+        <div>
+          <div class="text-[9px] uppercase text-slate-400">Fallidos</div>
+          <div class="text-base font-bold text-red-500 tabular-nums db-mod-fail">—</div>
+        </div>
+      </div>
+      <div class="text-[10px] text-slate-400 mt-2 db-mod-ultimo">—</div>
+    </div>
   </div>
 
   <!-- Actividad reciente -->
@@ -443,57 +873,15 @@
     <div id="form-wrap">
       <div>
         <form id="fext" class="px-3 pb-3 space-y-2.5 border-b border-slate-200 bg-slate-50">
-          <div class="grid grid-cols-2 gap-2 pt-0.5">
-            <div>
-              <label class="text-xs font-medium text-slate-500 block mb-1">Desde</label>
-              <input id="desde" type="date" required
-                     class="w-full h-8 px-2 rounded-md border border-slate-300 text-xs bg-white
-                            outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500"/>
-            </div>
-            <div>
-              <label class="text-xs font-medium text-slate-500 block mb-1">Hasta</label>
-              <input id="hasta" type="date" required
-                     class="w-full h-8 px-2 rounded-md border border-slate-300 text-xs bg-white
-                            outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500"/>
-            </div>
-          </div>
-          <div>
-            <label class="text-xs font-medium text-slate-500 block mb-1">Limite de registros</label>
-            <!-- Toggle Auto / Manual -->
-            <div class="flex rounded-md overflow-hidden border border-slate-300 mb-1.5 text-xs">
-              <button type="button" id="btn-modo-auto" onclick="setModoLimite('auto')"
-                      class="flex-1 h-7 font-medium transition-colors bg-brand-700 text-white">
-                Auto
-              </button>
-              <button type="button" id="btn-modo-manual" onclick="setModoLimite('manual')"
-                      class="flex-1 h-7 font-medium transition-colors bg-white text-slate-600 hover:bg-slate-50">
-                Manual
-              </button>
-            </div>
-            <!-- Descripcion modo Auto -->
-            <div id="auto-desc" class="space-y-1">
-              <p class="text-[10px] text-brand-600 leading-tight">Trae todos los registros del rango seleccionado</p>
-              <!-- Preview de conteo -->
-              <div id="auto-preview" class="hidden rounded-md px-2 py-1.5 text-[10px] leading-snug border">
-                <span id="auto-preview-txt"></span>
-              </div>
-            </div>
-            <!-- Input modo Manual -->
-            <div id="manual-wrap" class="hidden">
-              <input id="limite" type="number" min="1" max="600000" value="25"
-                     oninput="updateLotePreview()"
-                     class="w-full h-8 px-2 rounded-md border border-slate-300 text-xs bg-white
-                            outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500"/>
-              <p id="lote-preview" class="text-[10px] text-slate-400 mt-1"></p>
-            </div>
-          </div>
-          <!-- Filtro por factura (solo Demanda Inducida — toggle via switchTab) -->
-          <div id="factura-section" class="hidden di-only border-t border-slate-200 pt-2.5">
+          <!-- 1. Filtro por régimen (oculto en módulos que no lo aceptan) -->
+          <div id="factura-section" class="hidden pt-0.5">
             <label class="text-xs font-medium text-slate-500 block mb-1.5">
-              Filtro por factura
-              <span class="text-[10px] text-slate-400 font-normal">(opcional · cruza con AVS_REGISTROS_AP)</span>
+              <span id="factura-section-label">Código de régimen</span> <span class="text-red-500">*</span>
+              <span id="factura-section-hint" class="text-[10px] text-slate-400 font-normal">(requerido · cruza con AVS_REGISTROS_AP)</span>
             </label>
-            <div class="space-y-1.5">
+
+            <!-- Variante A: inputs CAB/FAB (módulos con usaFactura=true) -->
+            <div id="factura-inputs" class="space-y-1.5">
               <div class="flex items-center gap-1.5">
                 <span class="text-[10px] font-semibold uppercase tracking-wide text-slate-600 w-12 shrink-0">Sub</span>
                 <span class="font-mono text-[10px] text-slate-400 shrink-0">CAB/FAB</span>
@@ -511,8 +899,73 @@
                               outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500"/>
               </div>
               <p class="text-[10px] text-slate-500 leading-snug">
-                Al cargar un régimen las fechas saltan al mes anterior. Con los 2 cargados se crean 2 jobs separados.
+                Al cargar un régimen las fechas saltan al mes anterior automáticamente.
+                Con los 2 cargados se crean 2 jobs separados.
               </p>
+            </div>
+
+            <!-- Variante B: solo checkboxes (módulos con usaRegimen=true sin factura, ej. Caracterización) -->
+            <div id="regimen-only-toggles" class="hidden space-y-1.5">
+              <label class="flex items-center gap-2 cursor-pointer text-xs text-slate-700">
+                <input id="reg-only-sub" type="checkbox" class="accent-brand-600 h-4 w-4">
+                <span class="font-semibold uppercase tracking-wide">Subsidiado</span>
+                <span class="text-[10px] text-slate-400 font-normal">— afiliados del régimen subsidiado</span>
+              </label>
+              <label class="flex items-center gap-2 cursor-pointer text-xs text-slate-700">
+                <input id="reg-only-cont" type="checkbox" class="accent-brand-600 h-4 w-4">
+                <span class="font-semibold uppercase tracking-wide">Contributivo</span>
+                <span class="text-[10px] text-slate-400 font-normal">— afiliados del régimen contributivo</span>
+              </label>
+              <p class="text-[10px] text-slate-500 leading-snug">
+                Marcá uno o ambos. Con los 2 marcados se crean 2 jobs separados.
+                Sin marcar nada se trae el universo completo (todos los regímenes).
+              </p>
+            </div>
+          </div>
+          <!-- 2. Rango de fechas (siempre requeridas; con factura se autocompletan al mes anterior) -->
+          <div class="grid grid-cols-2 gap-2 border-t border-slate-200 pt-2.5">
+            <div>
+              <label class="text-xs font-medium text-slate-500 block mb-1">Desde <span class="text-red-500">*</span></label>
+              <input id="desde" type="date" required
+                     class="w-full h-8 px-2 rounded-md border border-slate-300 text-xs bg-white
+                            outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500"/>
+            </div>
+            <div>
+              <label class="text-xs font-medium text-slate-500 block mb-1">Hasta <span class="text-red-500">*</span></label>
+              <input id="hasta" type="date" required
+                     class="w-full h-8 px-2 rounded-md border border-slate-300 text-xs bg-white
+                            outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500"/>
+            </div>
+          </div>
+          <!-- 3. Límite de registros (Auto = todo el universo del rango+factura) -->
+          <div>
+            <label class="text-xs font-medium text-slate-500 block mb-1">Limite de registros</label>
+            <!-- Toggle Auto / Manual -->
+            <div class="flex rounded-md overflow-hidden border border-slate-300 mb-1.5 text-xs">
+              <button type="button" id="btn-modo-auto" onclick="setModoLimite('auto')"
+                      class="flex-1 h-7 font-medium transition-colors bg-brand-700 text-white">
+                Auto
+              </button>
+              <button type="button" id="btn-modo-manual" onclick="setModoLimite('manual')"
+                      class="flex-1 h-7 font-medium transition-colors bg-white text-slate-600 hover:bg-slate-50">
+                Manual
+              </button>
+            </div>
+            <!-- Descripcion modo Auto -->
+            <div id="auto-desc" class="space-y-1">
+              <p class="text-[10px] text-brand-600 leading-tight">Trae todas las filas-programa del rango + factura</p>
+              <!-- Preview de conteo -->
+              <div id="auto-preview" class="hidden rounded-md px-2 py-1.5 text-[10px] leading-snug border">
+                <span id="auto-preview-txt"></span>
+              </div>
+            </div>
+            <!-- Input modo Manual -->
+            <div id="manual-wrap" class="hidden">
+              <input id="limite" type="number" min="1" value="25"
+                     oninput="updateLotePreview()"
+                     class="w-full h-8 px-2 rounded-md border border-slate-300 text-xs bg-white
+                            outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500"/>
+              <p id="lote-preview" class="text-[10px] text-slate-400 mt-1"></p>
             </div>
           </div>
           <p id="ferr" class="text-xs text-red-500 hidden"></p>
@@ -532,6 +985,108 @@
       </div>
     </div>
 
+    <!-- ═══ FORM Vacunación (visible solo en tab vacunacion) ═══ -->
+    <div id="vacunacion-form-wrap" class="hidden">
+      <div class="px-3 pb-3 space-y-2.5 border-b border-slate-200 bg-slate-50">
+        <div class="pt-0.5">
+          <label class="text-xs font-medium text-slate-500 block mb-1.5">
+            1. Subir Excel <span class="text-red-500">*</span>
+            <span class="text-[10px] text-slate-400 font-normal">(.xlsx con datos de vacunación)</span>
+          </label>
+          <!-- Dropzone -->
+          <div id="vac-dropzone"
+               class="relative border-2 border-dashed border-slate-300 rounded-md
+                      p-4 text-center cursor-pointer hover:border-cyan-500
+                      hover:bg-cyan-50/50 transition-colors">
+            <input id="vac-file-input" type="file" accept=".xlsx"
+                   class="absolute inset-0 w-full h-full opacity-0 cursor-pointer"/>
+            <div id="vac-dz-idle">
+              <svg class="h-7 w-7 mx-auto mb-1 text-slate-400" fill="none"
+                   viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                <path stroke-linecap="round" stroke-linejoin="round"
+                      d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+              </svg>
+              <p class="text-xs text-slate-600 font-medium">
+                Arrastrá el .xlsx acá o clic para elegir
+              </p>
+              <p class="text-[10px] text-slate-400 mt-0.5">Solo Excel moderno (.xlsx)</p>
+            </div>
+            <div id="vac-dz-uploading" class="hidden">
+              <svg class="h-7 w-7 mx-auto mb-1 text-cyan-500 animate-spin" fill="none"
+                   viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" opacity="0.25"></circle>
+                <path fill="currentColor"
+                      d="M4 12a8 8 0 018-8v3l4-4-4-4v3a9 9 0 100 18v-3l-4 4 4 4v-3a8 8 0 01-8-8z"/>
+              </svg>
+              <p class="text-xs text-slate-600 font-medium">Subiendo y analizando…</p>
+            </div>
+            <div id="vac-dz-ready" class="hidden text-left">
+              <div class="flex items-center gap-2 mb-1.5">
+                <svg class="h-5 w-5 text-emerald-500 shrink-0" fill="none"
+                     viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round"
+                        d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+                <span id="vac-file-name" class="text-xs font-semibold text-slate-700 truncate"></span>
+                <button type="button" onclick="vacResetUpload()"
+                        class="ml-auto text-[10px] text-slate-400 hover:text-red-500 px-1 rounded">
+                  Cambiar
+                </button>
+              </div>
+              <div class="grid grid-cols-3 gap-1.5 text-center">
+                <div class="bg-white rounded p-1.5 border border-slate-200">
+                  <div class="text-[9px] uppercase text-slate-400">Filas</div>
+                  <div id="vac-stat-filas" class="text-xs font-bold text-slate-700 tabular-nums">—</div>
+                </div>
+                <div class="bg-white rounded p-1.5 border border-slate-200">
+                  <div class="text-[9px] uppercase text-slate-400">SUB</div>
+                  <div id="vac-stat-sub" class="text-xs font-bold text-cyan-700 tabular-nums">—</div>
+                </div>
+                <div class="bg-white rounded p-1.5 border border-slate-200">
+                  <div class="text-[9px] uppercase text-slate-400">CONT</div>
+                  <div id="vac-stat-cont" class="text-xs font-bold text-cyan-700 tabular-nums">—</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div id="vac-regimen-section" class="border-t border-slate-200 pt-2.5 hidden">
+          <label class="text-xs font-medium text-slate-500 block mb-1.5">
+            2. Régimen <span class="text-red-500">*</span>
+            <span class="text-[10px] text-slate-400 font-normal">(elegí uno o ambos)</span>
+          </label>
+          <div class="grid grid-cols-2 gap-1.5">
+            <label class="flex items-center gap-2 px-2 py-1.5 rounded-md border border-slate-300
+                          bg-white cursor-pointer hover:border-cyan-400 transition-colors text-xs">
+              <input id="vac-cb-sub" type="checkbox" checked class="accent-cyan-600 h-3.5 w-3.5"/>
+              <span class="font-semibold text-slate-700">Subsidiado</span>
+              <span id="vac-cb-sub-cnt" class="ml-auto text-[10px] text-slate-400 tabular-nums">—</span>
+            </label>
+            <label class="flex items-center gap-2 px-2 py-1.5 rounded-md border border-slate-300
+                          bg-white cursor-pointer hover:border-cyan-400 transition-colors text-xs">
+              <input id="vac-cb-cont" type="checkbox" class="accent-cyan-600 h-3.5 w-3.5"/>
+              <span class="font-semibold text-slate-700">Contributivo</span>
+              <span id="vac-cb-cont-cnt" class="ml-auto text-[10px] text-slate-400 tabular-nums">—</span>
+            </label>
+          </div>
+          <p id="vac-ferr" class="text-xs text-red-500 mt-1.5 hidden"></p>
+          <button type="button" id="vac-btn-gen" onclick="vacGenerar()"
+                  class="w-full h-8 mt-2 rounded-md bg-cyan-700 hover:bg-cyan-800 text-white
+                         text-xs font-semibold transition-colors disabled:opacity-50
+                         inline-flex items-center justify-center gap-1.5">
+            <span class="vac-bico">
+              <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24"
+                   stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round"
+                      d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
+              </svg>
+            </span>
+            <span class="vac-blbl">Generar carnés</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- List header -->
     <div class="s-section-hdr px-4 py-2 flex items-center justify-between shrink-0">
       <div class="s-label flex items-center gap-2">
@@ -547,7 +1102,7 @@
       </button>
     </div>
 
-    <div class="flex-1 overflow-y-auto">
+    <div class="flex-1 overflow-y-auto min-h-0">
       <div id="jempty" class="hidden px-4 py-10 text-center">
         <svg class="h-8 w-8 text-slate-200 mx-auto mb-2" fill="none" viewBox="0 0 24 24"
              stroke="currentColor" stroke-width="1.5">
@@ -820,12 +1375,12 @@
   </div>
 </div>
 
-<!-- ═══ MOBILE BOTTOM NAV ═══ -->
-<nav class="sm:hidden shrink-0 bg-white border-t border-slate-100 z-20"
+<!-- ═══ MOBILE BOTTOM NAV (reemplazado por sidebar drawer + Cmd+K) ═══ -->
+<nav class="hidden shrink-0 bg-white border-t border-slate-100 z-20"
      style="padding-bottom: env(safe-area-inset-bottom, 0px)">
-  <div class="flex">
+  <div class="tabs-scroll flex">
     <button data-mob-tab="dashboard" onclick="switchTab('dashboard')"
-            class="mob-tab active flex-1 flex flex-col items-center gap-0.5 py-2.5 transition-colors">
+            class="mob-tab active flex-1 min-w-[68px] flex flex-col items-center gap-0.5 py-2.5 transition-colors">
       <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
         <path stroke-linecap="round" stroke-linejoin="round"
               d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
@@ -833,7 +1388,7 @@
       <span class="font-medium">Inicio</span>
     </button>
     <button data-mob-tab="demanda-inducida" onclick="switchTab('demanda-inducida')"
-            class="mob-tab flex-1 flex flex-col items-center gap-0.5 py-2.5 transition-colors">
+            class="mob-tab flex-1 min-w-[68px] flex flex-col items-center gap-0.5 py-2.5 transition-colors">
       <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
         <path stroke-linecap="round" stroke-linejoin="round"
               d="M9 12h6m-6 4h6M9 8h6m-3 12H7a2 2 0 01-2-2V6a2 2 0 012-2h7l5 5v9a2 2 0 01-2 2h-2"/>
@@ -841,7 +1396,7 @@
       <span class="font-medium">Demanda</span>
     </button>
     <button data-mob-tab="findrisc" onclick="switchTab('findrisc')"
-            class="mob-tab flex-1 flex flex-col items-center gap-0.5 py-2.5 transition-colors">
+            class="mob-tab flex-1 min-w-[68px] flex flex-col items-center gap-0.5 py-2.5 transition-colors">
       <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
         <path stroke-linecap="round" stroke-linejoin="round"
               d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
@@ -849,7 +1404,7 @@
       <span>FINDRISC</span>
     </button>
     <button data-mob-tab="gestion-captacion" onclick="switchTab('gestion-captacion')"
-            class="mob-tab flex-1 flex flex-col items-center gap-0.5 py-2.5 transition-colors">
+            class="mob-tab flex-1 min-w-[68px] flex flex-col items-center gap-0.5 py-2.5 transition-colors">
       <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
         <path stroke-linecap="round" stroke-linejoin="round"
               d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/>
@@ -857,15 +1412,284 @@
       <span>Captación</span>
     </button>
     <button data-mob-tab="planificacion-familiar" onclick="switchTab('planificacion-familiar')"
-            class="mob-tab flex-1 flex flex-col items-center gap-0.5 py-2.5 transition-colors">
+            class="mob-tab flex-1 min-w-[68px] flex flex-col items-center gap-0.5 py-2.5 transition-colors">
       <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
         <path stroke-linecap="round" stroke-linejoin="round"
               d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/>
       </svg>
       <span>PlanFami</span>
     </button>
+    <button data-mob-tab="vacunacion" onclick="switchTab('vacunacion')"
+            class="mob-tab flex-1 min-w-[68px] flex flex-col items-center gap-0.5 py-2.5 transition-colors">
+      <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+        <path stroke-linecap="round" stroke-linejoin="round"
+              d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"/>
+      </svg>
+      <span>Vacunación</span>
+    </button>
+    <button data-mob-tab="caracterizacion-familiar" onclick="switchTab('caracterizacion-familiar')"
+            class="mob-tab flex-1 min-w-[68px] flex flex-col items-center gap-0.5 py-2.5 transition-colors">
+      <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+        <path stroke-linecap="round" stroke-linejoin="round"
+              d="M3 12l9-9 9 9M5 10v10a1 1 0 001 1h12a1 1 0 001-1V10M9 21v-6a1 1 0 011-1h4a1 1 0 011 1v6"/>
+      </svg>
+      <span>Caract. Fam.</span>
+    </button>
+    <button data-mob-tab="pruebas-rapidas" onclick="switchTab('pruebas-rapidas')"
+            class="mob-tab flex-1 min-w-[68px] flex flex-col items-center gap-0.5 py-2.5 transition-colors">
+      <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+        <path stroke-linecap="round" stroke-linejoin="round"
+              d="M9 3h6l-1 4h-4L9 3zm1 4v3a4 4 0 11-1.999 7.535L8 17l-2-4V7m6 0v3a4 4 0 102 7.535L14 17l2-4V7"/>
+      </svg>
+      <span>Pruebas R.</span>
+    </button>
+    <button data-mob-tab="educacion-grupal" onclick="switchTab('educacion-grupal')"
+            class="mob-tab flex-1 min-w-[68px] flex flex-col items-center gap-0.5 py-2.5 transition-colors">
+      <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+        <path stroke-linecap="round" stroke-linejoin="round"
+              d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/>
+      </svg>
+      <span>Educac.</span>
+    </button>
   </div>
 </nav>
+
+</div><!-- /flex-1 wrapper (header+main) -->
+
+<!-- ═══ MODAL: Mi perfil ═══ -->
+<div id="profile-overlay" class="modal-overlay" onclick="if(event.target===this) closeProfileModal()">
+  <div class="modal-box">
+    <div class="modal-header">
+      <h2>Mi perfil</h2>
+      <button class="modal-close" type="button" onclick="closeProfileModal()" title="Cerrar">
+        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="form-row">
+        <label>Usuario</label>
+        <div class="text-sm text-slate-700 font-mono" id="pr-username">—</div>
+      </div>
+      <div class="form-row">
+        <label>Nombre</label>
+        <div class="text-sm text-slate-700" id="pr-nombre">—</div>
+      </div>
+      <div class="form-row">
+        <label>Rol</label>
+        <div><span class="rol-badge" id="pr-rol">—</span></div>
+      </div>
+      <div class="form-row">
+        <label>Módulos con acceso</label>
+        <div id="pr-modulos" class="text-sm text-slate-700">—</div>
+      </div>
+      <div class="form-row">
+        <label>Último login</label>
+        <div class="text-sm text-slate-700" id="pr-ultimo-login">—</div>
+      </div>
+      <hr class="my-3 border-slate-200">
+      <h3 class="text-sm font-bold text-slate-800 mb-2">Cambiar password</h3>
+      <div id="pr-err" class="form-error hidden"></div>
+      <div id="pr-ok"  class="form-ok hidden">Password actualizada.</div>
+      <div class="form-row">
+        <label>Password actual</label>
+        <input id="pr-pwd-actual" type="password" autocomplete="current-password">
+      </div>
+      <div class="form-row">
+        <label>Password nueva</label>
+        <input id="pr-pwd-nueva" type="password" autocomplete="new-password" minlength="8">
+        <span class="hint">Mínimo 8 caracteres.</span>
+      </div>
+      <div class="form-row">
+        <label>Confirmar nueva password</label>
+        <input id="pr-pwd-confirm" type="password" autocomplete="new-password" minlength="8">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" type="button" onclick="closeProfileModal()">Cerrar</button>
+      <button id="pr-submit" class="btn-primary" type="button" onclick="submitProfilePwd()">Cambiar password</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ MODAL: Gestionar usuarios ═══ -->
+<div id="users-overlay" class="modal-overlay" onclick="if(event.target===this) closeUsersModal()">
+  <div class="modal-box modal-xl">
+    <div class="modal-header">
+      <h2>Gestionar usuarios</h2>
+      <div class="flex items-center gap-2">
+        <button class="btn-primary" type="button" onclick="openUserFormModal(null)">+ Nuevo usuario</button>
+        <button class="modal-close" type="button" onclick="closeUsersModal()" title="Cerrar">
+          <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="modal-body">
+      <div id="users-list-err" class="form-error hidden"></div>
+      <table class="users-table">
+        <thead>
+          <tr>
+            <th>Usuario</th>
+            <th>Nombre</th>
+            <th>Rol</th>
+            <th>Módulos</th>
+            <th>Estado</th>
+            <th>Último login</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="users-tbody">
+          <tr><td colspan="7" class="text-center text-slate-400 py-6">Cargando…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ MODAL: Crear / Editar usuario ═══ -->
+<div id="user-form-overlay" class="modal-overlay" onclick="if(event.target===this) closeUserFormModal()">
+  <div class="modal-box modal-lg">
+    <div class="modal-header">
+      <h2 id="uf-title">Nuevo usuario</h2>
+      <button class="modal-close" type="button" onclick="closeUserFormModal()" title="Cerrar">
+        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div id="uf-err" class="form-error hidden"></div>
+      <div id="uf-ok"  class="form-ok hidden"></div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-4">
+        <div class="form-row">
+          <label>Username *</label>
+          <input id="uf-username" type="text" maxlength="40">
+          <span class="hint">3-40 caracteres. Letras, números, punto, guión, underscore.</span>
+        </div>
+        <div class="form-row">
+          <label>Nombre completo</label>
+          <input id="uf-nombre" type="text" maxlength="80">
+        </div>
+        <div class="form-row">
+          <label>Email (opcional)</label>
+          <input id="uf-email" type="email" maxlength="120">
+        </div>
+        <div class="form-row" id="uf-password-row">
+          <label>Password *</label>
+          <input id="uf-password" type="password" autocomplete="new-password" minlength="8" maxlength="72">
+          <span class="hint">Mínimo 8 caracteres.</span>
+        </div>
+        <div class="form-row">
+          <label>Rol *</label>
+          <select id="uf-rol">
+            <option value="viewer">Viewer (solo lectura)</option>
+            <option value="operador">Operador (puede generar)</option>
+            <option value="admin">Admin (todo + gestión de usuarios)</option>
+          </select>
+          <span class="hint">Admin ignora la selección de módulos (ve todos).</span>
+        </div>
+        <div class="form-row">
+          <label>Estado</label>
+          <label class="flex items-center gap-2 mt-1 cursor-pointer">
+            <input id="uf-activo" type="checkbox" checked style="accent-color:#1a2f6e">
+            <span class="text-sm text-slate-700">Usuario activo</span>
+          </label>
+        </div>
+      </div>
+      <div class="form-row">
+        <label>Módulos permitidos</label>
+        <div class="checkbox-grid" id="uf-modulos">
+          <!-- renderizado por JS desde MODULES -->
+        </div>
+        <span class="hint">Aplica solo a Operador y Viewer. Admin ve todos los módulos automáticamente.</span>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" type="button" onclick="closeUserFormModal()">Cancelar</button>
+      <button id="uf-submit" class="btn-primary" type="button" onclick="submitUserForm()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ MODAL: Reset password (admin) ═══ -->
+<div id="reset-pwd-overlay" class="modal-overlay" onclick="if(event.target===this) closeResetPwdModal()">
+  <div class="modal-box">
+    <div class="modal-header">
+      <h2>Resetear password</h2>
+      <button class="modal-close" type="button" onclick="closeResetPwdModal()" title="Cerrar">
+        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="form-row">
+        <label>Usuario</label>
+        <div class="text-sm text-slate-700 font-mono" id="rp-username">—</div>
+      </div>
+      <div id="rp-err" class="form-error hidden"></div>
+      <div id="rp-ok"  class="form-ok hidden">Password reseteada. Avisale al usuario.</div>
+      <div class="form-row">
+        <label>Nueva password *</label>
+        <input id="rp-pwd" type="password" autocomplete="new-password" minlength="8" maxlength="72">
+        <span class="hint">Mínimo 8 caracteres. El usuario la podrá cambiar después en "Mi perfil".</span>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" type="button" onclick="closeResetPwdModal()">Cancelar</button>
+      <button id="rp-submit" class="btn-primary" type="button" onclick="submitResetPwd()">Resetear</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ MODAL: Audit log (solo ADMIN) ═══ -->
+<div id="audit-overlay" class="modal-overlay" onclick="if(event.target===this) closeAuditModal()">
+  <div class="modal-box modal-xl">
+    <div class="modal-header">
+      <h2>Audit log</h2>
+      <div class="flex items-center gap-2">
+        <span id="audit-meta" class="text-xs text-slate-500"></span>
+        <button class="modal-close" type="button" onclick="closeAuditModal()" title="Cerrar">
+          <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="modal-body">
+      <div class="audit-filtros">
+        <div class="form-row">
+          <label>Actor (username)</label>
+          <input id="al-actor" type="text" placeholder="admin" onkeydown="if(event.key==='Enter')reloadAuditLog()">
+        </div>
+        <div class="form-row">
+          <label>Target ID</label>
+          <input id="al-target" type="text" placeholder="UUID del usuario afectado" onkeydown="if(event.key==='Enter')reloadAuditLog()">
+        </div>
+        <button class="btn-primary" type="button" onclick="reloadAuditLog()">Aplicar</button>
+        <button class="btn-secondary" type="button" onclick="$('al-actor').value='';$('al-target').value='';reloadAuditLog()">Limpiar</button>
+      </div>
+      <div id="audit-err" class="form-error hidden"></div>
+      <table class="users-table">
+        <thead>
+          <tr>
+            <th style="width:120px">Cuándo</th>
+            <th style="width:120px">Actor</th>
+            <th style="width:180px">Acción</th>
+            <th>Target</th>
+            <th>Detalle</th>
+          </tr>
+        </thead>
+        <tbody id="audit-tbody">
+          <tr><td colspan="5" class="text-center text-slate-400 py-6">Cargando…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ CMD+K PALETTE ═══ -->
+<div id="cmdk-overlay" onclick="if(event.target===this) closeCmdK()">
+  <div id="cmdk-modal">
+    <input id="cmdk-input" placeholder="Buscar módulo…" autocomplete="off"
+           oninput="cmdkFilter(this.value)"
+           onkeydown="cmdkKey(event)" />
+    <div id="cmdk-results"></div>
+  </div>
+</div>
 
 <!-- ═══ TOAST STACK ═══ -->
 <div id="toast-stack"
@@ -880,14 +1704,104 @@
 const API = "";
 const $ = id => document.getElementById(id);
 
+// ═══════════════════════════════════════════════════════════════════
+// MODULE REGISTRY — única fuente de verdad para todos los módulos
+// ═══════════════════════════════════════════════════════════════════
+// Para agregar un módulo nuevo:
+//   1. Agregar entrada acá (clave = tabId con guiones)
+//   2. Agregar botón en el nav desktop (data-tab) y nav móvil (data-mob-tab)
+//   3. Agregar card en el dashboard (data-mod con el tipoBackend)
+// El resto del JS (api, badge, color, unidad, factura, excel) se resuelve
+// automáticamente desde este registry — sin tocar ramas if/else.
+//
+// Las clases tipo `bg-{color}-100 text-{color}-700` y `hover:border-{color}-400`
+// ya viven en el HTML literal de las cards/badges, así que el JIT de Tailwind
+// CDN las genera. NO agregar colores acá sin agregar también clases literales.
+// Heroicons outline paths (24x24, stroke-width 1.8).
+const ICONS = {
+  home:    `<path stroke-linecap="round" stroke-linejoin="round" d="M3 12l9-9 9 9M5 10v10a1 1 0 001 1h12a1 1 0 001-1V10M9 21v-6a1 1 0 011-1h4a1 1 0 011 1v6"/>`,
+  doc:     `<path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6M9 8h6m-3 12H7a2 2 0 01-2-2V6a2 2 0 012-2h7l5 5v9a2 2 0 01-2 2h-2"/>`,
+  chart:   `<path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>`,
+  users:   `<path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/>`,
+  heart:   `<path stroke-linecap="round" stroke-linejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/>`,
+  beaker:  `<path stroke-linecap="round" stroke-linejoin="round" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"/>`,
+  house:   `<path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12l8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75"/>`,
+};
+
+const MODULES = {
+  "demanda-inducida": {
+    tipoBackend: "demanda_inducida", label: "Demanda Inducida",
+    api: "/extractions", color: "brand", icon: "doc",
+    categoria: "Prevención", badge: "DI",
+    usaFactura: true, usaRegimen: true, usaExcel: false, unidad: "afiliados",
+  },
+  "findrisc": {
+    tipoBackend: "findrisc", label: "FINDRISC",
+    api: "/findrisc/extractions", color: "emerald", icon: "chart",
+    categoria: "Tamizajes", badge: "FR",
+    usaFactura: true, usaRegimen: true, usaExcel: false, unidad: "afiliados",
+  },
+  "gestion-captacion": {
+    tipoBackend: "gestion_captacion", label: "Gestión Captación",
+    api: "/gestion-captacion/extractions", color: "amber", icon: "users",
+    categoria: "Seguimiento", badge: "GC",
+    usaFactura: true, usaRegimen: true, usaExcel: false, unidad: "afiliados",
+  },
+  "planificacion-familiar": {
+    tipoBackend: "planificacion_familiar", label: "Planificación Familiar",
+    api: "/planificacion-familiar/extractions", color: "rose", icon: "heart",
+    categoria: "Seguimiento", badge: "PF",
+    usaFactura: true, usaRegimen: true, usaExcel: false, unidad: "afiliados",
+  },
+  "vacunacion": {
+    tipoBackend: "vacunacion", label: "Vacunación",
+    api: "/vacunacion/extractions", color: "cyan", icon: "beaker",
+    categoria: "Prevención", badge: "VAC",
+    usaFactura: false, usaRegimen: false, usaExcel: true, unidad: "afiliados",
+  },
+  "caracterizacion-familiar": {
+    tipoBackend: "caracterizacion_familiar", label: "Caracterización Familiar",
+    api: "/caracterizacion-familiar/extractions", color: "indigo", icon: "house",
+    categoria: "Caracterización", badge: "CF",
+    usaFactura: false, usaRegimen: true, usaExcel: false, unidad: "familias",
+  },
+  "pruebas-rapidas": {
+    tipoBackend: "pruebas_rapidas", label: "Pruebas Rápidas",
+    api: "/pruebas/extractions", color: "violet", icon: "beaker",
+    categoria: "Tamizajes", badge: "PR",
+    usaFactura: true, usaRegimen: true, usaExcel: false, unidad: "afiliados",
+  },
+  "educacion-grupal": {
+    tipoBackend: "educacion_grupal", label: "Educación Grupal",
+    api: "/educacion-grupal/extractions", color: "teal", icon: "users",
+    categoria: "Seguimiento", badge: "EG",
+    usaFactura: false, usaRegimen: true, usaExcel: false, unidad: "afiliados",
+  },
+};
+
+// Orden de categorías en el sidebar (los que no estén acá quedan al final).
+const CATEGORIAS_ORDEN = ["Prevención", "Tamizajes", "Seguimiento", "Caracterización"];
+
+// Lookups: por tabId, por api base (lo que persiste en _selApiBase), por tipo backend.
+function modByTab(tabId)         { return MODULES[tabId] || null; }
+function modByApiBase(apiBase)   {
+  for (const m of Object.values(MODULES)) if (m.api === apiBase) return m;
+  return null;
+}
+function modByTipo(tipoBackend)  {
+  for (const m of Object.values(MODULES)) if (m.tipoBackend === tipoBackend) return m;
+  return null;
+}
+
 function getModuleApi() {
-  if (activeTab === "findrisc")               return "/findrisc/extractions";
-  if (activeTab === "gestion-captacion")      return "/gestion-captacion/extractions";
-  if (activeTab === "planificacion-familiar") return "/planificacion-familiar/extractions";
-  return "/extractions";
+  return modByTab(activeTab)?.api || "/extractions";
 }
 // API base capturada al seleccionar un job — persiste en callbacks deferred
 let _selApiBase = "/extractions";
+
+function unidadAgrupacion() {
+  return modByApiBase(_selApiBase)?.unidad || "afiliados";
+}
 
 const DOC_COLORS = {
   CC: { pill: "bg-cyan-500 text-white",   soft: "bg-cyan-50 text-cyan-700"   },
@@ -944,16 +1858,8 @@ function setJobName(id, name)   {
 function renderExpName(id, nombre) {
   // nombre viene de la DB; localStorage solo como caché optimista
   const name = (nombre !== undefined ? nombre : null) ?? getJobName(id);
-  const isFindrisc = _selApiBase.includes("findrisc");
-  const isCaptacion = _selApiBase.includes("gestion-captacion");
-  const isPlanFami = _selApiBase.includes("planificacion-familiar");
-  const modBadge = isPlanFami
-    ? `<span class="ml-2 text-xs font-semibold px-1.5 py-0.5 rounded-full bg-rose-100 text-rose-700">Planificación Familiar</span>`
-    : isCaptacion
-    ? `<span class="ml-2 text-xs font-semibold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">Gestión Captación</span>`
-    : isFindrisc
-    ? `<span class="ml-2 text-xs font-semibold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700">FINDRISC</span>`
-    : `<span class="ml-2 text-xs font-semibold px-1.5 py-0.5 rounded-full bg-brand-100 text-brand-700">Demanda Inducida</span>`;
+  const m = modByApiBase(_selApiBase) || MODULES["demanda-inducida"];
+  const modBadge = `<span class="ml-2 text-xs font-semibold px-1.5 py-0.5 rounded-full bg-${m.color}-100 text-${m.color}-700">${m.label}</span>`;
   const label = name
     ? `<span class="text-slate-800">${name}</span>`
     : `<span class="font-mono text-slate-500 text-xs">job_${id.slice(0, 8)}&hellip;</span>`;
@@ -1172,7 +2078,10 @@ function renderDashboard(d) {
   $("db-pdfs-mes").textContent      = fmt(d.global.pdfs_mes);
   $("db-afiliados-mes").textContent = fmt(d.global.afiliados_mes);
 
-  // Cards por módulo
+  // Cards por módulo + reconstruir activeTabsSet desde el dashboard data.
+  // Esto cierra el bug: desde el dashboard, navegar a otro módulo cuando hay
+  // uno corriendo en cualquier parte de la app debe bloquearse.
+  const activosTabs = new Set();
   document.querySelectorAll(".db-mod-card").forEach(card => {
     const mod = card.dataset.mod;
     const m = d.modulos[mod];
@@ -1183,7 +2092,14 @@ function renderDashboard(d) {
     card.querySelector(".db-mod-ultimo").textContent =
       m.ultimo ? "Última: " + fmtRel(m.ultimo) : "Sin actividad";
     card.onclick = () => switchTab(m.tab);
+    card.dataset.tab = m.tab;
+    if ((m.en_curso || 0) > 0) activosTabs.add(m.tab);
   });
+  // Sincronizar el set global y el flag — switchTab los usa para bloquear.
+  activeTabsSet = activosTabs;
+  _activosDashboard = activosTabs.size > 0;
+  refrescarBloqueoCardsDashboard();  // aplicar estado de bloqueo inmediatamente
+  filtrarCardsDashboard();           // ocultar cards de módulos sin permiso (RBAC)
 
   // Actividad reciente
   const ul = $("db-recientes");
@@ -1198,12 +2114,10 @@ function renderDashboard(d) {
     failed:    "text-red-700 bg-red-50",
     cancelled: "text-slate-500 bg-slate-100",
   };
-  const modColor = {
-    demanda_inducida:       "bg-brand-100 text-brand-700",
-    findrisc:               "bg-emerald-100 text-emerald-700",
-    gestion_captacion:      "bg-amber-100 text-amber-700",
-    planificacion_familiar: "bg-rose-100 text-rose-700",
-  };
+  // Derivado del registry: cualquier módulo nuevo se pinta solo en actividad reciente.
+  const modColor = Object.fromEntries(
+    Object.values(MODULES).map(m => [m.tipoBackend, `bg-${m.color}-100 text-${m.color}-700`])
+  );
   ul.innerHTML = d.recientes.map(r => {
     const stCls = stColor[r.estado] || "text-slate-600 bg-slate-100";
     const mCls  = modColor[r.tipo]  || "bg-slate-100 text-slate-700";
@@ -1263,17 +2177,60 @@ async function loadQuickStats() {
 }
 
 
+// Visto desde el dashboard summary: módulos que tienen jobs pending/running
+// AHORA MISMO en TODA la app (no solo en el módulo activo). loadJobs() solo
+// llena prevSt con los del módulo actual; sin esto el bloqueo no funciona
+// al venir directo desde el dashboard sin haber visitado el módulo del job.
+let _activosDashboard = false;
+
 function hasActiveJobs() {
-  return Object.values(prevSt).some(s => s === "pending" || s === "running");
+  return _activosDashboard ||
+    Object.values(prevSt).some(s => s === "pending" || s === "running");
+}
+
+function refrescarBloqueoCardsDashboard() {
+  // Aplica feedback visual a las cards del dashboard: cuando hay un job activo
+  // en otro módulo, esta card aparece atenuada y con cursor-not-allowed.
+  // La card del módulo del job activo y todas las cards (cuando NO hay jobs)
+  // quedan habilitadas normalmente. El click sigue pasando por switchTab que
+  // muestra el toast — esto es solo el avance visual para evitar fricción.
+  const hayJobs = hasActiveJobs();
+  document.querySelectorAll(".db-mod-card").forEach(card => {
+    const cardTab = card.dataset.tab;
+    const bloqueada = hayJobs && cardTab && !activeTabsSet.has(cardTab);
+    card.classList.toggle("opacity-50", bloqueada);
+    card.classList.toggle("cursor-not-allowed", bloqueada);
+    card.classList.toggle("cursor-pointer", !bloqueada);
+    card.title = bloqueada
+      ? "Hay una extracción corriendo en otro módulo. Esperá a que termine."
+      : "";
+  });
 }
 
 function switchTab(tabId) {
   if (tabId === activeTab) return;
-  // Permitimos siempre cambiar a "dashboard"; el bloqueo por jobs activos solo aplica entre módulos
-  if (tabId !== "dashboard" && activeTab !== "dashboard" && hasActiveJobs()) {
-    toast("No se puede cambiar de modulo", "Hay una extraccion en curso. Espera a que finalice.", "info");
+  // Permitimos siempre ir a "dashboard". Si hay jobs activos, solo se puede
+  // entrar al módulo donde está corriendo el job (no a otros módulos vacíos).
+  // Esto cubre TODOS los caminos: cards del dashboard, tabs superiores, tabs móviles.
+  if (tabId !== "dashboard" && hasActiveJobs() && !activeTabsSet.has(tabId)) {
+    toast("Módulo bloqueado",
+          "Hay una extracción corriendo en otro módulo. Esperá a que termine para entrar a éste.",
+          "info");
     return;
   }
+  // Limpiar la lista de jobs ANTES de cambiar de módulo — evita que se vea
+  // residual la lista del módulo anterior hasta que el polling traiga la nueva.
+  const jlist = $("jlist");
+  const jempty = $("jempty");
+  if (jlist) jlist.innerHTML = "";
+  if (jempty) jempty.classList.add("hidden");
+  prevSt = {};
+  // Cerrar el panel de detalle del job si estaba abierto (apuntaba a otro módulo)
+  selId = null;
+  $("rp")?.classList.remove("mopen");
+  $("rp-empty")?.classList.remove("hidden");
+  $("rp-content")?.classList.add("hidden");
+
   activeTab = tabId;
   document.querySelectorAll(".tab-btn").forEach(btn =>
     btn.classList.toggle("active", btn.dataset.tab === tabId)
@@ -1281,21 +2238,65 @@ function switchTab(tabId) {
   document.querySelectorAll(".mob-tab").forEach(btn =>
     btn.classList.toggle("active", btn.dataset.mobTab === tabId)
   );
+  // Sidebar nav: sincronizar item activo + cerrar drawer en mobile
+  document.querySelectorAll("#app-sidebar-nav .sidebar-item").forEach(el =>
+    el.classList.toggle("active", el.dataset.tab === tabId)
+  );
+  closeAppSidebar();
 
-  // Elementos "solo Demanda Inducida": boton conteo + seccion factura en form
+  // Elementos "solo Demanda Inducida": boton conteo previo de códigos de régimen
   const isDI = tabId === "demanda-inducida";
   const btnFac = $("btn-facturas");
   if (btnFac) {
     btnFac.classList.toggle("hidden", !isDI);
     btnFac.classList.toggle("flex",   isDI);
   }
+  // Panel de régimen (SUB/CONT). Aparece cuando el módulo lo acepta:
+  //   - usaFactura=true   → variante A: inputs CAB/FAB (DI, FINDRISC, Captación, PlanFami)
+  //   - usaRegimen sin usaFactura → variante B: solo checkboxes SUB/CONT
+  //     (ej. Caracterización Familiar: filtra por régimen del JEFE DE FAMILIA)
+  const _mod = modByTab(tabId);
+  const aceptaFiltroRegimen = !!(_mod?.usaFactura || _mod?.usaRegimen);
+  const usaFactura = !!_mod?.usaFactura;
   const facSection = $("factura-section");
-  if (facSection) facSection.classList.toggle("hidden", !isDI);
-  // Reset inputs de factura al cambiar de tab
+  if (facSection) facSection.classList.toggle("hidden", !aceptaFiltroRegimen);
+  // Toggle entre variante A (inputs) y B (checkboxes)
+  $("factura-inputs")?.classList.toggle("hidden", !usaFactura);
+  $("regimen-only-toggles")?.classList.toggle("hidden", usaFactura || !_mod?.usaRegimen);
+  // Etiqueta del bloque
+  const label = $("factura-section-label");
+  const hint  = $("factura-section-hint");
+  if (label && hint) {
+    if (usaFactura) {
+      label.textContent = "Código de régimen";
+      hint.textContent  = "(requerido · cruza con AVS_REGISTROS_AP)";
+    } else {
+      label.textContent = "Régimen";
+      hint.textContent  = tabId === "educacion-grupal"
+        ? "(opcional · filtra por régimen del afiliado)"
+        : "(opcional · filtra por régimen del JEFE DE FAMILIA)";
+    }
+  }
+  // Reset al cambiar de tab si el destino NO soporta filtro
   const fSub  = $("fac-form-sub");
   const fCont = $("fac-form-cont");
-  if (fSub)  fSub.value  = "";
-  if (fCont) fCont.value = "";
+  const rSub  = $("reg-only-sub");
+  const rCont = $("reg-only-cont");
+  if (!aceptaFiltroRegimen) {
+    if (fSub)  fSub.value  = "";
+    if (fCont) fCont.value = "";
+    // Solo limpiar checkboxes si el módulo destino NO acepta régimen.
+    // Si acepta, conservar selección previa (mejor UX entre tabs).
+    if (rSub)  rSub.checked  = false;
+    if (rCont) rCont.checked = false;
+  }
+
+  // ── Form SQL ↔ form de upload Excel (módulos con usaExcel=true, ej: Vacunación) ──
+  const usaExcel = modByTab(tabId)?.usaExcel || false;
+  const formSqlWrap  = $("form-wrap");
+  const formVacWrap  = $("vacunacion-form-wrap");
+  if (formSqlWrap) formSqlWrap.classList.toggle("hidden", usaExcel);
+  if (formVacWrap) formVacWrap.classList.toggle("hidden", !usaExcel);
 
   // ── Dashboard: vista exclusiva, ocultar módulos + franja B ──────────────
   const dbView = $("dashboard-view");
@@ -1358,6 +2359,15 @@ function switchTab(tabId) {
 // JOBS LIST
 // ═══════════════════════════════════════════════════════════════════
 let selId = null, prevSt = {}, _poll = null;
+// Set de tabs (módulos) que tienen jobs en estado pending/running.
+// Lo usa switchTab para permitir volver SOLO al módulo donde está corriendo el job
+// (no a otros módulos vacíos) cuando se navega desde el dashboard.
+let activeTabsSet = new Set();
+function _tipoToTab(tipo) {
+  // ExtraccionTipo usa underscores ('demanda_inducida'), los tabIds usan guiones
+  // ('demanda-inducida'). Mapeo trivial.
+  return tipo ? String(tipo).replace(/_/g, "-") : null;
+}
 
 function jobHtml(e) {
   const s  = STATUS[e.estado] || STATUS.pending;
@@ -1367,7 +2377,7 @@ function jobHtml(e) {
     ? `<span class="inline-block px-1.5 rounded-sm bg-emerald-50 text-emerald-700 text-[9px] font-bold uppercase tracking-wide mr-1 align-middle"
              title="Cruce por factura (${(e.facturas || []).join(', ')})">${e.regimen.slice(0,3)}</span>`
     : "";
-  const sub = ok ? `${regimenBadge}${e.total_afiliados} afil &middot; ${e.total_pdfs} PDFs`
+  const sub = ok ? `${regimenBadge}${e.total_afiliados} ${unidadAgrupacion() === "familias" ? "fam" : "afil"} &middot; ${e.total_pdfs} PDFs`
             : ko ? `${regimenBadge}<span class="text-red-400 truncate">${e.mensaje_error || "Error"}</span>`
             : `${regimenBadge}${s.label}`;
   const shortId    = e.id.slice(0, 8);
@@ -1506,8 +2516,21 @@ async function loadJobs() {
     if (badge) badge.textContent = activos > 0 ? `${total} · ${activos} activo${activos !== 1 ? "s" : ""}` : `${total}`;
 
     prevSt = Object.fromEntries(data.map(e => [e.id, e.estado]));
+    // Recalcular qué módulos tienen jobs activos — usado por switchTab para
+    // permitir volver SOLO al módulo del job corriendo desde el dashboard.
+    // OJO: loadJobs() solo trae los jobs del módulo activo; los activos de
+    // OTROS módulos vienen del dashboard summary (sincronizados en renderDashboard).
+    const tabsActivosEnEsteModulo = new Set(
+      data
+        .filter(e => e.estado === "pending" || e.estado === "running")
+        .map(e => _tipoToTab(e.tipo))
+        .filter(Boolean)
+    );
+    // Mergeamos con lo que ya teníamos para no perder los activos de otros módulos.
+    tabsActivosEnEsteModulo.forEach(t => activeTabsSet.add(t));
     const active = data.some(e => e.estado === "pending" || e.estado === "running");
     updateGenButtons(active);  // ← bloquea/habilita botones según haya jobs activos
+    refrescarBloqueoCardsDashboard();  // visual feedback en cards del dashboard
     clearTimeout(_poll);
     _poll = setTimeout(loadJobs, active ? 45000 : 5000);
   } catch {
@@ -1548,7 +2571,8 @@ async function selJob(id) {
     $("exp-dl").classList.toggle("pointer-events-none", disabled);
 
     if (job.estado === "completed") {
-      $("exp-meta").textContent = `${job.total_afiliados} afiliados · ${job.total_pdfs} PDFs · ${fmtRel(job.creado_en)}`;
+      const creador = job.created_by_username ? ` · por ${job.created_by_username}` : "";
+      $("exp-meta").textContent = `${job.total_afiliados} ${unidadAgrupacion()} · ${job.total_pdfs} PDFs · ${fmtRel(job.creado_en)}${creador}`;
       await loadTreeWithSummary(id, job);
     } else if (job.estado === "failed") {
       $("exp-meta").textContent = STATUS.failed.label;
@@ -1582,7 +2606,7 @@ async function showProgress(job, apiBase) {
       try {
         const j = await apiGet(`${apiBase}/${job.id}`);
         if (j.estado === "completed") {
-          $("exp-meta").textContent = `${j.total_afiliados} afiliados · ${j.total_pdfs} PDFs · ${fmtRel(j.creado_en)}`;
+          $("exp-meta").textContent = `${j.total_afiliados} ${unidadAgrupacion()} · ${j.total_pdfs} PDFs · ${fmtRel(j.creado_en)}`;
           $("exp-dl").classList.remove("opacity-40", "pointer-events-none");
           toast("Extracción completada", `${j.total_pdfs.toLocaleString()} PDFs en ${j.total_lotes} lote${j.total_lotes > 1 ? "s" : ""}`, "success");
           loadTree(job.id);
@@ -1724,8 +2748,12 @@ async function submitFacturas() {
   verifyLbl.textContent = "Consultando…";
 
   try {
+    // El botón de preview solo está activo en Demanda Inducida (CIEX Z048),
+    // que es la firma que deja el SP prGeneraRips en AVS_REGISTROS_AP. Pasamos
+    // cod_diag para que el conteo refleje SOLO las DI facturadas, no la mezcla
+    // con FINDRISC/pruebas/gestantes que también viven en la misma factura.
     const qs = codigos.map(c => `codigos=${encodeURIComponent(c)}`).join("&");
-    const r  = await fetch(`/extractions/facturas/count?${qs}`);
+    const r  = await fetch(`/extractions/facturas/count?${qs}&cod_diag=Z048`);
     const body = await r.json().catch(() => ({}));
     if (!r.ok) {
       errEl.textContent = body.detail || `Error ${r.status}`;
@@ -1801,7 +2829,7 @@ function buildEventsFromState(job, lotes) {
     if (l.estado === "completed" && l.completado_en) {
       pushEvent(
         job.id, "ok",
-        `Lote #${String(l.numero).padStart(3, "0")} · ${l.total_atenciones.toLocaleString()} atenciones · ${l.total_afiliados.toLocaleString()} afiliados · ${l.total_pdfs.toLocaleString()} PDFs`,
+        `Lote #${String(l.numero).padStart(3, "0")} · ${l.total_atenciones.toLocaleString()} ${unidadAgrupacion() === "familias" ? "personas" : "atenciones"} · ${l.total_afiliados.toLocaleString()} ${unidadAgrupacion()} · ${l.total_pdfs.toLocaleString()} PDFs`,
         l.completado_en,
       );
     }
@@ -2111,7 +3139,7 @@ function renderJobSummary(job) {
         <div>
           <div class="text-slate-400 uppercase tracking-wider text-[10px] mb-0.5">Resultado</div>
           ${resultadoLine}
-          <div class="text-slate-500 tabular-nums">${job.total_afiliados.toLocaleString()} afiliados · ${job.total_atenciones.toLocaleString()} ${_selApiBase.includes("extractions") && !_selApiBase.includes("findrisc") && !_selApiBase.includes("gestion-captacion") ? "atenciones" : "registros"}</div>
+          <div class="text-slate-500 tabular-nums">${job.total_afiliados.toLocaleString()} ${unidadAgrupacion()} · ${job.total_atenciones.toLocaleString()} ${_selApiBase.includes("caracterizacion-familiar") ? "personas" : (_selApiBase.includes("extractions") && !_selApiBase.includes("findrisc") && !_selApiBase.includes("gestion-captacion") ? "atenciones" : "registros")}</div>
         </div>
         <div>
           <div class="text-slate-400 uppercase tracking-wider text-[10px] mb-0.5">Tiempos</div>
@@ -2207,8 +3235,8 @@ function applyFilters() {
   // Update count
   const total = treeData.folders.length;
   $("filter-count").textContent = filtered.length === total
-    ? `${total} afiliados`
-    : `${filtered.length} / ${total} afiliados`;
+    ? `${total} ${unidadAgrupacion()}`
+    : `${filtered.length} / ${total} ${unidadAgrupacion()}`;
 
   renderTree({ ...treeData, folders: filtered });
 }
@@ -2316,12 +3344,32 @@ function fetchAutoPreview() {
   const hasta  = $("hasta").value;
   if (!desde || !hasta || modoLimite !== "auto") { setAutoPreview(null); return; }
   if (new Date(hasta) < new Date(desde)) { setAutoPreview("err"); return; }
+  // Si hay factura cargada, la incluimos en el preview para que el conteo
+  // refleje EXACTAMENTE lo que se va a procesar al generar. Priorizamos Sub
+  // si están los dos; si el usuario ve un total muy chico, sabe que es el del
+  // régimen subsidiado y al lanzar se crearán los 2 jobs por separado.
+  const subN  = _facturaFormSufijo($("fac-form-sub")?.value || "");
+  const contN = _facturaFormSufijo($("fac-form-cont")?.value || "");
+  const facN  = subN || contN || "";
+  // Variante B (módulos con régimen sin factura, ej Educación Grupal):
+  // si hay EXACTAMENTE 1 checkbox marcado, filtramos el preview por ese
+  // régimen. Con 0 o 2 marcados mostramos el universo (con los 2 marcados se
+  // crean 2 jobs separados, así que el universo refleja bien la suma).
+  const subOn  = $("reg-only-sub")?.checked  || false;
+  const contOn = $("reg-only-cont")?.checked || false;
+  let regimenParam = "";
+  if (!facN && subOn && !contOn)      regimenParam = "SUBSIDIADO";
+  else if (!facN && contOn && !subOn) regimenParam = "CONTRIBUTIVO";
+  const params = new URLSearchParams({desde, hasta});
+  if (facN)         params.set("numero_factura", facN);
+  if (regimenParam) params.set("regimen", regimenParam);
+  const url = `${getModuleApi()}/count?${params.toString()}`;
   setAutoPreview("loading");
   setBtnGenDisabled(true);
   clearTimeout(_previewTimer);
   _previewTimer = setTimeout(async () => {
     try {
-      const r = await fetch(`${getModuleApi()}/count?desde=${desde}&hasta=${hasta}`);
+      const r = await fetch(url);
       if (!r.ok) { setAutoPreview("err"); setBtnGenDisabled(false); return; }
       setAutoPreview(await r.json());
     } catch { setAutoPreview("err"); }
@@ -2358,10 +3406,10 @@ function setAutoPreview(data) {
     txt.textContent = "No hay registros para este rango de fechas.";
     return;
   }
-  const cap = data.capeado ? ` (cap: la DB tiene más de 600.000)` : "";
+  const cap = "";
   box.className = "rounded-md px-2 py-1.5 text-[10px] leading-snug border bg-brand-50 border-brand-200 text-brand-700";
   txt.innerHTML =
-    `<span class="font-semibold">${data.limite_efectivo.toLocaleString()} registros</span>` +
+    `<span class="font-semibold">${data.limite_efectivo.toLocaleString()} ${unidadAgrupacion() === "familias" ? "familias" : "registros"}</span>` +
     ` · ${data.lotes_estimados} lote${data.lotes_estimados !== 1 ? "s" : ""}` +
     ` de ${data.tamano_lote.toLocaleString()}${cap}`;
 }
@@ -2389,6 +3437,9 @@ function toggleForm() {
 function updateGenButtons(busy) {
   const btnToggle = $("btn-toggle");
   const btnGen    = $("btn-gen");
+  const btnVacGen = $("vac-btn-gen");
+  const dzInput   = $("vac-file-input");
+  const dzBox     = $("vac-dropzone");
   const lbl       = $("lbl-btn");
   if (btnToggle) {
     btnToggle.disabled = busy;
@@ -2402,6 +3453,17 @@ function updateGenButtons(busy) {
   if (btnGen) {
     btnGen.disabled = busy || btnGen.dataset.submitting === "1";
     btnGen.classList.toggle("opacity-50", btnGen.disabled);
+  }
+  // Vacunación: bloquear botón Generar carnés + dropzone (no más uploads ni jobs nuevos)
+  if (btnVacGen) {
+    btnVacGen.disabled = busy || btnVacGen.dataset.submitting === "1";
+    btnVacGen.classList.toggle("opacity-50", btnVacGen.disabled);
+    btnVacGen.title = busy ? "Hay una extracción en curso. Espera a que termine." : "";
+  }
+  if (dzInput) dzInput.disabled = busy;
+  if (dzBox) {
+    dzBox.classList.toggle("opacity-50", busy);
+    dzBox.classList.toggle("pointer-events-none", busy);
   }
   // Si el form está abierto y empieza una extracción, cerrar form para evitar otro submit
   if (busy && formOpen) toggleForm();
@@ -2426,10 +3488,6 @@ function updateLotePreview() {
     el.textContent = "";
     return;
   }
-  if (limite > 600000) {
-    el.innerHTML = `<span class="text-red-500">&#9888; maximo 600.000</span>`;
-    return;
-  }
   const t = calcularTamanoLote(limite);
   const n = Math.ceil(limite / t);
   el.textContent = `Auto: ${n} lote${n !== 1 ? "s" : ""} de ${t.toLocaleString()} registros`;
@@ -2451,6 +3509,9 @@ function setGenLoading(on) {
 
 $("desde").addEventListener("change", fetchAutoPreview);
 $("hasta").addEventListener("change", fetchAutoPreview);
+// Checkboxes de régimen (variante B): refrescan el preview al cambiar.
+$("reg-only-sub")?.addEventListener("change", fetchAutoPreview);
+$("reg-only-cont")?.addEventListener("change", fetchAutoPreview);
 
 // ─── Filtro por factura en form (DI Fase 2) ───
 function _facturaFormSufijo(raw) {
@@ -2464,19 +3525,179 @@ function onFacturaFormInput() {
   // Auto-fill fechas al mes anterior cuando aparece el primer caracter de factura
   const tieneFactura = !!(_facturaFormSufijo($("fac-form-sub").value)
                         || _facturaFormSufijo($("fac-form-cont").value));
-  if (!tieneFactura) return;
   const desdeInput = $("desde");
   const hastaInput = $("hasta");
-  if (desdeInput.value || hastaInput.value) return;  // respetar lo que el usuario ya escribió
-  const hoy = new Date();
-  // Primer día del mes anterior a hoy
-  const primero = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1);
-  // Último día del mes anterior = día 0 del mes actual
-  const ultimo  = new Date(hoy.getFullYear(), hoy.getMonth(), 0);
-  const fmt = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
-  desdeInput.value = fmt(primero);
-  hastaInput.value = fmt(ultimo);
+  if (tieneFactura && !desdeInput.value && !hastaInput.value) {
+    const hoy = new Date();
+    // Primer día del mes anterior a hoy
+    const primero = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1);
+    // Último día del mes anterior = día 0 del mes actual
+    const ultimo  = new Date(hoy.getFullYear(), hoy.getMonth(), 0);
+    const fmt = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+    desdeInput.value = fmt(primero);
+    hastaInput.value = fmt(ultimo);
+  }
+  // Re-disparar preview SIEMPRE que cambie la factura (no solo al auto-llenar
+  // fechas) para que el conteo refleje el filtro actual.
+  if (desdeInput.value && hastaInput.value) {
+    fetchAutoPreview();
+  }
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// VACUNACIÓN — upload + crear extracción
+// ═══════════════════════════════════════════════════════════════════
+let vacUpload = null;  // {upload_id, filename, total_filas, por_regimen, afiliados_por_regimen}
+
+function vacResetUpload() {
+  vacUpload = null;
+  const inp = $("vac-file-input"); if (inp) inp.value = "";
+  $("vac-dz-idle")?.classList.remove("hidden");
+  $("vac-dz-uploading")?.classList.add("hidden");
+  $("vac-dz-ready")?.classList.add("hidden");
+  $("vac-regimen-section")?.classList.add("hidden");
+  const err = $("vac-ferr");
+  if (err) { err.textContent = ""; err.classList.add("hidden"); }
+}
+
+async function vacSubirArchivo(file) {
+  if (!file) return;
+  if (!file.name.toLowerCase().endsWith(".xlsx")) {
+    toast("Formato inválido", "Solo se acepta .xlsx (Excel moderno).", "error");
+    return;
+  }
+  $("vac-dz-idle")?.classList.add("hidden");
+  $("vac-dz-uploading")?.classList.remove("hidden");
+  $("vac-dz-ready")?.classList.add("hidden");
+  $("vac-regimen-section")?.classList.add("hidden");
+
+  try {
+    const fd = new FormData();
+    fd.append("file", file);
+    const r = await fetch("/vacunacion/uploads", {method: "POST", body: fd});
+    const body = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      throw new Error(body.detail || `HTTP ${r.status}`);
+    }
+    vacUpload = body;
+    $("vac-dz-uploading")?.classList.add("hidden");
+    $("vac-dz-ready")?.classList.remove("hidden");
+    $("vac-file-name").textContent = body.filename;
+    $("vac-stat-filas").textContent = body.total_filas.toLocaleString();
+    $("vac-stat-sub").textContent   = (body.por_regimen.SUBSIDIADO || 0).toLocaleString();
+    $("vac-stat-cont").textContent  = (body.por_regimen.CONTRIBUTIVO || 0).toLocaleString();
+
+    // Mostrar sección de régimen + contadores en los checkboxes
+    $("vac-regimen-section")?.classList.remove("hidden");
+    const afi = body.afiliados_por_regimen || {};
+    $("vac-cb-sub-cnt").textContent  = afi.SUBSIDIADO   ? `≈ ${afi.SUBSIDIADO.toLocaleString()} PDFs`   : "0";
+    $("vac-cb-cont-cnt").textContent = afi.CONTRIBUTIVO ? `≈ ${afi.CONTRIBUTIVO.toLocaleString()} PDFs` : "0";
+    // Si solo un régimen tiene datos, marcarlo automáticamente y deshabilitar el otro
+    $("vac-cb-sub").checked  = (body.por_regimen.SUBSIDIADO   || 0) > 0;
+    $("vac-cb-cont").checked = (body.por_regimen.CONTRIBUTIVO || 0) > 0;
+    $("vac-cb-sub").disabled  = (body.por_regimen.SUBSIDIADO   || 0) === 0;
+    $("vac-cb-cont").disabled = (body.por_regimen.CONTRIBUTIVO || 0) === 0;
+    toast("Excel cargado", `${body.total_filas.toLocaleString()} filas listas`, "success");
+  } catch (e) {
+    vacResetUpload();
+    toast("Error al subir", e.message || "No se pudo procesar el archivo", "error");
+  }
+}
+
+function setVacGenLoading(on) {
+  const btn = $("vac-btn-gen");
+  if (!btn) return;
+  btn.disabled = on;
+  const lbl = btn.querySelector(".vac-blbl");
+  const ico = btn.querySelector(".vac-bico");
+  if (lbl) lbl.textContent = on ? "Procesando..." : "Generar carnés";
+  if (ico) ico.innerHTML = on
+    ? `<svg class="h-3.5 w-3.5 spin" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
+         <path stroke-linecap="round" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+       </svg>`
+    : `<svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+         <path stroke-linecap="round" stroke-linejoin="round"
+               d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
+       </svg>`;
+}
+
+async function vacGenerar() {
+  const err = $("vac-ferr");
+  err.classList.add("hidden");
+  err.textContent = "";
+
+  if (!vacUpload) {
+    err.textContent = "Primero subí un archivo .xlsx.";
+    err.classList.remove("hidden"); return;
+  }
+  if (hasActiveJobs()) {
+    err.textContent = "Hay una extracción en curso. Esperá a que termine.";
+    err.classList.remove("hidden"); return;
+  }
+  const regimenes = [];
+  if ($("vac-cb-sub").checked)  regimenes.push("SUBSIDIADO");
+  if ($("vac-cb-cont").checked) regimenes.push("CONTRIBUTIVO");
+  if (regimenes.length === 0) {
+    err.textContent = "Marcá al menos un régimen.";
+    err.classList.remove("hidden"); return;
+  }
+
+  const btn = $("vac-btn-gen");
+  btn.dataset.submitting = "1";
+  setVacGenLoading(true);
+  try {
+    const r = await fetch("/vacunacion/extractions", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({upload_id: vacUpload.upload_id, regimenes}),
+    });
+    const body = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      throw new Error(body.detail || `HTTP ${r.status}`);
+    }
+    const jobs = Array.isArray(body) ? body : [body];
+    toast(
+      jobs.length === 1 ? "Extracción iniciada" : `${jobs.length} extracciones iniciadas`,
+      jobs.map(j => `${j.regimen}: ${j.limite.toLocaleString()} registros`).join(" · "),
+      "success",
+    );
+    // Seleccionar el primer job creado
+    if (jobs[0]?.id) {
+      selId = jobs[0].id;
+      _selApiBase = "/vacunacion/extractions";
+    }
+    loadJobs();
+  } catch (e) {
+    err.textContent = e.message || "No se pudo crear la extracción.";
+    err.classList.remove("hidden");
+  } finally {
+    delete btn.dataset.submitting;
+    setVacGenLoading(false);
+  }
+}
+
+// Wire del dropzone — click en el div, drag/drop, change del input
+(function wireVacunacionDropzone() {
+  const dz  = $("vac-dropzone");
+  const inp = $("vac-file-input");
+  if (!dz || !inp) return;
+  inp.addEventListener("change", e => {
+    const f = e.target.files?.[0];
+    if (f) vacSubirArchivo(f);
+  });
+  ["dragenter", "dragover"].forEach(ev => dz.addEventListener(ev, e => {
+    e.preventDefault();
+    dz.classList.add("border-cyan-500", "bg-cyan-50");
+  }));
+  ["dragleave", "drop"].forEach(ev => dz.addEventListener(ev, e => {
+    e.preventDefault();
+    dz.classList.remove("border-cyan-500", "bg-cyan-50");
+  }));
+  dz.addEventListener("drop", e => {
+    const f = e.dataTransfer?.files?.[0];
+    if (f) vacSubirArchivo(f);
+  });
+})();
 
 $("fext").addEventListener("submit", async ev => {
   ev.preventDefault();
@@ -2493,23 +3714,38 @@ $("fext").addEventListener("submit", async ev => {
     $("ferr").textContent = "El limite debe ser un numero mayor a 0.";
     $("ferr").classList.remove("hidden"); return;
   }
-  if (!esAuto && limite > 600000) {
-    $("ferr").textContent = "El maximo permitido es 600.000 registros.";
-    $("ferr").classList.remove("hidden"); return;
-  }
   if (new Date($("hasta").value) < new Date($("desde").value)) {
     $("ferr").textContent = "'Hasta' debe ser mayor o igual a 'Desde'.";
     $("ferr").classList.remove("hidden"); return;
   }
 
   // ── Construir lista de jobs a disparar ──
-  // Solo aplica en pestaña DI; en otros módulos, los inputs no existen o están vacíos.
-  const subN  = _facturaFormSufijo($("fac-form-sub")?.value || "");
-  const contN = _facturaFormSufijo($("fac-form-cont")?.value || "");
+  const _modCfg = modByTab(activeTab);
+  const moduloRequiereFactura = !!_modCfg?.usaFactura;
+  const moduloAceptaRegimen   = !!_modCfg?.usaRegimen;
+
   const lanzamientos = [];
-  if (subN)  lanzamientos.push({regimen: "SUBSIDIADO",   numero: subN});
-  if (contN) lanzamientos.push({regimen: "CONTRIBUTIVO", numero: contN});
-  if (lanzamientos.length === 0) lanzamientos.push(null);  // POST sin factura
+  if (moduloRequiereFactura) {
+    // Variante A: cruce contra AVS_REGISTROS_AP — número CAB/FAB requerido.
+    const subN  = _facturaFormSufijo($("fac-form-sub")?.value || "");
+    const contN = _facturaFormSufijo($("fac-form-cont")?.value || "");
+    if (!subN && !contN) {
+      $("ferr").textContent = "Debes ingresar al menos un código de régimen (Subsidiado o Contributivo) antes de generar.";
+      $("ferr").classList.remove("hidden"); return;
+    }
+    if (subN)  lanzamientos.push({regimen: "SUBSIDIADO",   numero: subN});
+    if (contN) lanzamientos.push({regimen: "CONTRIBUTIVO", numero: contN});
+  } else if (moduloAceptaRegimen) {
+    // Variante B: solo régimen (sin factura) — ej. Caracterización Familiar.
+    const subOn  = $("reg-only-sub")?.checked  || false;
+    const contOn = $("reg-only-cont")?.checked || false;
+    if (subOn)  lanzamientos.push({regimen: "SUBSIDIADO",   numero: null});
+    if (contOn) lanzamientos.push({regimen: "CONTRIBUTIVO", numero: null});
+    // Si ninguno marcado: 1 job sin filtro (universo completo).
+    if (!subOn && !contOn) lanzamientos.push(null);
+  } else {
+    lanzamientos.push(null);   // Módulos que no aceptan filtro (vacunación)
+  }
 
   const bodyBase = {
     desde: $("desde").value, hasta: $("hasta").value,
@@ -2527,8 +3763,8 @@ $("fext").addEventListener("submit", async ev => {
     for (const fac of lanzamientos) {
       const body = {...bodyBase};
       if (fac) {
-        body.numero_factura = fac.numero;
-        body.regimen        = fac.regimen;
+        if (fac.numero) body.numero_factura = fac.numero;
+        body.regimen = fac.regimen;
       }
       try {
         const r = await apiPost(getModuleApi(), body);
@@ -2597,17 +3833,619 @@ setInterval(() => {
   els.forEach(el => el.setAttribute("src", LOTTIE_SRCS[_lottieIdx]));
 }, 15000);
 
-(function () {
+// ═══════════════════════════════════════════════════════════════════
+// SIDEBAR NAV (sidebar lateral + drawer móvil)
+// ═══════════════════════════════════════════════════════════════════
+function _iconSvg(name, cls = "") {
+  return `<svg class="${cls}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">${ICONS[name] || ""}</svg>`;
+}
+
+function renderAppSidebar() {
+  const nav = $("app-sidebar-nav");
+  if (!nav) return;
+
+  const inicioActive = activeTab === "dashboard" ? "active" : "";
+  let html = `
+    <div class="sidebar-item ${inicioActive}" data-tab="dashboard"
+         onclick="navTo('dashboard')">
+      <div class="sidebar-icon-box">${_iconSvg("home")}</div>
+      <span>Inicio</span>
+    </div>
+  `;
+
+  // Agrupar módulos por categoría, respetando CATEGORIAS_ORDEN
+  const grupos = {};
+  for (const [tabId, m] of Object.entries(MODULES)) {
+    (grupos[m.categoria] ||= []).push({ tabId, ...m });
+  }
+  const cats = [...CATEGORIAS_ORDEN.filter(c => grupos[c]),
+                ...Object.keys(grupos).filter(c => !CATEGORIAS_ORDEN.includes(c))];
+
+  for (const cat of cats) {
+    html += `<div class="sidebar-group-header">${cat} <span class="sidebar-count">${grupos[cat].length}</span></div>`;
+    for (const m of grupos[cat]) {
+      const cls = activeTab === m.tabId ? "active" : "";
+      html += `
+        <div class="sidebar-item ${cls}" data-tab="${m.tabId}"
+             onclick="navTo('${m.tabId}')">
+          <div class="sidebar-icon-box" style="background:rgb(var(--c-${m.color},241 245 249));">
+            ${_iconSvg(m.icon)}
+          </div>
+          <span class="truncate">${m.label}</span>
+        </div>
+      `;
+    }
+  }
+  nav.innerHTML = html;
+}
+
+function navTo(tabId) {
+  switchTab(tabId);
+  closeCmdK();
+}
+
+function openAppSidebar()  { $("app-sidebar").classList.add("open"); $("app-sidebar-backdrop").classList.add("open"); }
+function closeAppSidebar() { $("app-sidebar").classList.remove("open"); $("app-sidebar-backdrop").classList.remove("open"); }
+
+// ═══════════════════════════════════════════════════════════════════
+// CMD+K PALETTE
+// ═══════════════════════════════════════════════════════════════════
+let _cmdkIdx = 0;
+let _cmdkItems = [];
+
+function _cmdkAllItems() {
+  return [
+    { tabId: "dashboard", label: "Inicio", categoria: "Navegación", icon: "home", color: "brand" },
+    ...Object.entries(MODULES).map(([tabId, m]) => ({
+      tabId, label: m.label, categoria: m.categoria, icon: m.icon, color: m.color,
+    })),
+  ];
+}
+
+function openCmdK() {
+  $("cmdk-overlay").classList.add("open");
+  const input = $("cmdk-input");
+  input.value = "";
+  cmdkFilter("");
+  setTimeout(() => input.focus(), 50);
+}
+
+function closeCmdK() { $("cmdk-overlay").classList.remove("open"); }
+
+function _cmdkRender() {
+  const box = $("cmdk-results");
+  if (!_cmdkItems.length) {
+    box.innerHTML = `<div class="cmdk-empty">Sin resultados</div>`;
+    return;
+  }
+  box.innerHTML = _cmdkItems.map((it, i) => `
+    <div class="cmdk-item ${i === _cmdkIdx ? "cmdk-active" : ""}"
+         data-tab="${it.tabId}" onmouseenter="_cmdkIdx=${i};_cmdkRender()"
+         onclick="navTo('${it.tabId}')">
+      <div class="sidebar-icon-box">${_iconSvg(it.icon)}</div>
+      <span>${it.label}</span>
+      <span class="cmdk-cat">${it.categoria}</span>
+    </div>
+  `).join("");
+}
+
+function cmdkFilter(query) {
+  const q = (query || "").trim().toLowerCase();
+  const all = _cmdkAllItems();
+  _cmdkItems = !q ? all : all.filter(it =>
+    it.label.toLowerCase().includes(q) || (it.categoria || "").toLowerCase().includes(q)
+  );
+  _cmdkIdx = 0;
+  _cmdkRender();
+}
+
+function cmdkKey(e) {
+  if (e.key === "Escape")     { closeCmdK(); return; }
+  if (e.key === "ArrowDown")  { e.preventDefault(); _cmdkIdx = Math.min(_cmdkIdx + 1, _cmdkItems.length - 1); _cmdkRender(); return; }
+  if (e.key === "ArrowUp")    { e.preventDefault(); _cmdkIdx = Math.max(_cmdkIdx - 1, 0); _cmdkRender(); return; }
+  if (e.key === "Enter") {
+    const it = _cmdkItems[_cmdkIdx];
+    if (it) navTo(it.tabId);
+  }
+}
+
+document.addEventListener("keydown", e => {
+  // Cmd+K / Ctrl+K abre el palette
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+    e.preventDefault();
+    if ($("cmdk-overlay").classList.contains("open")) closeCmdK(); else openCmdK();
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// CURRENT USER + PERMISOS UI
+// ═══════════════════════════════════════════════════════════════════
+let currentUser = null;   // {id, username, nombre, rol, modulos_efectivos, ...}
+
+async function loadCurrentUser() {
+  try {
+    const r = await fetch("/api/me", { credentials: "same-origin" });
+    if (!r.ok) return null;
+    currentUser = await r.json();
+    return currentUser;
+  } catch { return null; }
+}
+
+function isAdmin()  { return currentUser?.rol === "admin"; }
+function isViewer() { return currentUser?.rol === "viewer"; }
+function canModify(){ return currentUser && !isViewer(); }
+function tieneAccesoModulo(tabId) {
+  if (!currentUser) return false;
+  return (currentUser.modulos_efectivos || []).includes(tabId);
+}
+
+function _iniciales(s) {
+  s = (s || "").trim();
+  if (!s) return "?";
+  const parts = s.split(/\s+/);
+  return (parts[0][0] + (parts[1]?.[0] || "")).toUpperCase();
+}
+
+function updateUserMenuChrome() {
+  if (!currentUser) return;
+  const display = currentUser.nombre || currentUser.username;
+  $("user-avatar-iniciales").textContent = _iniciales(display);
+  $("user-menu-username").textContent = currentUser.username;
+  $("um-nombre").textContent = display;
+  $("um-username-text").textContent = "@" + currentUser.username;
+  const badge = $("um-rol-badge");
+  badge.textContent = currentUser.rol;
+  badge.className = "rol-badge rol-" + currentUser.rol;
+  $("um-users-btn").classList.toggle("hidden", !isAdmin());
+  $("um-audit-btn").classList.toggle("hidden", !isAdmin());
+}
+
+function toggleUserMenu(ev) {
+  ev?.stopPropagation();
+  $("user-menu").classList.toggle("hidden");
+}
+document.addEventListener("click", e => {
+  // Cerrar dropdown al hacer click fuera
+  if (!e.target.closest("#user-menu-btn") && !e.target.closest("#user-menu")) {
+    $("user-menu")?.classList.add("hidden");
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// FILTROS POR PERMISO — sidebar + dashboard + cmdk
+// ═══════════════════════════════════════════════════════════════════
+// Estos wrappers REEMPLAZAN funciones definidas antes (renderAppSidebar,
+// _cmdkAllItems) para añadirles el filtro por currentUser.modulos_efectivos.
+// Los originales siguen funcionando antes de cargar el user (caso edge:
+// si /api/me falla, currentUser=null y NO se filtra nada — el backend igual
+// devuelve 403 al intentar entrar, así que es seguro).
+
+const _renderAppSidebar_orig = renderAppSidebar;
+renderAppSidebar = function() {
+  const nav = $("app-sidebar-nav");
+  if (!nav) return;
+  const inicioActive = activeTab === "dashboard" ? "active" : "";
+  let html = `
+    <div class="sidebar-item ${inicioActive}" data-tab="dashboard"
+         onclick="navTo('dashboard')">
+      <div class="sidebar-icon-box">${_iconSvg("home")}</div>
+      <span>Inicio</span>
+    </div>
+  `;
+  const grupos = {};
+  for (const [tabId, m] of Object.entries(MODULES)) {
+    if (currentUser && !tieneAccesoModulo(tabId)) continue;
+    (grupos[m.categoria] ||= []).push({ tabId, ...m });
+  }
+  const cats = [...CATEGORIAS_ORDEN.filter(c => grupos[c]),
+                ...Object.keys(grupos).filter(c => !CATEGORIAS_ORDEN.includes(c))];
+  for (const cat of cats) {
+    html += `<div class="sidebar-group-header">${cat} <span class="sidebar-count">${grupos[cat].length}</span></div>`;
+    for (const m of grupos[cat]) {
+      const cls = activeTab === m.tabId ? "active" : "";
+      html += `
+        <div class="sidebar-item ${cls}" data-tab="${m.tabId}"
+             onclick="navTo('${m.tabId}')">
+          <div class="sidebar-icon-box">${_iconSvg(m.icon)}</div>
+          <span class="truncate">${m.label}</span>
+        </div>
+      `;
+    }
+  }
+  nav.innerHTML = html;
+};
+
+const _cmdkAllItems_orig = _cmdkAllItems;
+_cmdkAllItems = function() {
+  const inicio = { tabId: "dashboard", label: "Inicio", categoria: "Navegación", icon: "home", color: "brand" };
+  const modulos = Object.entries(MODULES)
+    .filter(([tabId]) => !currentUser || tieneAccesoModulo(tabId))
+    .map(([tabId, m]) => ({ tabId, label: m.label, categoria: m.categoria, icon: m.icon, color: m.color }));
+  return [inicio, ...modulos];
+};
+
+function filtrarCardsDashboard() {
+  document.querySelectorAll(".db-mod-card").forEach(card => {
+    const mod = card.dataset.mod;          // ej: "demanda_inducida"
+    if (!mod || !currentUser) return;
+    // Convertir tipoBackend → tabId buscando en MODULES
+    const m = Object.values(MODULES).find(x => x.tipoBackend === mod);
+    if (!m) return;
+    const tabId = Object.keys(MODULES).find(k => MODULES[k] === m);
+    card.classList.toggle("hidden", !tieneAccesoModulo(tabId));
+  });
+}
+
+// Hook para que cuando un fetch a un endpoint de módulo devuelva 403,
+// avise con toast en vez de mostrar pantalla muerta.
+async function _apiJson(url, opts = {}) {
+  const r = await fetch(url, { credentials: "same-origin", ...opts });
+  if (r.status === 403) {
+    let detail = "Sin permiso";
+    try { detail = (await r.json()).detail || detail; } catch {}
+    toast("Acceso denegado", detail, "error");
+    throw new Error("403: " + detail);
+  }
+  if (!r.ok) {
+    let detail = `HTTP ${r.status}`;
+    try { detail = (await r.json()).detail || detail; } catch {}
+    throw new Error(detail);
+  }
+  return r.json();
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// MODAL: Mi perfil
+// ═══════════════════════════════════════════════════════════════════
+function openProfileModal() {
+  $("user-menu").classList.add("hidden");
+  if (!currentUser) return;
+  $("pr-username").textContent = currentUser.username;
+  $("pr-nombre").textContent = currentUser.nombre || "—";
+  const rb = $("pr-rol");
+  rb.textContent = currentUser.rol;
+  rb.className = "rol-badge rol-" + currentUser.rol;
+  const mods = currentUser.modulos_efectivos || [];
+  $("pr-modulos").innerHTML = mods.length
+    ? mods.map(m => `<span class="modulo-chip">${MODULES[m]?.label || m}</span>`).join(" ")
+    : `<span class="text-slate-400 text-xs italic">Ningún módulo asignado</span>`;
+  $("pr-ultimo-login").textContent = currentUser.ultimo_login_en
+    ? new Date(currentUser.ultimo_login_en).toLocaleString()
+    : "Primera vez";
+  ["pr-pwd-actual", "pr-pwd-nueva", "pr-pwd-confirm"].forEach(id => $(id).value = "");
+  $("pr-err").classList.add("hidden");
+  $("pr-ok").classList.add("hidden");
+  $("profile-overlay").classList.add("open");
+}
+function closeProfileModal() { $("profile-overlay").classList.remove("open"); }
+
+async function submitProfilePwd() {
+  const actual  = $("pr-pwd-actual").value;
+  const nueva   = $("pr-pwd-nueva").value;
+  const confirm_ = $("pr-pwd-confirm").value;
+  const err = $("pr-err"); const ok = $("pr-ok");
+  err.classList.add("hidden"); ok.classList.add("hidden");
+  if (!actual || !nueva)        { err.textContent = "Completá ambos campos."; err.classList.remove("hidden"); return; }
+  if (nueva.length < 8)         { err.textContent = "La nueva password debe tener al menos 8 caracteres."; err.classList.remove("hidden"); return; }
+  if (nueva !== confirm_)       { err.textContent = "La confirmación no coincide."; err.classList.remove("hidden"); return; }
+  if (nueva === actual)         { err.textContent = "La password nueva debe ser distinta de la actual."; err.classList.remove("hidden"); return; }
+  const btn = $("pr-submit"); btn.disabled = true;
+  try {
+    const r = await fetch("/api/me/password", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ password_actual: actual, password_nueva: nueva }),
+    });
+    if (!r.ok) {
+      const d = await r.json().catch(() => ({}));
+      err.textContent = d.detail || `Error ${r.status}`;
+      err.classList.remove("hidden"); return;
+    }
+    ok.classList.remove("hidden");
+    ["pr-pwd-actual", "pr-pwd-nueva", "pr-pwd-confirm"].forEach(id => $(id).value = "");
+    toast("Password actualizada", "Tu contraseña se cambió correctamente.", "success");
+  } finally { btn.disabled = false; }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// MODAL: Gestionar usuarios (solo admin)
+// ═══════════════════════════════════════════════════════════════════
+async function openUsersModal() {
+  $("user-menu").classList.add("hidden");
+  if (!isAdmin()) { toast("Solo admin", "Esta sección requiere rol ADMIN.", "error"); return; }
+  $("users-overlay").classList.add("open");
+  await reloadUsersList();
+}
+function closeUsersModal() { $("users-overlay").classList.remove("open"); }
+
+async function reloadUsersList() {
+  const tbody = $("users-tbody");
+  const err = $("users-list-err");
+  err.classList.add("hidden");
+  tbody.innerHTML = `<tr><td colspan="7" class="text-center text-slate-400 py-6">Cargando…</td></tr>`;
+  try {
+    const users = await _apiJson("/api/users");
+    if (!users.length) {
+      tbody.innerHTML = `<tr><td colspan="7" class="text-center text-slate-400 py-6">Sin usuarios.</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = users.map(u => {
+      const modChips = u.modulos_efectivos.length
+        ? u.modulos_efectivos.map(m => `<span class="modulo-chip">${MODULES[m]?.badge || m}</span>`).join("")
+        : `<span class="text-slate-300 text-xs italic">—</span>`;
+      const ultimo = u.ultimo_login_en ? fmtRel(u.ultimo_login_en) : `<span class="text-slate-400">nunca</span>`;
+      const yo = currentUser?.id === u.id ? `<span class="text-[10px] font-bold text-brand-700 ml-1">(vos)</span>` : "";
+      return `
+        <tr data-uid="${u.id}">
+          <td><span class="font-mono text-xs">${u.username}</span>${yo}</td>
+          <td>${u.nombre || "<span class='text-slate-300'>—</span>"}</td>
+          <td><span class="rol-badge rol-${u.rol}">${u.rol}</span></td>
+          <td>${modChips}</td>
+          <td><span class="estado-dot ${u.activo ? 'activo' : 'inactivo'}"></span>${u.activo ? "Activo" : "Inactivo"}</td>
+          <td class="text-xs text-slate-500">${ultimo}</td>
+          <td>
+            <div class="acciones">
+              <button class="btn-icon" type="button" onclick='editUser(${JSON.stringify(u.id)})' title="Editar">✎</button>
+              <button class="btn-icon" type="button" onclick='openResetPwdModal(${JSON.stringify(u.id)}, ${JSON.stringify(u.username)})' title="Resetear password">🔑</button>
+              <button class="btn-danger" type="button" onclick='confirmDeleteUser(${JSON.stringify(u.id)}, ${JSON.stringify(u.username)})' title="Eliminar">🗑</button>
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join("");
+  } catch (e) {
+    err.textContent = e.message || "Error cargando usuarios";
+    err.classList.remove("hidden");
+    tbody.innerHTML = "";
+  }
+}
+
+async function confirmDeleteUser(uid, username) {
+  if (!confirm(`¿Eliminar al usuario "${username}"?\n\nEsto NO afecta las extracciones que haya creado.`)) return;
+  try {
+    const r = await fetch("/api/users/" + uid, { method: "DELETE", credentials: "same-origin" });
+    if (!r.ok) {
+      const d = await r.json().catch(() => ({}));
+      toast("No se pudo eliminar", d.detail || `Error ${r.status}`, "error");
+      return;
+    }
+    toast("Usuario eliminado", username, "success");
+    await reloadUsersList();
+  } catch (e) { toast("Error", e.message, "error"); }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// MODAL: Audit log (solo admin)
+// ═══════════════════════════════════════════════════════════════════
+function _escAudit(s) {
+  return String(s ?? "").replace(/[&<>"']/g, c => ({
+    "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
+  }[c]));
+}
+function _accionClass(accion) {
+  if (!accion) return "ac-default";
+  if (accion.endsWith(".create")) return "ac-create";
+  if (accion.endsWith(".delete")) return "ac-delete";
+  if (accion.endsWith(".update")) return "ac-update";
+  if (accion.endsWith("reset_password")) return "ac-reset";
+  if (accion.endsWith("change_password")) return "ac-pw";
+  return "ac-default";
+}
+
+async function openAuditModal() {
+  $("user-menu").classList.add("hidden");
+  if (!isAdmin()) { toast("Solo admin", "Esta sección requiere rol ADMIN.", "error"); return; }
+  $("al-actor").value = "";
+  $("al-target").value = "";
+  $("audit-overlay").classList.add("open");
+  await reloadAuditLog();
+}
+function closeAuditModal() { $("audit-overlay").classList.remove("open"); }
+
+async function reloadAuditLog() {
+  const tbody = $("audit-tbody");
+  const err = $("audit-err");
+  const meta = $("audit-meta");
+  err.classList.add("hidden");
+  meta.textContent = "";
+  tbody.innerHTML = `<tr><td colspan="5" class="text-center text-slate-400 py-6">Cargando…</td></tr>`;
+
+  const qs = new URLSearchParams({ limit: "200" });
+  const actor = $("al-actor").value.trim();
+  const target = $("al-target").value.trim();
+  if (actor) qs.set("actor", actor);
+  if (target) qs.set("target_id", target);
+
+  try {
+    const data = await _apiJson("/api/users/_audit/log?" + qs.toString());
+    meta.textContent = `${data.total} evento${data.total === 1 ? "" : "s"}`;
+    if (!data.eventos.length) {
+      tbody.innerHTML = `<tr><td colspan="5" class="text-center text-slate-400 py-6">Sin eventos para esos filtros.</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = data.eventos.map(e => {
+      let detalleHtml;
+      if (e.detalle && typeof e.detalle === "object") {
+        const json = _escAudit(JSON.stringify(e.detalle, null, 2));
+        detalleHtml = `<details><summary class="cursor-pointer text-xs text-brand-700">ver JSON</summary><pre class="audit-detalle">${json}</pre></details>`;
+      } else if (e.detalle) {
+        detalleHtml = `<span class="text-xs text-slate-600">${_escAudit(e.detalle)}</span>`;
+      } else {
+        detalleHtml = `<span class="text-slate-300 text-xs">—</span>`;
+      }
+      const targetHtml = e.target_label
+        ? `<span class="font-mono text-xs">${_escAudit(e.target_label)}</span>${e.target_type ? `<span class="text-[10px] text-slate-400 ml-1">${_escAudit(e.target_type)}</span>` : ""}`
+        : (e.target_id
+            ? `<span class="font-mono text-[10px] text-slate-500" title="${_escAudit(e.target_id)}">${_escAudit(e.target_id.slice(0, 8))}…</span>`
+            : `<span class="text-slate-300">—</span>`);
+      const tsAbs = new Date(e.ts).toLocaleString("es-CO");
+      return `
+        <tr>
+          <td class="text-xs text-slate-500 whitespace-nowrap" title="${_escAudit(tsAbs)}">${fmtRel(e.ts)}</td>
+          <td><span class="font-mono text-xs">${_escAudit(e.actor_username)}</span></td>
+          <td><span class="accion-badge ${_accionClass(e.accion)}">${_escAudit(e.accion)}</span></td>
+          <td>${targetHtml}</td>
+          <td>${detalleHtml}</td>
+        </tr>
+      `;
+    }).join("");
+  } catch (e) {
+    err.textContent = e.message || "Error cargando audit log";
+    err.classList.remove("hidden");
+    tbody.innerHTML = "";
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// MODAL: Crear / Editar usuario
+// ═══════════════════════════════════════════════════════════════════
+let _editingUserId = null;
+
+function _renderModulosCheckboxes(seleccionados = []) {
+  const set = new Set(seleccionados);
+  const html = Object.entries(MODULES).map(([tabId, m]) => `
+    <label>
+      <input type="checkbox" name="uf-mod" value="${tabId}" ${set.has(tabId) ? "checked" : ""}>
+      ${m.label}
+    </label>
+  `).join("");
+  $("uf-modulos").innerHTML = html;
+}
+
+function openUserFormModal(uid /* null = crear */) {
+  _editingUserId = uid;
+  $("uf-title").textContent = uid ? "Editar usuario" : "Nuevo usuario";
+  $("uf-err").classList.add("hidden");
+  $("uf-ok").classList.add("hidden");
+  // En edición no permitimos cambiar username ni password (password va por reset).
+  $("uf-username").value = "";
+  $("uf-username").disabled = !!uid;
+  $("uf-nombre").value = "";
+  $("uf-email").value = "";
+  $("uf-password").value = "";
+  $("uf-password-row").classList.toggle("hidden", !!uid);
+  $("uf-rol").value = "viewer";
+  $("uf-activo").checked = true;
+  _renderModulosCheckboxes([]);
+
+  if (uid) {
+    // Cargar datos del user
+    fetch("/api/users/" + uid, { credentials: "same-origin" })
+      .then(r => r.ok ? r.json() : null)
+      .then(u => {
+        if (!u) return;
+        $("uf-username").value = u.username;
+        $("uf-nombre").value = u.nombre || "";
+        $("uf-email").value = u.email || "";
+        $("uf-rol").value = u.rol;
+        $("uf-activo").checked = u.activo;
+        _renderModulosCheckboxes(u.modulos);
+      });
+  }
+  $("user-form-overlay").classList.add("open");
+}
+function editUser(uid) { closeUsersModal(); $("users-overlay").classList.add("open"); openUserFormModal(uid); }
+function closeUserFormModal() { $("user-form-overlay").classList.remove("open"); _editingUserId = null; }
+
+async function submitUserForm() {
+  const err = $("uf-err"); const ok = $("uf-ok");
+  err.classList.add("hidden"); ok.classList.add("hidden");
+  const modulos = Array.from(document.querySelectorAll('input[name="uf-mod"]:checked')).map(i => i.value);
+  const payload = {
+    nombre: $("uf-nombre").value.trim() || null,
+    email: $("uf-email").value.trim() || null,
+    rol: $("uf-rol").value,
+    modulos: modulos,
+    activo: $("uf-activo").checked,
+  };
+  if (!_editingUserId) {
+    // Crear: username + password obligatorios
+    payload.username = $("uf-username").value.trim();
+    payload.password = $("uf-password").value;
+    if (!payload.username) { err.textContent = "Username requerido."; err.classList.remove("hidden"); return; }
+    if (!payload.password || payload.password.length < 8) {
+      err.textContent = "Password mínima 8 caracteres."; err.classList.remove("hidden"); return;
+    }
+  }
+  const btn = $("uf-submit"); btn.disabled = true;
+  try {
+    const url = _editingUserId ? ("/api/users/" + _editingUserId) : "/api/users";
+    const method = _editingUserId ? "PUT" : "POST";
+    const r = await fetch(url, {
+      method, headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify(payload),
+    });
+    if (!r.ok) {
+      const d = await r.json().catch(() => ({}));
+      err.textContent = (typeof d.detail === "string") ? d.detail
+                       : Array.isArray(d.detail) ? d.detail.map(x => x.msg).join("; ")
+                       : `Error ${r.status}`;
+      err.classList.remove("hidden"); return;
+    }
+    toast(_editingUserId ? "Usuario actualizado" : "Usuario creado", payload.username || payload.nombre || "OK", "success");
+    closeUserFormModal();
+    await reloadUsersList();
+  } finally { btn.disabled = false; }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// MODAL: Reset password
+// ═══════════════════════════════════════════════════════════════════
+let _resetUserId = null;
+function openResetPwdModal(uid, username) {
+  _resetUserId = uid;
+  $("rp-username").textContent = username;
+  $("rp-pwd").value = "";
+  $("rp-err").classList.add("hidden");
+  $("rp-ok").classList.add("hidden");
+  $("reset-pwd-overlay").classList.add("open");
+}
+function closeResetPwdModal() { $("reset-pwd-overlay").classList.remove("open"); _resetUserId = null; }
+async function submitResetPwd() {
+  const pwd = $("rp-pwd").value;
+  const err = $("rp-err"); const ok = $("rp-ok");
+  err.classList.add("hidden"); ok.classList.add("hidden");
+  if (!pwd || pwd.length < 8) {
+    err.textContent = "Password mínima 8 caracteres."; err.classList.remove("hidden"); return;
+  }
+  const btn = $("rp-submit"); btn.disabled = true;
+  try {
+    const r = await fetch("/api/users/" + _resetUserId + "/reset-password", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ password: pwd }),
+    });
+    if (!r.ok) {
+      const d = await r.json().catch(() => ({}));
+      err.textContent = d.detail || `Error ${r.status}`;
+      err.classList.remove("hidden"); return;
+    }
+    ok.classList.remove("hidden");
+    toast("Password reseteada", "Avisale al usuario.", "success");
+    setTimeout(closeResetPwdModal, 1200);
+  } finally { btn.disabled = false; }
+}
+
+(async function () {
   const hoy = new Date().toISOString().slice(0, 10);
   const mes  = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
   $("desde").value = mes; $("desde").max = hoy;
   $("hasta").value = hoy; $("hasta").max = hoy;
   updateLotePreview();
   loadHealth();
-  loadJobs();
   setInterval(loadHealth, 30000);
+  // 1. Cargar current user ANTES de pintar el sidebar/dashboard (para filtrar).
+  await loadCurrentUser();
+  updateUserMenuChrome();
+  // 2. Pintar nav + dashboard (ya con filtros de permisos).
+  renderAppSidebar();
+  loadJobs();
   // Boot del dashboard (activeTab="dashboard" por default)
   loadDashboard();
+  // 3. Al cargar las cards del dashboard, filtrar las que el user no puede ver.
+  setTimeout(filtrarCardsDashboard, 700);
 })();
 </script>
 </body>

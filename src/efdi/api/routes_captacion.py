@@ -5,17 +5,18 @@ from datetime import date, datetime
 from pathlib import Path
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, status
+from fastapi import Depends, APIRouter, BackgroundTasks, HTTPException, Query, status
+from efdi.api.dependencies import current_user, require_modulo, require_no_viewer
 from fastapi.responses import FileResponse
 
 from efdi.api.schemas import CrearExtraccionReq, ExtraccionResp, RenombrarJobReq
 from efdi.config import settings
-from efdi.domain.models import EstadoExtraccion, Extraccion, ExtraccionTipo, Lote, ModoPdf, estado_label, safe_filename
+from efdi.domain.models import User, EstadoExtraccion, Extraccion, ExtraccionTipo, Lote, ModoPdf, estado_label, safe_filename
 from efdi.infrastructure.job_store import store
 from efdi.infrastructure.repository_captacion import get_captacion_repository
 from efdi.services.extraction_captacion import ejecutar_extraccion_captacion
 
-router = APIRouter(prefix="/gestion-captacion", tags=["gestion-captacion"])
+router = APIRouter(prefix="/gestion-captacion", tags=["gestion-captacion"], dependencies=[Depends(require_modulo("gestion-captacion"))])
 
 
 def _auto_tamano_lote(limite: int) -> int:
@@ -35,14 +36,26 @@ def _auto_tamano_lote(limite: int) -> int:
 async def contar_registros_captacion(
     desde: date = Query(...),
     hasta: date = Query(...),
+    numero_factura: str | None = Query(
+        None,
+        description="Sufijo del código de régimen (ej '11502'). Backend arma CABn+FABn.",
+    ),
 ) -> dict:
     if hasta < desde:
         raise HTTPException(status_code=400, detail="hasta debe ser >= desde")
+    facturas: list[str] | None = None
+    if numero_factura:
+        n = numero_factura.strip().upper()
+        if n.startswith("CAB") or n.startswith("FAB"):
+            n = n[3:]
+        if not n:
+            raise HTTPException(status_code=400, detail="numero_factura no puede ser vacío")
+        facturas = [f"CAB{n}", f"FAB{n}"]
     repo = get_captacion_repository()
-    total = repo.get_total(desde, hasta)
+    total = repo.get_total(desde, hasta, facturas=facturas)
     if total <= 0:
         return {"total_en_db": 0, "limite_efectivo": 0, "tamano_lote": 0, "lotes_estimados": 0, "capeado": False}
-    limite_efectivo = min(total, 600_000)
+    limite_efectivo = total
     tamano = _auto_tamano_lote(limite_efectivo)
     lotes = math.ceil(limite_efectivo / tamano)
     return {
@@ -50,7 +63,7 @@ async def contar_registros_captacion(
         "limite_efectivo": limite_efectivo,
         "tamano_lote": tamano,
         "lotes_estimados": lotes,
-        "capeado": total > 600_000,
+        "capeado": False,
     }
 
 
@@ -59,21 +72,33 @@ async def contar_registros_captacion(
     response_model=ExtraccionResp,
     status_code=status.HTTP_202_ACCEPTED,
     summary="Crear extracción de PDFs de Gestión Captación",
+    dependencies=[Depends(require_no_viewer)],
 )
 async def crear_extraccion_captacion(
     req: CrearExtraccionReq,
     background: BackgroundTasks,
+    current: User = Depends(current_user)
 ) -> ExtraccionResp:
+    # Mismo patrón que DI/FINDRISC: CAB+N / FAB+N es el código de régimen.
+    facturas: list[str] | None = None
+    nombre_default: str | None = None
+    if req.numero_factura is not None:
+        facturas = [f"CAB{req.numero_factura}", f"FAB{req.numero_factura}"]
+        nombre_default = f"CAPTACION {req.desde}—{req.hasta} · {req.regimen}"
+
     limite = req.limite
     if limite is None:
         repo = get_captacion_repository()
-        total = repo.get_total(req.desde, req.hasta)
+        total = repo.get_total(req.desde, req.hasta, facturas=facturas)
         if total <= 0:
             raise HTTPException(
                 status_code=400,
-                detail="No se pudo obtener el total de registros de captación.",
+                detail=(
+                    "No se encontraron registros de Captación para el rango/código indicados. "
+                    "Verifica el conteo previo y la conexión a la base de datos."
+                ),
             )
-        limite = min(total, 600_000)
+        limite = total
 
     tamano_lote = req.tamano_lote or _auto_tamano_lote(limite)
 
@@ -85,7 +110,11 @@ async def crear_extraccion_captacion(
         tamano_lote=tamano_lote,
         tipo=ExtraccionTipo.GESTION_CAPTACION,
         modo_pdf=ModoPdf.UNO_POR_ATENCION,
+        nombre=nombre_default,
+        regimen=req.regimen,
+        facturas=facturas,
         creado_en=datetime.now(),
+        created_by_username=current.username,
     )
     store.save(job)
     background.add_task(ejecutar_extraccion_captacion, job)
@@ -168,6 +197,7 @@ async def descargar_lote_captacion(job_id: UUID, numero: int) -> FileResponse:
     "/extractions/{job_id}/nombre",
     response_model=ExtraccionResp,
     summary="Renombrar una extracción de Captación",
+    dependencies=[Depends(require_no_viewer)],
 )
 async def renombrar_extraccion_captacion(job_id: UUID, req: RenombrarJobReq) -> ExtraccionResp:
     job = store.get(job_id)
@@ -181,6 +211,7 @@ async def renombrar_extraccion_captacion(job_id: UUID, req: RenombrarJobReq) -> 
 @router.post(
     "/extractions/{job_id}/cancel",
     summary="Cancelar extracción de Captación en curso",
+    dependencies=[Depends(require_no_viewer)],
 )
 async def cancelar_extraccion_captacion(job_id: UUID) -> dict:
     job = store.get(job_id)
@@ -197,6 +228,7 @@ async def cancelar_extraccion_captacion(job_id: UUID) -> dict:
 @router.delete(
     "/extractions/{job_id}",
     summary="Eliminar extracción de Captación",
+    dependencies=[Depends(require_no_viewer)],
 )
 async def eliminar_extraccion_captacion(job_id: UUID) -> dict:
     job = store.get(job_id)

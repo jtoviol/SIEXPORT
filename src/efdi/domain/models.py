@@ -7,6 +7,67 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 
+# ─── Auth / Multi-user ─────────────────────────────────────────────────────
+class Rol(str, Enum):
+    """Roles del sistema. Solo ADMIN puede gestionar otros usuarios.
+
+    - ADMIN:    todo, incluyendo CRUD de usuarios.
+    - OPERADOR: puede crear/cancelar/borrar extracciones de sus módulos asignados.
+    - VIEWER:   solo lectura: lista y descarga, no genera.
+    """
+
+    ADMIN = "admin"
+    OPERADOR = "operador"
+    VIEWER = "viewer"
+
+
+# Módulos válidos (tab IDs del frontend). Mismo conjunto que el registry MODULES
+# del frontend — usado para validar permisos al crear/editar usuarios.
+MODULOS_VALIDOS: list[str] = [
+    "demanda-inducida",
+    "findrisc",
+    "gestion-captacion",
+    "planificacion-familiar",
+    "vacunacion",
+    "caracterizacion-familiar",
+    "pruebas-rapidas",
+    "educacion-grupal",
+]
+
+
+class User(BaseModel):
+    """Usuario del sistema. `password_hash` SOLO sale por endpoints internos."""
+
+    model_config = ConfigDict(use_enum_values=True, str_strip_whitespace=True)
+
+    id: UUID
+    username: str = Field(min_length=3, max_length=40, pattern=r"^[a-zA-Z0-9._-]+$")
+    nombre: str | None = None
+    email: str | None = None
+    password_hash: str
+    rol: Rol = Rol.VIEWER
+    # Lista de tabIds de módulos a los que el usuario puede acceder.
+    # Si rol == ADMIN, este campo se ignora (admin ve todos).
+    modulos: list[str] = Field(default_factory=list)
+    activo: bool = True
+    creado_en: datetime
+    actualizado_en: datetime | None = None
+    ultimo_login_en: datetime | None = None
+    # username del admin que creó este usuario (audit trail).
+    creado_por: str | None = None
+
+    def modulos_efectivos(self) -> list[str]:
+        """Lista de módulos a los que tiene acceso. ADMIN ve todos."""
+        if self.rol == Rol.ADMIN or self.rol == Rol.ADMIN.value:
+            return list(MODULOS_VALIDOS)
+        return [m for m in self.modulos if m in MODULOS_VALIDOS]
+
+    def puede_modificar(self) -> bool:
+        """ADMIN y OPERADOR pueden crear/cancelar/borrar extracciones. VIEWER no."""
+        r = self.rol if isinstance(self.rol, str) else self.rol.value
+        return r in (Rol.ADMIN.value, Rol.OPERADOR.value)
+
+
 class TipoDocumento(str, Enum):
     CC = "CC"
     TI = "TI"
@@ -160,6 +221,10 @@ class ExtraccionTipo(str, Enum):
     FINDRISC = "findrisc"
     GESTION_CAPTACION = "gestion_captacion"
     PLANIFICACION_FAMILIAR = "planificacion_familiar"
+    VACUNACION = "vacunacion"
+    CARACTERIZACION_FAMILIAR = "caracterizacion_familiar"
+    PRUEBAS_RAPIDAS = "pruebas_rapidas"
+    EDUCACION_GRUPAL = "educacion_grupal"
 
 
 # ─── Factores Clínicos del módulo Seguimiento Planificación Familiar ────────
@@ -258,6 +323,79 @@ class AfiliadoConFindrisc(BaseModel):
     @property
     def pdf_key(self) -> str:
         return f"{self.doc_key}_{self.fecha_registro}"
+
+
+class RespuestaPruebaRapida(BaseModel):
+    """Una respuesta de prueba rápida — 1 PDF por instancia.
+
+    Pivote: `srg_respuesta_prueba_rapida` (1 respuesta = 1 fila AP en el SP
+    `prGeneraRips` cursor `cuPruebaRapida`). El CIEX y CUPS NO son fijos por
+    módulo: vienen del catálogo `srg_prueba_rapida` (varían por prueba — VIH,
+    Sífilis, Embarazo, etc.). Ver memoria `reference-ciex-por-modulo` §PR.
+    """
+
+    model_config = ConfigDict(use_enum_values=True, str_strip_whitespace=True)
+
+    # ── Metadata interna ─────────────────────────────────────────────────────
+    seq_seragil: int
+    seq_respuesta: int                                  # id sintético = seq_seragil*1M + seq_prueba_rapida (la tabla no tiene PK simple)
+    seq_prueba_rapida: int                              # FK al catálogo
+    tipo_documento: TipoDocumento
+    fecha_realizacion: date
+    fecha_registro: date | None = None
+
+    # ── Afiliado ─────────────────────────────────────────────────────────────
+    nombre_completo: str
+    primer_nombre: str | None = None
+    segundo_nombre: str | None = None
+    primer_apellido: str | None = None
+    segundo_apellido: str | None = None
+    sexo: str | None = None
+    edad: int = Field(default=0, ge=0, le=120)
+    fec_nacimiento: date | None = None
+    tipo_identificacion_desc: str | None = None
+    num_documento: str
+    departamento: str | None = None
+    municipio: str | None = None
+    direccion: str | None = None
+    telefono_1: str | None = None
+    telefono_2: str | None = None
+    correo: str | None = None
+    flg_gestante: bool = False
+
+    # ── Encuesta / encuestador ───────────────────────────────────────────────
+    encuestador: str | None = None
+    cargo_encuestador: str | None = None
+    presion_arterial: str | None = None
+
+    # ── Prueba ───────────────────────────────────────────────────────────────
+    des_prueba_rapida: str
+    resultado_prueba: str | None = None                 # "NEGATIVA" / "POSITIVA" / texto crudo
+    nro_lote: str | None = None
+    observacion: str | None = None
+
+    @property
+    def doc_key(self) -> str:
+        return f"{self.tipo_documento}_{self.num_documento}"
+
+
+class AfiliadoConPruebasRapidas(BaseModel):
+    """Un afiliado con TODAS sus pruebas del lote — carpeta por afiliado en el ZIP.
+
+    A diferencia de FINDRISC (1 carpeta por afiliado/fecha), acá vamos por
+    afiliado solo: si Juan se hizo 5 pruebas en 3 días distintos del periodo,
+    las 5 caen en la misma carpeta `CC_1067839405_PEREZ_JUAN/`.
+    """
+
+    doc_key: str
+    tipo_documento: TipoDocumento
+    num_documento: str
+    nombre_completo: str
+    primer_nombre: str | None = None
+    segundo_nombre: str | None = None
+    primer_apellido: str | None = None
+    segundo_apellido: str | None = None
+    respuestas: list[RespuestaPruebaRapida]
 
 
 class RegistroCaptacion(BaseModel):
@@ -452,6 +590,234 @@ class AfiliadoConPlanFamiliar(BaseModel):
         return f"{self.doc_key}_{self.fecha_gestion}"
 
 
+# ─── Vacunación ─────────────────────────────────────────────────────────────
+# El Excel ya viene con todos los datos cocinados (mismo shape que la query de DI
+# pero solo programas de vacunación). 1 fila = 1 vacuna aplicada. Para el PDF
+# tipo carné agrupamos por afiliado: 1 PDF por persona con todas sus vacunas.
+
+
+class RegistroVacuna(BaseModel):
+    """Una fila del Excel — 1 vacuna aplicada a 1 afiliado en una fecha."""
+
+    model_config = ConfigDict(use_enum_values=True, str_strip_whitespace=True)
+
+    # === Identificación afiliado ===
+    seq_seragil: int = Field(description="SEQ_SERAGIL — id de la atención origen")
+    tipo_documento: TipoDocumento = Field(description="Normalizado desde DES_TIPO_IDENTIFICACION")
+    num_documento: str = Field(description="NRO_TIPO_IDENTIFICACION")
+    tipo_identificacion_desc: str | None = Field(
+        default=None, description="DES_TIPO_IDENTIFICACION (label largo: 'CEDULA DE CIUDADANIA')"
+    )
+    primer_nombre: str
+    segundo_nombre: str | None = None
+    primer_apellido: str
+    segundo_apellido: str | None = None
+    sexo: Sexo
+    edad: int = Field(ge=0, le=120, description="VLR_EDAD_ACTUAL")
+    fecha_nacimiento: date
+
+    # === Contacto ===
+    direccion: str | None = None
+    telefono_1: str | None = None
+    telefono_2: str | None = None
+    correo: str | None = None
+
+    # === Ubicación ===
+    departamento: str | None = None
+    municipio: str | None = None
+    zona_afiliado: int | None = Field(default=None, description="ZONA_AFILIADO (1=urbana, 2=rural)")
+
+    # === Sociodemográfico ===
+    curso_vida: str | None = None
+    regimen: Regimen | None = Field(default=None, description="Viene del propio Excel (col REGIMEN)")
+
+    # === Vacuna específica ===
+    fecha_aplicacion: date = Field(description="FEC_REGISTRO_INFORMACION normalizada")
+    programa: str = Field(description="DES_PROGRAMA_DEMIND (ej: 'VACUNACION VPH')")
+    modo_ingreso: str | None = Field(default=None, description="DES_MODO_INGRESO (COMUNIDAD/...)")
+    encuestador: str | None = Field(default=None, description="ENCUESTADOR = vacunador")
+    cargo_encuestador: str | None = None
+
+    @property
+    def doc_key(self) -> str:
+        return f"{self.tipo_documento}_{self.num_documento}"
+
+
+class AfiliadoConVacunas(BaseModel):
+    """1 PDF tipo carné por afiliado, con todas sus vacunas del Excel."""
+
+    doc_key: str
+    tipo_documento: TipoDocumento
+    num_documento: str
+    nombre_completo: str
+
+    # Datos demográficos del afiliado (tomados del primer registro)
+    sexo: Sexo
+    edad: int
+    fecha_nacimiento: date
+    tipo_identificacion_desc: str | None = None
+    direccion: str | None = None
+    telefono_1: str | None = None
+    telefono_2: str | None = None
+    correo: str | None = None
+    departamento: str | None = None
+    municipio: str | None = None
+    regimen: Regimen | None = None
+
+    vacunas: list[RegistroVacuna]
+
+    @property
+    def total_vacunas(self) -> int:
+        return len(self.vacunas)
+
+    @property
+    def pdf_key(self) -> str:
+        """Nombre del PDF: tipo_documento_numero. Sin fecha — es el carné completo."""
+        return self.doc_key
+
+
+# ─── Educación Grupal ─────────────────────────────────────────────────────
+# 1 fila = 1 asistente a 1 sesión educativa grupal. El PDF agrupa por
+# afiliado: 1 PDF por persona con todas las sesiones a las que asistió.
+
+
+class RegistroEducacionGrupal(BaseModel):
+    """Una fila del SELECT contra SRG_EDUCACION_GRUPAL + asistentes."""
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    seq_educacion_grupal: int = Field(description="seq_educacion_grupal — id de la sesión")
+    consecutivo: int = Field(description="NUM_REGISTRO")
+
+    facilitador: str | None = Field(default=None, description="Nombre del facilitador")
+    des_curso_vida_asociado: str | None = Field(default=None, description="Curso de vida asociado")
+    des_eje_tematico: str | None = Field(default=None, description="Eje temático")
+    des_modalidad: str | None = Field(default=None, description="PRESENCIAL / VIRTUAL / OTROS")
+    fec_educacion_grupal: str | None = Field(default=None, description="Fecha de la sesión")
+    fec_registro_educacion: str | None = Field(default=None, description="Fecha de registro")
+
+    departamento: str | None = None
+    municipio: str | None = None
+    txt_ubicacion_fisica: str | None = Field(default=None, description="Lugar físico")
+
+    cod_tipo_identificacion: str | None = None
+    nro_tipo_identificacion: str | None = None
+    nombre_afiliado: str | None = None
+    regimen: str | None = Field(default=None, description="SUBSIDIADO / CONTRIBUTIVO")
+
+    @property
+    def doc_key(self) -> str:
+        return f"{self.cod_tipo_identificacion or 'CC'}_{self.nro_tipo_identificacion or '0'}"
+
+
+class AfiliadoConEducacionGrupal(BaseModel):
+    """Un afiliado con todas las sesiones educativas a las que asistió."""
+
+    doc_key: str
+    tipo_documento: str
+    num_documento: str
+    nombre_completo: str
+    registros: list[RegistroEducacionGrupal]
+
+    @property
+    def total_sesiones(self) -> int:
+        return len(self.registros)
+
+    @property
+    def pdf_key(self) -> str:
+        return self.doc_key
+
+
+# ─── Caracterización Familiar (base sibacom) ────────────────────────────────
+# Política de fidelidad total: cada campo se guarda como string literal de la
+# query — sin parseo, sin decodificación, sin enums. 1 fila = 1 persona
+# caracterizada. Para el PDF se agrupa por familia (jerarquía geográfica
+# completa + vivienda + familia + ciuf).
+
+
+class RegistroCaracterizacion(BaseModel):
+    """Una fila del SELECT contra SBW_PERSONA_CARACTERIZADA — literal de la BD."""
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    # ── Área geográfica / familia (departamento/municipio/area ya vienen
+    # como DESCRIPCIONES resueltas en SQL — no códigos crudos) ────────────
+    departamento: str | None = None        # DES_DEPARTAMENTO o codniv1 si no matchea
+    municipio: str | None = None           # DES_MUNICIPIO o codniv1+codniv2
+    area: str | None = None                # 'URBANA' / 'RURAL' / codniv3
+    corregimiento: str | None = None       # codniv4
+    barrio_vereda: str | None = None       # codniv5
+    manzana: str | None = None             # codniv6
+    vivienda: str | None = None            # codvivi
+    familia: str | None = None             # codfami (secuencial dentro de vivienda)
+    tipo_familia: str | None = None        # AVS_TIPO_FAMILIA: NUCLEAR/EXTENSA/MONOPARENTAL
+    ciuf: str | None = None
+
+    # ── Persona ──────────────────────────────────────────────────────────
+    tipo_documento: str | None = None      # tipodocu (CC, TI, RC…)
+    num_documento: str | None = None
+    nombres_apellidos: str | None = None
+    sexo: str | None = None
+    fecha_nacimiento: str | None = None
+    edad: str | None = None
+    unidades: str | None = None            # edaduni
+    parentesco: str | None = None          # P.parentesco (JEFE DE FAMILIA, CONYUGE…)
+    estudia: str | None = None
+    anos_aprobados: str | None = None      # grado
+    nombre_ocupacion: str | None = None    # OI.DES_OCUPACION_INGRESO
+    nombre_institucion: str | None = None  # I.desc_ins (EPS/Institución)
+    descripcion_regimen: str | None = None # R.DES_TIPO_REGIMEN
+    etnia: str | None = None               # E.etnia (NINGUNO, INDIGENA, AFRO…)
+    gae: str | None = None                 # crudo (catálogo pendiente)
+    programa: str | None = None            # PG.nombre
+    discapacidad: str | None = None        # TD.DES_TIPO_DISCAPACIDAD
+
+    # ── Ubicación familia (SBW_UBICACION_FAMILIA) ────────────────────────
+    fecha_registro: str | None = None      # UF.fecha_reg
+    latitud: str | None = None
+    longitud: str | None = None
+    cohorte: str | None = None
+    visita: str | None = None
+    sisben_grupo: str | None = None
+    sisben_subgrupo: str | None = None
+    direccion: str | None = None
+    telefono_1: str | None = None          # 'N/A' si vacío/-1
+    telefono_2: str | None = None          # 'N/A' si vacío/-1
+    correo: str | None = None              # 'N/A' si vacío
+
+    @property
+    def familia_key(self) -> str:
+        """Llave de agrupación: jerarquía geográfica completa + vivienda +
+        familia + ciuf. Mismo separador '|' que el COUNT(DISTINCT CONCAT(...))
+        del repositorio para que ambos definan la familia de forma idéntica."""
+        partes = [
+            self.departamento, self.municipio, self.area, self.corregimiento,
+            self.barrio_vereda, self.manzana, self.vivienda, self.familia,
+            self.ciuf,
+        ]
+        return "|".join((p or "").strip() for p in partes)
+
+
+class FamiliaCaracterizada(BaseModel):
+    """Una familia con sus N integrantes — 1 PDF por familia."""
+
+    familia_key: str
+    registros: list[RegistroCaracterizacion]
+
+    @property
+    def total_integrantes(self) -> int:
+        return len(self.registros)
+
+    @property
+    def doc_key(self) -> str:
+        """Nombre de carpeta dentro del lote."""
+        return f"FAM_{safe_filename(self.familia_key, 'sin_clave')}"
+
+    @property
+    def pdf_key(self) -> str:
+        return self.doc_key
+
+
 class ModoPdf(str, Enum):
     UNO_POR_ATENCION = "uno_por_atencion"
 
@@ -480,7 +846,7 @@ class Extraccion(BaseModel):
     id: UUID
     desde: date
     hasta: date
-    limite: int = Field(ge=1, le=600_000, description="Total de registros a generar (sumando lotes)")
+    limite: int = Field(ge=1, description="Total de registros a generar (sumando lotes)")
     tamano_lote: int = Field(default=10_000, ge=1, le=50_000, description="Registros por lote")
     total_lotes: int = 0
     tipo: ExtraccionTipo = ExtraccionTipo.DEMANDA_INDUCIDA
@@ -494,6 +860,13 @@ class Extraccion(BaseModel):
         default=None,
         description="Lista de códigos CAB/FAB para cruzar con AVS_REGISTROS_AP",
     )
+    # ── Vacunación: ruta al Excel uploadeado ──
+    # No usamos `facturas` ni `regimen` del módulo Vacunación: el régimen viene
+    # del propio Excel y se pasa como filtro al servicio.
+    excel_path: str | None = Field(
+        default=None,
+        description="Ruta absoluta al .xlsx subido en data/uploads/vacunacion/<uuid>.xlsx",
+    )
     estado: EstadoExtraccion = EstadoExtraccion.PENDING
     total_atenciones: int = 0
     total_afiliados: int = 0
@@ -502,3 +875,6 @@ class Extraccion(BaseModel):
     completado_en: datetime | None = None
     zip_path: str | None = None
     mensaje_error: str | None = None
+    # Auditoría: username del usuario que disparó el POST de creación.
+    # Nullable: jobs anteriores a la introducción de auth multi-user no lo tienen.
+    created_by_username: str | None = None

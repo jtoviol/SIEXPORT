@@ -153,14 +153,22 @@ def _label_value_grid(rows: list[list[tuple[str, str]]], width: float) -> Table:
     return contenedor
 
 
-def _datos_afiliado(reg: RegistroPlanFamiliar, width: float) -> Table:
+def _datos_afiliado(
+    reg: RegistroPlanFamiliar,
+    width: float,
+    regimen_override: str | None = None,
+) -> Table:
+    """`regimen_override` (cuando viene del filtro CAB/FAB) manda sobre el
+    régimen derivado de `b.AFIC_REGIMEN` en la query — garantiza consistencia
+    con el cruce contra AVS_REGISTROS_AP."""
     doc_full = f"{_raw(reg.tipo_identificacion_desc)}: {_raw(reg.num_documento)}"
+    regimen_str = (regimen_override or "").strip() or _raw(reg.regimen)
     return _label_value_grid([
         [("Nombre del afiliado", _raw(reg.nombre_completo)),
          ("Documento", doc_full)],
         [("Fecha de nacimiento", _raw(reg.fecha_nacimiento)),
          ("Edad", f"{_raw(reg.edad)} años"),
-         ("Régimen", _raw(reg.regimen))],
+         ("Régimen", regimen_str)],
         [("Teléfono(s)", _raw(reg.telefono))],
     ], width)
 
@@ -299,7 +307,10 @@ def _bloque_seguimiento(reg: RegistroPlanFamiliar, width: float,
     return elems
 
 
-def _construir_pagina_planfami(afiliado: AfiliadoConPlanFamiliar) -> list:
+def _construir_pagina_planfami(
+    afiliado: AfiliadoConPlanFamiliar,
+    regimen_override: str | None = None,
+) -> list:
     reg = afiliado.registros[0]       # datos compartidos (afiliado / ubicación / FIC)
     width = letter[0] - 20 * mm
     total_seg = len(afiliado.registros)
@@ -310,7 +321,7 @@ def _construir_pagina_planfami(afiliado: AfiliadoConPlanFamiliar) -> list:
 
     # ── Bloques compartidos (no cambian entre seguimientos del mismo afiliado) ──
     elems.append(_section_header("DATOS DEL AFILIADO", width))
-    elems.append(_datos_afiliado(reg, width))
+    elems.append(_datos_afiliado(reg, width, regimen_override=regimen_override))
     elems.append(Spacer(1, 4))
 
     elems.append(_section_header("UBICACIÓN Y PERÍODO", width))
@@ -328,7 +339,13 @@ def _construir_pagina_planfami(afiliado: AfiliadoConPlanFamiliar) -> list:
     return elems
 
 
-def generar_pdf_planfami(afiliado: AfiliadoConPlanFamiliar, output_path: Path) -> Path:
+def generar_pdf_planfami(
+    afiliado: AfiliadoConPlanFamiliar,
+    output_path: Path,
+    regimen_override: str | None = None,
+) -> Path:
+    """`regimen_override` viene del job cuando la extracción se filtró por
+    código CAB/FAB — se imprime en el bloque DATOS DEL AFILIADO."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
     doc = SimpleDocTemplate(
         str(output_path),
@@ -338,7 +355,7 @@ def generar_pdf_planfami(afiliado: AfiliadoConPlanFamiliar, output_path: Path) -
         title=f"Planificación Familiar — {afiliado.pdf_key}",
         author="SIEDFASER",
     )
-    elems = _construir_pagina_planfami(afiliado)
+    elems = _construir_pagina_planfami(afiliado, regimen_override=regimen_override)
     elems.append(Spacer(1, 6))
     elems.append(Paragraph(
         "Documento generado automáticamente por SIEDFASER — Seguimiento Planificación Familiar",

@@ -11,10 +11,11 @@ log = logging.getLogger(__name__)
 
 class CaptacionRepository(Protocol):
     def obtener_registros(
-        self, desde: date, hasta: date, limite: int, offset: int = 0
+        self, desde: date, hasta: date, limite: int, offset: int = 0,
+        facturas: list[str] | None = None,
     ) -> list[RegistroCaptacion]: ...
 
-    def get_total(self, desde: date, hasta: date) -> int: ...
+    def get_total(self, desde: date, hasta: date, facturas: list[str] | None = None) -> int: ...
 
 
 # === Query principal paginada =================================================
@@ -97,6 +98,7 @@ WITH X AS (
     WHERE 1 = 1
       AND a.fec_captacion_afiliado >= ?
       AND a.fec_captacion_afiliado <= ?
+      {factura_filter}
 )
 SELECT X.NUM_REGISTRO,
        X.seq_captacion_afiliado,
@@ -138,7 +140,27 @@ INNER JOIN AVS_AFILIADO_MUTUALSER AS e
    AND a.num_tipo_identificacion_persona = e.NRO_TIPO_IDENTIFICACION
 WHERE a.fec_captacion_afiliado >= ?
   AND a.fec_captacion_afiliado <= ?
+  {factura_filter}
 """
+
+
+# Fragmento EXISTS contra AVS_REGISTROS_AP — mismo patrón que DI/FINDRISC.
+# Captación usa alias 'e' para el afiliado (AVS_AFILIADO_MUTUALSER).
+# El código completo CAB+N / FAB+N identifica el régimen de facturación.
+_FACTURA_EXISTS_CAPTACION = """AND EXISTS (
+    SELECT 1 FROM AVS_REGISTROS_AP r_ap
+    WHERE r_ap.NUM_TIPO_IDENTIFICACION = e.NRO_TIPO_IDENTIFICACION
+      AND r_ap.COD_TIPO_IDENTIFICACION = e.COD_TIPO_IDENTIFICACION
+      AND r_ap.NRO_FACTURA IN ({placeholders})
+)"""
+
+
+def _factura_filter_captacion(facturas: list[str] | None) -> str:
+    """Devuelve fragmento EXISTS con N placeholders o cadena vacía."""
+    if not facturas:
+        return ""
+    placeholders = ",".join("?" * len(facturas))
+    return _FACTURA_EXISTS_CAPTACION.format(placeholders=placeholders)
 
 
 # ─── helpers ──────────────────────────────────────────────────────────────────
@@ -190,7 +212,8 @@ def _normalizar_tipo_doc(cod: str | None) -> TipoDocumento:
 
 class MockCaptacionRepository:
     def obtener_registros(
-        self, desde: date, hasta: date, limite: int, offset: int = 0
+        self, desde: date, hasta: date, limite: int, offset: int = 0,
+        facturas: list[str] | None = None,
     ) -> list[RegistroCaptacion]:
         import random
         from datetime import timedelta
@@ -250,17 +273,21 @@ class MockCaptacionRepository:
                 prestador_servicios=rng.choice(ips_list),
                 **flags_dict,
             ))
+        if facturas:
+            # Mock del cruce: simula ~50% de afiliados en el set de códigos.
+            registros = [r for r in registros if r.seq_captacion_afiliado % 2 == 0]
         return registros
 
-    def get_total(self, desde: date, hasta: date) -> int:
-        return 500
+    def get_total(self, desde: date, hasta: date, facturas: list[str] | None = None) -> int:
+        return 250 if facturas else 500
 
 
 # ─── SQL Server real ─────────────────────────────────────────────────────────
 
 class SqlServerCaptacionRepository:
     def obtener_registros(
-        self, desde: date, hasta: date, limite: int, offset: int = 0
+        self, desde: date, hasta: date, limite: int, offset: int = 0,
+        facturas: list[str] | None = None,
     ) -> list[RegistroCaptacion]:
         try:
             import pyodbc
@@ -268,11 +295,18 @@ class SqlServerCaptacionRepository:
             raise RuntimeError("pyodbc no instalado") from e
 
         fecha_inicio, fecha_final = _fechas_dt(desde, hasta)
-        log.info("captacion.query", extra={"desde": str(desde), "hasta": str(hasta), "limite": limite, "offset": offset})
+        sql = QUERY_CAPTACION.format(factura_filter=_factura_filter_captacion(facturas))
+        params: list = [fecha_inicio, fecha_final]
+        if facturas:
+            params.extend(facturas)
+        params.extend([offset, limite])
+        log.info("captacion.query", extra={"desde": str(desde), "hasta": str(hasta),
+                                            "limite": limite, "offset": offset,
+                                            "facturas": len(facturas or [])})
 
         with pyodbc.connect(settings.db_dsn, timeout=60) as conn:
             cur = conn.cursor()
-            cur.execute(QUERY_CAPTACION, fecha_inicio, fecha_final, offset, limite)
+            cur.execute(sql, *params)
             cols = [c[0] for c in cur.description]
             rows = [dict(zip(cols, r, strict=False)) for r in cur.fetchall()]
 
@@ -333,16 +367,20 @@ class SqlServerCaptacionRepository:
         log.info("captacion.fetched", extra={"rows": len(registros)})
         return registros
 
-    def get_total(self, desde: date, hasta: date) -> int:
+    def get_total(self, desde: date, hasta: date, facturas: list[str] | None = None) -> int:
         try:
             import pyodbc
         except ImportError:
             return 0
         fecha_inicio, fecha_final = _fechas_dt(desde, hasta)
+        sql = QUERY_CAPTACION_COUNT.format(factura_filter=_factura_filter_captacion(facturas))
+        params: list = [fecha_inicio, fecha_final]
+        if facturas:
+            params.extend(facturas)
         try:
             with pyodbc.connect(settings.db_dsn, timeout=30) as conn:
                 cur = conn.cursor()
-                cur.execute(QUERY_CAPTACION_COUNT, fecha_inicio, fecha_final)
+                cur.execute(sql, *params)
                 row = cur.fetchone()
                 return int(row[0]) if row else 0
         except Exception:

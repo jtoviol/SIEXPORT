@@ -23,17 +23,18 @@ log = logging.getLogger(__name__)
 def _generar_pdfs_findrisc(
     tareas: list[tuple[AfiliadoConFindrisc, Path]],
     pool: "mp.pool.Pool | None" = None,
+    regimen_override: str | None = None,
 ) -> int:
     n = len(tareas)
     if settings.pdf_workers == 0 or n < settings.pdf_parallel_threshold or pool is None:
         for afiliado, path in tareas:
             path.parent.mkdir(parents=True, exist_ok=True)
-            generar_pdf_findrisc(afiliado, path)
+            generar_pdf_findrisc(afiliado, path, regimen_override=regimen_override)
         return n
     dirs = {p.parent for _, p in tareas}
     for d in dirs:
         d.mkdir(parents=True, exist_ok=True)
-    payload = [(af, str(p)) for af, p in tareas]
+    payload = [(af, str(p), regimen_override) for af, p in tareas]
     chunksize = max(20, n // (pool._processes * 8))  # type: ignore[attr-defined]
     results = list(pool.imap_unordered(pdf_worker_findrisc, payload, chunksize=chunksize))
     return len(results)
@@ -54,6 +55,7 @@ def _procesar_lote_findrisc(job: Extraccion, lote: Lote, pool: "mp.pool.Pool | N
             hasta=job.hasta,
             limite=lote.tamano,
             offset=lote.offset_inicio,
+            facturas=job.facturas,
         )
         lote.total_atenciones = len(registros)
 
@@ -78,7 +80,7 @@ def _procesar_lote_findrisc(job: Extraccion, lote: Lote, pool: "mp.pool.Pool | N
             pdf_path = lote_dir / afiliado.doc_key / f"{afiliado.pdf_key}.pdf"
             tareas.append((afiliado, pdf_path))
 
-        total_pdfs = _generar_pdfs_findrisc(tareas, pool=pool)
+        total_pdfs = _generar_pdfs_findrisc(tareas, pool=pool, regimen_override=job.regimen)
         lote.total_pdfs = total_pdfs
 
         lote.fase = "Empaquetando ZIP…"

@@ -16,6 +16,10 @@ _MOD_LABEL = {
     ExtraccionTipo.FINDRISC:                "FINDRISC",
     ExtraccionTipo.GESTION_CAPTACION:       "Gestión Captación",
     ExtraccionTipo.PLANIFICACION_FAMILIAR:  "Planificación Familiar",
+    ExtraccionTipo.VACUNACION:              "Vacunación",
+    ExtraccionTipo.CARACTERIZACION_FAMILIAR: "Caracterización Familiar",
+    ExtraccionTipo.PRUEBAS_RAPIDAS:         "Pruebas Rápidas",
+    ExtraccionTipo.EDUCACION_GRUPAL:        "Educación Grupal",
 }
 # Tab id de la web por tipo de módulo (para el deep-link "ver" desde el dashboard)
 _MOD_TAB = {
@@ -23,6 +27,10 @@ _MOD_TAB = {
     ExtraccionTipo.FINDRISC:                "findrisc",
     ExtraccionTipo.GESTION_CAPTACION:       "gestion-captacion",
     ExtraccionTipo.PLANIFICACION_FAMILIAR:  "planificacion-familiar",
+    ExtraccionTipo.VACUNACION:              "vacunacion",
+    ExtraccionTipo.CARACTERIZACION_FAMILIAR: "caracterizacion-familiar",
+    ExtraccionTipo.PRUEBAS_RAPIDAS:         "pruebas-rapidas",
+    ExtraccionTipo.EDUCACION_GRUPAL:        "educacion-grupal",
 }
 
 

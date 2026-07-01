@@ -1,0 +1,20 @@
+.venv/
+.git/
+.pytest_cache/
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# No copiar el .env al image — se pasa en tiempo de ejecución vía docker-compose
+.env
+.python-version
+
+# Datos generados y artefactos locales
+data/
+tests/
+*.pdf
+
+# Documentación y archivos de config del editor
+*.md
+.claude/

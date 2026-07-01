@@ -1,0 +1,18 @@
+services:
+  siedfaser:
+    build: .
+    image: siedfaser:latest
+    ports:
+      - "${API_PORT:-8765}:${API_PORT:-8765}"
+    env_file:
+      - .env
+    volumes:
+      # Persiste la BD SQLite (efdi.db) y los ZIPs/PDFs generados
+      - ./data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${API_PORT:-8765}/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

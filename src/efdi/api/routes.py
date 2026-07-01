@@ -5,10 +5,11 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from fastapi.responses import FileResponse
 
 from efdi import __version__
+from efdi.api.dependencies import current_user, require_modulo, require_no_viewer
 from efdi.api.schemas import (
     ConteoFacturasResp,
     CrearExtraccionReq,
@@ -19,13 +20,20 @@ from efdi.api.schemas import (
     RenombrarJobReq,
 )
 from efdi.config import settings
-from efdi.domain.models import Atencion, EstadoExtraccion, Extraccion, ExtraccionTipo, Lote, estado_label, safe_filename
+from efdi.domain.models import User, Atencion, EstadoExtraccion, Extraccion, ExtraccionTipo, Lote, estado_label, safe_filename
 from efdi.infrastructure.db import db
 from efdi.infrastructure.job_store import store
 from efdi.infrastructure.repository import SqlServerRepository, get_repository
 from efdi.services.extraction import ejecutar_extraccion
 
+# `router` = endpoints meta (sin gating de módulo): /health, /db/ping, /diagnostics.
+# Cualquier usuario autenticado puede consultar estos endpoints.
 router = APIRouter()
+
+# `router_di` = endpoints del módulo Demanda Inducida (/extractions/*). Aplicamos
+# require_modulo("demanda-inducida") a nivel router; los POST/PATCH/DELETE de
+# mutación adicionalmente requieren require_no_viewer en cada endpoint.
+router_di = APIRouter(dependencies=[Depends(require_modulo("demanda-inducida"))])
 
 
 def _auto_tamano_lote(limite: int) -> int:
@@ -167,7 +175,7 @@ async def diagnostics() -> DiagnosticsResp:
     )
 
 
-@router.get(
+@router_di.get(
     "/extractions/count",
     tags=["extracciones"],
     summary="Conteo previo de registros para un rango de fechas",
@@ -175,16 +183,34 @@ async def diagnostics() -> DiagnosticsResp:
 async def contar_registros(
     desde: date = Query(..., description="Fecha inicial (YYYY-MM-DD)"),
     hasta: date = Query(..., description="Fecha final (YYYY-MM-DD)"),
+    numero_factura: str | None = Query(
+        None,
+        description="Sufijo numérico del código de régimen (ej '11502'). Backend arma CABn+FABn.",
+    ),
 ) -> dict:
     """Consulta cuántos registros existen en la DB para el rango sin lanzar extracción.
-    Útil para que el usuario confirme el volumen antes de generar."""
+    Útil para que el usuario confirme el volumen antes de generar.
+
+    Si viene `numero_factura`, el conteo se restringe a los afiliados que están en
+    CABn/FABn como Demanda Inducida (cod_diag_principal='Z048' vía _FACTURA_EXISTS),
+    igual que lo va a hacer la extracción real."""
     if hasta < desde:
         raise HTTPException(status_code=400, detail="hasta debe ser >= desde")
+    facturas: list[str] | None = None
+    if numero_factura:
+        n = numero_factura.strip().upper()
+        if n.startswith("CAB") or n.startswith("FAB"):
+            n = n[3:]
+        if not n:
+            raise HTTPException(status_code=400, detail="numero_factura no puede ser vacío")
+        facturas = [f"CAB{n}", f"FAB{n}"]
     repo = get_repository()
-    total = repo.get_total(desde, hasta)
+    total = repo.get_total(desde, hasta, facturas=facturas)
     if total <= 0:
         return {"total_en_db": 0, "limite_efectivo": 0, "tamano_lote": 0, "lotes_estimados": 0, "capeado": False}
-    limite_efectivo = min(total, 600_000)
+    # Sin cap — el sistema procesa todo el universo que el filtro devuelva.
+    # `capeado` se mantiene en la respuesta por compat con el frontend, siempre False.
+    limite_efectivo = total
     tamano = _auto_tamano_lote(limite_efectivo)
     lotes = math.ceil(limite_efectivo / tamano)
     return {
@@ -192,7 +218,7 @@ async def contar_registros(
         "limite_efectivo": limite_efectivo,
         "tamano_lote": tamano,
         "lotes_estimados": lotes,
-        "capeado": total > 600_000,
+        "capeado": False,
     }
 
 
@@ -242,7 +268,7 @@ def _validar_pares_facturas(codigos: list[str]) -> list[str]:
     return normalizados
 
 
-@router.get(
+@router_di.get(
     "/extractions/facturas/count",
     response_model=ConteoFacturasResp,
     tags=["extracciones"],
@@ -256,6 +282,14 @@ async def contar_por_facturas(
             "o pasar uno solo separado por coma. Deben venir en pares CAB+FAB con el mismo número."
         ),
     ),
+    cod_diag: str | None = Query(
+        None,
+        description=(
+            "CIEX del módulo que invoca el preview, para que el conteo refleje SOLO "
+            "lo que ese módulo va a generar. Z048=Demanda Inducida, Z131=FINDRISC, "
+            "Z309=Planificación Familiar. Si no se pasa, cuenta todas las filas AP."
+        ),
+    ),
 ) -> ConteoFacturasResp:
     # Soporte "?codigos=CAB1,FAB1,CAB2,FAB2" además del repetido tradicional.
     aplanados: list[str] = []
@@ -264,20 +298,22 @@ async def contar_por_facturas(
 
     normalizados = _validar_pares_facturas(aplanados)
     repo = get_repository()
-    resultado = repo.contar_por_facturas(normalizados)
+    resultado = repo.contar_por_facturas(normalizados, cod_diag=cod_diag)
     return ConteoFacturasResp(**resultado)
 
 
-@router.post(
+@router_di.post(
     "/extractions",
     response_model=ExtraccionResp,
     status_code=status.HTTP_202_ACCEPTED,
     tags=["extracciones"],
     summary="Crear una nueva extracción de PDFs (se procesa en lotes)",
+    dependencies=[Depends(require_no_viewer)],
 )
 async def crear_extraccion(
     req: CrearExtraccionReq,
     background: BackgroundTasks,
+    current: User = Depends(current_user)
 ) -> ExtraccionResp:
     """Dispara la generación de PDFs en background.
 
@@ -304,7 +340,7 @@ async def crear_extraccion(
                     "Verifica el conteo previo y la conexión a la base de datos."
                 ),
             )
-        limite = min(total, 600_000)
+        limite = total
 
     tamano_lote = req.tamano_lote or _auto_tamano_lote(limite)
 
@@ -319,13 +355,14 @@ async def crear_extraccion(
         regimen=req.regimen,
         facturas=facturas,
         creado_en=datetime.now(),
+        created_by_username=current.username,
     )
     store.save(job)
     background.add_task(ejecutar_extraccion, job)
     return ExtraccionResp(**job.model_dump())
 
 
-@router.get(
+@router_di.get(
     "/extractions",
     response_model=list[ExtraccionResp],
     tags=["extracciones"],
@@ -338,7 +375,7 @@ async def listar_extracciones() -> list[ExtraccionResp]:
     ]
 
 
-@router.get(
+@router_di.get(
     "/extractions/{job_id}",
     response_model=ExtraccionResp,
     tags=["extracciones"],
@@ -351,7 +388,7 @@ async def obtener_extraccion(job_id: UUID) -> ExtraccionResp:
     return ExtraccionResp(**job.model_dump())
 
 
-@router.get(
+@router_di.get(
     "/extractions/{job_id}/atenciones",
     response_model=list[Atencion],
     tags=["extracciones"],
@@ -364,7 +401,7 @@ async def obtener_atenciones(job_id: UUID) -> list[Atencion]:
     return store.get_atenciones(job_id)
 
 
-@router.get(
+@router_di.get(
     "/extractions/{job_id}/lotes",
     response_model=list[Lote],
     tags=["extracciones", "lotes"],
@@ -377,7 +414,7 @@ async def listar_lotes(job_id: UUID) -> list[Lote]:
     return store.list_lotes(job_id)
 
 
-@router.get(
+@router_di.get(
     "/extractions/{job_id}/lotes/{numero}",
     response_model=Lote,
     tags=["extracciones", "lotes"],
@@ -393,7 +430,7 @@ async def obtener_lote(job_id: UUID, numero: int) -> Lote:
     return lote
 
 
-@router.get(
+@router_di.get(
     "/extractions/{job_id}/lotes/{numero}/download",
     tags=["extracciones", "lotes"],
     summary="Descargar el zip de un lote individual",
@@ -435,10 +472,11 @@ def _borrar_artefactos_extraccion(job_id: UUID) -> dict[str, int]:
     return borrados
 
 
-@router.post(
+@router_di.post(
     "/extractions/{job_id}/cancel",
     tags=["extracciones"],
     summary="Cancelar una extracción en curso (no la elimina, queda como 'cancelled')",
+    dependencies=[Depends(require_no_viewer)],
 )
 async def cancelar_extraccion(job_id: UUID) -> dict[str, object]:
     """Marca el job como cancelado. El worker lo detecta entre lotes y aborta.
@@ -463,11 +501,12 @@ async def cancelar_extraccion(job_id: UUID) -> dict[str, object]:
     }
 
 
-@router.patch(
+@router_di.patch(
     "/extractions/{job_id}/nombre",
     response_model=ExtraccionResp,
     tags=["extracciones"],
     summary="Renombrar una extracción",
+    dependencies=[Depends(require_no_viewer)],
 )
 async def renombrar_extraccion(job_id: UUID, req: RenombrarJobReq) -> ExtraccionResp:
     job = store.get(job_id)
@@ -478,10 +517,11 @@ async def renombrar_extraccion(job_id: UUID, req: RenombrarJobReq) -> Extraccion
     return ExtraccionResp(**job.model_dump())
 
 
-@router.delete(
+@router_di.delete(
     "/extractions/{job_id}",
     tags=["extracciones"],
     summary="Eliminar una extracción (SQLite + archivos en disco)",
+    dependencies=[Depends(require_no_viewer)],
 )
 async def eliminar_extraccion(job_id: UUID) -> dict[str, object]:
     job = store.get(job_id)
@@ -492,10 +532,11 @@ async def eliminar_extraccion(job_id: UUID) -> dict[str, object]:
     return {"id": str(job_id), "borrado": True, **artefactos}
 
 
-@router.delete(
+@router_di.delete(
     "/extractions",
     tags=["extracciones"],
     summary="Limpieza masiva — borrar extracciones por antigüedad o estado",
+    dependencies=[Depends(require_no_viewer)],
 )
 async def limpiar_extracciones(
     older_than_days: int | None = Query(None, ge=0, description="Borrar las creadas hace ≥ N días"),
@@ -533,7 +574,7 @@ async def limpiar_extracciones(
     return resumen
 
 
-@router.get(
+@router_di.get(
     "/extractions/{job_id}/download",
     tags=["extracciones"],
     summary="Descargar mega-zip con TODOS los lotes (puede ser muy grande)",
@@ -572,7 +613,7 @@ async def descargar_extraccion(job_id: UUID) -> FileResponse:
     )
 
 
-@router.get(
+@router_di.get(
     "/extractions/{job_id}/files",
     tags=["extracciones"],
     summary="Árbol de archivos de una extracción completada",
@@ -621,7 +662,7 @@ async def listar_archivos(job_id: UUID) -> dict:
     return {"job_id": str(job_id), "folders": folders, "total": sum(len(f["files"]) for f in folders)}
 
 
-@router.get(
+@router_di.get(
     "/extractions/{job_id}/files/{afiliado}/{filename}",
     tags=["extracciones"],
     summary="Descargar PDF individual de una extracción",
