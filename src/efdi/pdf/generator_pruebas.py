@@ -19,6 +19,7 @@ from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import cm, mm
 from reportlab.platypus import (
     Image,
+    PageBreak,
     Paragraph,
     SimpleDocTemplate,
     Spacer,
@@ -26,7 +27,7 @@ from reportlab.platypus import (
     TableStyle,
 )
 
-from efdi.domain.models import RespuestaPruebaRapida
+from efdi.domain.models import AfiliadoConPruebasRapidas, RespuestaPruebaRapida
 
 # ─── Paleta ──────────────────────────────────────────────────────────────────
 COLOR_SECTION      = colors.HexColor("#234674")
@@ -318,5 +319,50 @@ def generar_pdf_pruebas(
             STYLE_FOOTER,
         ),
     ]
+    doc.build(story)
+    return output
+
+
+def generar_pdf_pruebas_consolidado(
+    af: AfiliadoConPruebasRapidas,
+    output: Path,
+    regimen_override: str | None = None,
+) -> Path:
+    """Genera 1 PDF por afiliado con todas sus pruebas rápidas.
+
+    Cada página repite el diseño de un PDF individual (banner, datos generales,
+    prueba y encuestador) — una prueba por hoja.
+    """
+    output.parent.mkdir(parents=True, exist_ok=True)
+    doc = SimpleDocTemplate(
+        str(output),
+        pagesize=letter,
+        leftMargin=12*mm, rightMargin=12*mm,
+        topMargin=10*mm, bottomMargin=10*mm,
+        title=f"Pruebas rápidas — {af.num_documento}",
+    )
+    width = doc.width
+
+    story: list = []
+    for idx, reg in enumerate(af.respuestas):
+        if idx > 0:
+            story.append(PageBreak())
+        story.extend([
+            _banner(width),
+            Spacer(1, 6),
+            _section_header("DATOS GENERALES DEL AFILIADO", width),
+            _datos_generales(reg, width, regimen_override),
+            Spacer(1, 8),
+            _section_header("PRUEBA REALIZADA", width),
+            _bloque_prueba(reg, width),
+            Spacer(1, 8),
+            _section_header("DATOS DEL ENCUESTADOR", width),
+            _datos_encuestador(reg, width),
+            Spacer(1, 6),
+            Paragraph(
+                "Documento de soporte generado por SIEDFASER · uso administrativo, sin valor diagnóstico",
+                STYLE_FOOTER,
+            ),
+        ])
     doc.build(story)
     return output

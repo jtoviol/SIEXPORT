@@ -20,6 +20,7 @@ _MOD_LABEL = {
     ExtraccionTipo.CARACTERIZACION_FAMILIAR: "Caracterización Familiar",
     ExtraccionTipo.PRUEBAS_RAPIDAS:         "Pruebas Rápidas",
     ExtraccionTipo.EDUCACION_GRUPAL:        "Educación Grupal",
+    ExtraccionTipo.SOPORTE_UNIFICADO:       "Soporte Unificado",
 }
 # Tab id de la web por tipo de módulo (para el deep-link "ver" desde el dashboard)
 _MOD_TAB = {
@@ -31,6 +32,7 @@ _MOD_TAB = {
     ExtraccionTipo.CARACTERIZACION_FAMILIAR: "caracterizacion-familiar",
     ExtraccionTipo.PRUEBAS_RAPIDAS:         "pruebas-rapidas",
     ExtraccionTipo.EDUCACION_GRUPAL:        "educacion-grupal",
+    ExtraccionTipo.SOPORTE_UNIFICADO:       "soporte-unificado",
 }
 
 

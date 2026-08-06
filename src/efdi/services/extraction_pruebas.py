@@ -1,13 +1,12 @@
 """Orquestador Pruebas Rápidas: divide en lotes → query → agrupar por afiliado →
-PDFs (1 por prueba, todos en la carpeta del afiliado) → zip.
+1 PDF consolidado por afiliado (una prueba por hoja) → zip.
 
 Estructura del ZIP (a diferencia de los otros módulos):
     lote_001/
-      CC_1067839405_PEREZ_GOMEZ_JUAN_CARLOS/      ← una carpeta por afiliado
-        CC_1067839405_PRUEBA_DE_VIH1_2026-05-15.pdf
-        CC_1067839405_PRUEBA_DE_SIFILIS_2026-05-15.pdf
-      CC_1144567321_GOMEZ_RUIZ_MARIA/
-        CC_1144567321_PRUEBA_DE_EMBARAZO_2026-05-18.pdf
+      CC_1067839405/                              ← una carpeta por afiliado
+        CC_1067839405.pdf                         ← 1 PDF con todas sus pruebas
+      CC_1144567321/
+        CC_1144567321.pdf
 """
 import logging
 import math
@@ -26,16 +25,14 @@ from efdi.domain.models import (
     EstadoExtraccion,
     Extraccion,
     Lote,
-    RespuestaPruebaRapida,
 )
 from efdi.domain.services import agrupar_por_afiliado_pruebas
 from efdi.infrastructure.job_store import store
 from efdi.infrastructure.repository_pruebas import get_pruebas_repository
-from efdi.pdf.generator_pruebas import generar_pdf_pruebas
+from efdi.pdf.generator_pruebas import generar_pdf_pruebas_consolidado
 from efdi.pdf.parallel_pruebas import _worker as pdf_worker_pruebas
 
 log = logging.getLogger(__name__)
-
 
 _INVALID_FS_CHARS = re.compile(r'[\\/:*?"<>|\r\n\t]+')
 _MULTI_UNDERSCORE = re.compile(r"_+")
@@ -60,59 +57,39 @@ def _safe_part(s: str | None) -> str:
 
 
 def _nombre_carpeta(af: AfiliadoConPruebasRapidas) -> str:
-    """`{doc_key}_{APELLIDOS_NOMBRES}` truncado y safe-filename."""
-    partes = [af.primer_apellido, af.segundo_apellido, af.primer_nombre, af.segundo_nombre]
-    nombres = "_".join(_safe_part(p) for p in partes if p)
-    if not nombres:
-        nombres = _safe_part(af.nombre_completo)
-    base = af.doc_key
-    if nombres:
-        base = f"{base}_{nombres}"
-    return _MULTI_UNDERSCORE.sub("_", base).strip("._-")[:100]
+    """`{doc_key}` — tipo y número de documento del afiliado (CC_72096131).
 
-
-def _nombre_archivo(reg: RespuestaPruebaRapida) -> str:
-    """`{doc_key}_{NOMBRE_PRUEBA}_{fecha}` (sin extensión)."""
-    prueba = _safe_part(reg.des_prueba_rapida) or "PRUEBA"
-    base = f"{reg.doc_key}_{prueba}_{reg.fecha_realizacion.isoformat()}"
-    return _MULTI_UNDERSCORE.sub("_", base).strip("._-")[:120]
+    Consistente con el resto de los módulos: la carpeta identifica a la persona
+    y dentro va el PDF consolidado de sus pruebas (`{doc_key}.pdf`).
+    """
+    return af.doc_key
 
 
 def _construir_tareas(
     afiliados: list[AfiliadoConPruebasRapidas], lote_dir: Path,
-) -> list[tuple[RespuestaPruebaRapida, Path]]:
-    """1 tarea por respuesta. Si dos pruebas del MISMO afiliado generan el mismo
-    nombre de archivo (misma prueba misma fecha — VIH1 y VIH2 comparten nombre
-    cuando el catálogo tiene aliases) → desambigua con `_seq{seq_respuesta}`.
-    """
-    tareas: list[tuple[RespuestaPruebaRapida, Path]] = []
-    for af in afiliados:
-        carpeta = lote_dir / _nombre_carpeta(af)
-        vistos: set[str] = set()
-        for resp in af.respuestas:
-            nombre = _nombre_archivo(resp)
-            if nombre in vistos:
-                nombre = f"{nombre}_seq{resp.seq_respuesta}"
-            vistos.add(nombre)
-            tareas.append((resp, carpeta / f"{nombre}.pdf"))
-    return tareas
+) -> list[tuple[AfiliadoConPruebasRapidas, Path]]:
+    """1 tarea por afiliado → un único PDF `{doc_key}.pdf` en su carpeta."""
+    return [
+        (af, lote_dir / _nombre_carpeta(af) / f"{af.doc_key}.pdf")
+        for af in afiliados
+    ]
 
 
 def _generar_pdfs_pruebas(
-    tareas: list[tuple[RespuestaPruebaRapida, Path]],
+    tareas: list[tuple[AfiliadoConPruebasRapidas, Path]],
     pool: "mp.pool.Pool | None" = None,
     regimen_override: str | None = None,
 ) -> int:
     n = len(tareas)
     if settings.pdf_workers == 0 or n < settings.pdf_parallel_threshold or pool is None:
-        for reg, path in tareas:
+        for af, path in tareas:
             path.parent.mkdir(parents=True, exist_ok=True)
-            generar_pdf_pruebas(reg, path, regimen_override=regimen_override)
+            generar_pdf_pruebas_consolidado(af, path, regimen_override=regimen_override)
         return n
     dirs = {p.parent for _, p in tareas}
     for d in dirs:
         d.mkdir(parents=True, exist_ok=True)
-    payload = [(reg, str(p), regimen_override) for reg, p in tareas]
+    payload = [(af, str(p), regimen_override) for af, p in tareas]
     chunksize = max(20, n // (pool._processes * 8))  # type: ignore[attr-defined]
     results = list(pool.imap_unordered(pdf_worker_pruebas, payload, chunksize=chunksize))
     return len(results)

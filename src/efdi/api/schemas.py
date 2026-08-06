@@ -157,6 +157,45 @@ class CrearVacunacionReq(BaseModel):
         return self
 
 
+# ─── Soporte Unificado ───────────────────────────────────────────────────────
+
+
+class CrearSoporteUnificadoReq(BaseModel):
+    """Crea un job de Soporte Unificado (reorganiza los 8 módulos por afiliado)."""
+
+    desde: date = Field(description="Fecha inicial del rango")
+    hasta: date = Field(description="Fecha final del rango")
+    numero_factura: str = Field(
+        description="Sufijo numérico de la factura del régimen (ej '11502'). Backend arma CABn+FABn.",
+    )
+    regimen: str = Field(description="SUBSIDIADO o CONTRIBUTIVO — corrida separada por régimen")
+    upload_id: UUID | None = Field(
+        default=None,
+        description="UUID de un .xlsx de vacunación ya subido (opcional). Si viene, incluye Vacunación.",
+    )
+    tamano_lote: int | None = Field(
+        default=None, ge=1, le=50_000,
+        description="Afiliados por lote. None=default (1000).",
+    )
+    nombre: str | None = Field(default=None, max_length=100)
+
+    @model_validator(mode="after")
+    def _validar(self) -> "CrearSoporteUnificadoReq":
+        if self.hasta < self.desde:
+            raise ValueError("hasta debe ser ≥ desde")
+        r = (self.regimen or "").strip().upper()
+        if r not in ("SUBSIDIADO", "CONTRIBUTIVO"):
+            raise ValueError("regimen debe ser SUBSIDIADO o CONTRIBUTIVO")
+        self.regimen = r
+        n = (self.numero_factura or "").strip().upper()
+        if n.startswith("CAB") or n.startswith("FAB"):
+            n = n[3:]
+        if not n:
+            raise ValueError("numero_factura no puede ser vacío")
+        self.numero_factura = n
+        return self
+
+
 class HealthResp(BaseModel):
     status: str = "ok"
     version: str

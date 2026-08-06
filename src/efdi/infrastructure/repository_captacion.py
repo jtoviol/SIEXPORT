@@ -12,10 +12,13 @@ log = logging.getLogger(__name__)
 class CaptacionRepository(Protocol):
     def obtener_registros(
         self, desde: date, hasta: date, limite: int, offset: int = 0,
-        facturas: list[str] | None = None,
+        facturas: list[str] | None = None, regimen: str | None = None,
     ) -> list[RegistroCaptacion]: ...
 
-    def get_total(self, desde: date, hasta: date, facturas: list[str] | None = None) -> int: ...
+    def get_total(
+        self, desde: date, hasta: date, facturas: list[str] | None = None,
+        regimen: str | None = None,
+    ) -> int: ...
 
 
 # === Query principal paginada =================================================
@@ -99,6 +102,7 @@ WITH X AS (
       AND a.fec_captacion_afiliado >= ?
       AND a.fec_captacion_afiliado <= ?
       {factura_filter}
+      {regimen_filter}
 )
 SELECT X.NUM_REGISTRO,
        X.seq_captacion_afiliado,
@@ -141,6 +145,7 @@ INNER JOIN AVS_AFILIADO_MUTUALSER AS e
 WHERE a.fec_captacion_afiliado >= ?
   AND a.fec_captacion_afiliado <= ?
   {factura_filter}
+  {regimen_filter}
 """
 
 
@@ -161,6 +166,32 @@ def _factura_filter_captacion(facturas: list[str] | None) -> str:
         return ""
     placeholders = ",".join("?" * len(facturas))
     return _FACTURA_EXISTS_CAPTACION.format(placeholders=placeholders)
+
+
+# ─── Filtro por régimen (Soporte Unificado — Captación NO se factura) ─────────
+# Captación no genera filas en AVS_REGISTROS_AP (el SP prGeneraRips no la
+# procesa), así que en el módulo unificado se filtra por fecha + régimen. El
+# régimen sale de AVS_AFILIADO_MUTUALSER (alias 'e' ya joineado), columna
+# AFIC_REGIMEN: 'S'=SUBSIDIADO, 'C'=CONTRIBUTIVO. Aditivo: regimen=None → sin
+# filtro (comportamiento intacto del módulo Captación usado en solitario).
+def _regimen_cod(regimen: str | None) -> str | None:
+    if not regimen:
+        return None
+    r = regimen.upper().strip()
+    if r.startswith("SUB"):
+        return "S"
+    if r.startswith("CON"):
+        return "C"
+    return None
+
+
+def _regimen_filter_captacion(regimen: str | None) -> str:
+    return "AND e.AFIC_REGIMEN = ?" if _regimen_cod(regimen) else ""
+
+
+def _mock_regimen_captacion(seq: int) -> str:
+    """Régimen simulado determinístico por seq (≈12.5% contributivo)."""
+    return "C" if seq % 8 == 0 else "S"
 
 
 # ─── helpers ──────────────────────────────────────────────────────────────────
@@ -213,7 +244,7 @@ def _normalizar_tipo_doc(cod: str | None) -> TipoDocumento:
 class MockCaptacionRepository:
     def obtener_registros(
         self, desde: date, hasta: date, limite: int, offset: int = 0,
-        facturas: list[str] | None = None,
+        facturas: list[str] | None = None, regimen: str | None = None,
     ) -> list[RegistroCaptacion]:
         import random
         from datetime import timedelta
@@ -273,12 +304,22 @@ class MockCaptacionRepository:
                 prestador_servicios=rng.choice(ips_list),
                 **flags_dict,
             ))
-        if facturas:
+        cod = _regimen_cod(regimen)
+        if cod:
+            # Filtro por régimen (Soporte Unificado): usa el régimen simulado.
+            registros = [r for r in registros if _mock_regimen_captacion(r.seq_captacion_afiliado) == cod]
+        elif facturas:
             # Mock del cruce: simula ~50% de afiliados en el set de códigos.
             registros = [r for r in registros if r.seq_captacion_afiliado % 2 == 0]
         return registros
 
-    def get_total(self, desde: date, hasta: date, facturas: list[str] | None = None) -> int:
+    def get_total(
+        self, desde: date, hasta: date, facturas: list[str] | None = None,
+        regimen: str | None = None,
+    ) -> int:
+        cod = _regimen_cod(regimen)
+        if cod:
+            return 437 if cod == "S" else 63
         return 250 if facturas else 500
 
 
@@ -287,7 +328,7 @@ class MockCaptacionRepository:
 class SqlServerCaptacionRepository:
     def obtener_registros(
         self, desde: date, hasta: date, limite: int, offset: int = 0,
-        facturas: list[str] | None = None,
+        facturas: list[str] | None = None, regimen: str | None = None,
     ) -> list[RegistroCaptacion]:
         try:
             import pyodbc
@@ -295,14 +336,21 @@ class SqlServerCaptacionRepository:
             raise RuntimeError("pyodbc no instalado") from e
 
         fecha_inicio, fecha_final = _fechas_dt(desde, hasta)
-        sql = QUERY_CAPTACION.format(factura_filter=_factura_filter_captacion(facturas))
+        sql = QUERY_CAPTACION.format(
+            factura_filter=_factura_filter_captacion(facturas),
+            regimen_filter=_regimen_filter_captacion(regimen),
+        )
         params: list = [fecha_inicio, fecha_final]
         if facturas:
             params.extend(facturas)
+        cod_regimen = _regimen_cod(regimen)
+        if cod_regimen:
+            params.append(cod_regimen)
         params.extend([offset, limite])
         log.info("captacion.query", extra={"desde": str(desde), "hasta": str(hasta),
                                             "limite": limite, "offset": offset,
-                                            "facturas": len(facturas or [])})
+                                            "facturas": len(facturas or []),
+                                            "regimen": regimen or ""})
 
         with pyodbc.connect(settings.db_dsn, timeout=60) as conn:
             cur = conn.cursor()
@@ -367,16 +415,25 @@ class SqlServerCaptacionRepository:
         log.info("captacion.fetched", extra={"rows": len(registros)})
         return registros
 
-    def get_total(self, desde: date, hasta: date, facturas: list[str] | None = None) -> int:
+    def get_total(
+        self, desde: date, hasta: date, facturas: list[str] | None = None,
+        regimen: str | None = None,
+    ) -> int:
         try:
             import pyodbc
         except ImportError:
             return 0
         fecha_inicio, fecha_final = _fechas_dt(desde, hasta)
-        sql = QUERY_CAPTACION_COUNT.format(factura_filter=_factura_filter_captacion(facturas))
+        sql = QUERY_CAPTACION_COUNT.format(
+            factura_filter=_factura_filter_captacion(facturas),
+            regimen_filter=_regimen_filter_captacion(regimen),
+        )
         params: list = [fecha_inicio, fecha_final]
         if facturas:
             params.extend(facturas)
+        cod_regimen = _regimen_cod(regimen)
+        if cod_regimen:
+            params.append(cod_regimen)
         try:
             with pyodbc.connect(settings.db_dsn, timeout=30) as conn:
                 cur = conn.cursor()

@@ -3,8 +3,8 @@ import multiprocessing as mp
 import os
 from pathlib import Path
 
-from efdi.domain.models import RespuestaPruebaRapida
-from efdi.pdf.generator_pruebas import generar_pdf_pruebas
+from efdi.domain.models import AfiliadoConPruebasRapidas
+from efdi.pdf.generator_pruebas import generar_pdf_pruebas_consolidado
 
 
 def _worker(args: tuple) -> str:
@@ -15,12 +15,12 @@ def _worker(args: tuple) -> str:
         regimen_override = None
     out = Path(path_str)
     out.parent.mkdir(parents=True, exist_ok=True)
-    generar_pdf_pruebas(obj, out, regimen_override=regimen_override)
+    generar_pdf_pruebas_consolidado(obj, out, regimen_override=regimen_override)
     return path_str
 
 
 def generar_pdfs_pruebas_paralelo(
-    tareas: list[tuple[RespuestaPruebaRapida, Path]],
+    tareas: list[tuple[AfiliadoConPruebasRapidas, Path]],
     n_workers: int | None = None,
     regimen_override: str | None = None,
 ) -> int:
