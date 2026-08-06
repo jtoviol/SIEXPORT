@@ -17,3 +17,5 @@ data/
 *.log
 .DS_Store
 cap
+web/
+web.config
