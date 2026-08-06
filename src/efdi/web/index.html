@@ -922,6 +922,37 @@
               </p>
             </div>
           </div>
+          <!-- Excel de vacunación OPCIONAL (solo Soporte Unificado) -->
+          <div id="su-excel-section" class="hidden border-t border-slate-200 pt-2.5">
+            <label class="text-xs font-medium text-slate-500 block mb-1.5">
+              Excel de vacunación
+              <span class="text-[10px] text-slate-400 font-normal">(opcional · incluye Vacunación en el soporte)</span>
+            </label>
+            <div id="su-dropzone"
+                 class="relative border-2 border-dashed border-slate-300 rounded-md p-3 text-center
+                        cursor-pointer hover:border-brand-500 hover:bg-brand-50/50 transition-colors">
+              <input id="su-file-input" type="file" accept=".xlsx"
+                     class="absolute inset-0 w-full h-full opacity-0 cursor-pointer"/>
+              <div id="su-dz-idle">
+                <p class="text-xs text-slate-600 font-medium">Arrastrá el .xlsx o clic para elegir</p>
+                <p class="text-[10px] text-slate-400 mt-0.5">Sin Excel, la corrida sale sin Vacunación</p>
+              </div>
+              <div id="su-dz-uploading" class="hidden">
+                <p class="text-xs text-slate-600 font-medium">Subiendo y analizando…</p>
+              </div>
+              <div id="su-dz-ready" class="hidden text-left">
+                <div class="flex items-center gap-2">
+                  <svg class="h-4 w-4 text-emerald-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                  </svg>
+                  <span id="su-file-name" class="text-xs font-semibold text-slate-700 truncate"></span>
+                  <span id="su-stat-filas" class="text-[10px] text-slate-400 tabular-nums"></span>
+                  <button type="button" onclick="suResetUpload()"
+                          class="ml-auto text-[10px] text-slate-400 hover:text-red-500 px-1 rounded">Quitar</button>
+                </div>
+              </div>
+            </div>
+          </div>
           <!-- 2. Rango de fechas (siempre requeridas; con factura se autocompletan al mes anterior) -->
           <div class="grid grid-cols-2 gap-2 border-t border-slate-200 pt-2.5">
             <div>
@@ -1451,6 +1482,14 @@
       </svg>
       <span>Educac.</span>
     </button>
+    <button data-mob-tab="soporte-unificado" onclick="switchTab('soporte-unificado')"
+            class="mob-tab flex-1 min-w-[68px] flex flex-col items-center gap-0.5 py-2.5 transition-colors">
+      <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+        <path stroke-linecap="round" stroke-linejoin="round"
+              d="M9 12h6m-6 4h6M9 8h6m-3 12H7a2 2 0 01-2-2V6a2 2 0 012-2h7l5 5v9a2 2 0 01-2 2h-2"/>
+      </svg>
+      <span>Unificado</span>
+    </button>
   </div>
 </nav>
 
@@ -1777,10 +1816,18 @@ const MODULES = {
     categoria: "Seguimiento", badge: "EG",
     usaFactura: false, usaRegimen: true, usaExcel: false, unidad: "afiliados",
   },
+  "soporte-unificado": {
+    tipoBackend: "soporte_unificado", label: "Soporte Unificado",
+    api: "/soporte-unificado/extractions", color: "brand", icon: "doc",
+    categoria: "Consolidado", badge: "SU",
+    // Combina factura (facturables) + régimen (raros). El Excel de vacunación
+    // es opcional y por ahora se adjunta vía API (no desde este form).
+    usaFactura: true, usaRegimen: true, usaExcel: false, unidad: "afiliados",
+  },
 };
 
 // Orden de categorías en el sidebar (los que no estén acá quedan al final).
-const CATEGORIAS_ORDEN = ["Prevención", "Tamizajes", "Seguimiento", "Caracterización"];
+const CATEGORIAS_ORDEN = ["Prevención", "Tamizajes", "Seguimiento", "Caracterización", "Consolidado"];
 
 // Lookups: por tabId, por api base (lo que persiste en _selApiBase), por tipo backend.
 function modByTab(tabId)         { return MODULES[tabId] || null; }
@@ -2290,6 +2337,11 @@ function switchTab(tabId) {
     if (rSub)  rSub.checked  = false;
     if (rCont) rCont.checked = false;
   }
+
+  // Soporte Unificado: dropzone opcional del Excel de vacunación
+  const esSU = tabId === "soporte-unificado";
+  $("su-excel-section")?.classList.toggle("hidden", !esSU);
+  if (!esSU && typeof suResetUpload === "function") suResetUpload();
 
   // ── Form SQL ↔ form de upload Excel (módulos con usaExcel=true, ej: Vacunación) ──
   const usaExcel = modByTab(tabId)?.usaExcel || false;
@@ -3363,6 +3415,16 @@ function fetchAutoPreview() {
   const params = new URLSearchParams({desde, hasta});
   if (facN)         params.set("numero_factura", facN);
   if (regimenParam) params.set("regimen", regimenParam);
+  // Soporte Unificado: el régimen sale de cuál input de factura está lleno, y
+  // adjuntamos el upload_id del Excel si hay uno, para que el preview de raros +
+  // vacunación refleje lo que se va a generar.
+  if (activeTab === "soporte-unificado") {
+    if (!regimenParam) {
+      if (subN && !contN)      params.set("regimen", "SUBSIDIADO");
+      else if (contN && !subN) params.set("regimen", "CONTRIBUTIVO");
+    }
+    if (typeof suUpload !== "undefined" && suUpload) params.set("upload_id", suUpload.upload_id);
+  }
   const url = `${getModuleApi()}/count?${params.toString()}`;
   setAutoPreview("loading");
   setBtnGenDisabled(true);
@@ -3404,6 +3466,20 @@ function setAutoPreview(data) {
   if (data.total_en_db === 0) {
     box.className = "rounded-md px-2 py-1.5 text-[10px] leading-snug border bg-amber-50 border-amber-200 text-amber-700";
     txt.textContent = "No hay registros para este rango de fechas.";
+    return;
+  }
+  // Soporte Unificado: desglose por módulo (el backend devuelve `por_modulo`).
+  if (Array.isArray(data.por_modulo)) {
+    box.className = "rounded-md px-2 py-1.5 text-[10px] leading-snug border bg-brand-50 border-brand-200 text-brand-700";
+    const filas = data.por_modulo.map(m =>
+      `<div class="flex justify-between gap-2"><span class="truncate">${m.label}</span>` +
+      `<span class="font-semibold tabular-nums">${(m.soportes || 0).toLocaleString()}</span></div>`
+    ).join("");
+    txt.innerHTML =
+      `<div class="font-semibold mb-1">${(data.total_soportes || 0).toLocaleString()} soportes` +
+      ` · ${data.lotes_estimados} lote${data.lotes_estimados !== 1 ? "s" : ""}</div>` +
+      `${filas}` +
+      `<div class="text-[9px] text-brand-500 mt-1">Personas distintas ≤ total (se deduplica al correr)</div>`;
     return;
   }
   const cap = "";
@@ -3699,6 +3775,54 @@ async function vacGenerar() {
   });
 })();
 
+// ── Soporte Unificado: upload OPCIONAL del Excel de vacunación ──
+let suUpload = null;  // {upload_id, filename, total_filas}
+async function suSubirArchivo(file) {
+  if (!file || !file.name.toLowerCase().endsWith(".xlsx")) {
+    toast("Archivo inválido", "Solo se acepta .xlsx", "error"); return;
+  }
+  $("su-dz-idle")?.classList.add("hidden");
+  $("su-dz-ready")?.classList.add("hidden");
+  $("su-dz-uploading")?.classList.remove("hidden");
+  try {
+    const fd = new FormData(); fd.append("file", file);
+    const r = await fetch("/soporte-unificado/uploads", {method: "POST", body: fd, credentials: "same-origin"});
+    if (!r.ok) { const e = await r.json().catch(() => ({detail: "Error"})); throw new Error(e.detail || "Error al subir"); }
+    const d = await r.json();
+    suUpload = {upload_id: d.upload_id, filename: d.filename, total_filas: d.total_filas};
+    $("su-file-name").textContent = d.filename;
+    $("su-stat-filas").textContent = `${(d.total_filas || 0).toLocaleString()} filas`;
+    $("su-dz-uploading")?.classList.add("hidden");
+    $("su-dz-ready")?.classList.remove("hidden");
+    fetchAutoPreview();
+  } catch (e) {
+    suUpload = null;
+    $("su-dz-uploading")?.classList.add("hidden");
+    $("su-dz-idle")?.classList.remove("hidden");
+    toast("No se pudo subir el Excel", e.message, "error");
+  }
+}
+function suResetUpload() {
+  suUpload = null;
+  const fi = $("su-file-input"); if (fi) fi.value = "";
+  $("su-dz-ready")?.classList.add("hidden");
+  $("su-dz-uploading")?.classList.add("hidden");
+  $("su-dz-idle")?.classList.remove("hidden");
+  if (typeof fetchAutoPreview === "function") fetchAutoPreview();
+}
+(function initSuDropzone() {
+  const dz = $("su-dropzone"); if (!dz) return;
+  const fi = $("su-file-input");
+  if (fi) fi.addEventListener("change", e => { const f = e.target.files?.[0]; if (f) suSubirArchivo(f); });
+  ["dragover", "dragenter"].forEach(ev => dz.addEventListener(ev, e => {
+    e.preventDefault(); dz.classList.add("border-brand-500", "bg-brand-50");
+  }));
+  ["dragleave", "drop"].forEach(ev => dz.addEventListener(ev, e => {
+    e.preventDefault(); dz.classList.remove("border-brand-500", "bg-brand-50");
+  }));
+  dz.addEventListener("drop", e => { const f = e.dataTransfer?.files?.[0]; if (f) suSubirArchivo(f); });
+})();
+
 $("fext").addEventListener("submit", async ev => {
   ev.preventDefault();
   $("ferr").classList.add("hidden");
@@ -3766,6 +3890,7 @@ $("fext").addEventListener("submit", async ev => {
         if (fac.numero) body.numero_factura = fac.numero;
         body.regimen = fac.regimen;
       }
+      if (activeTab === "soporte-unificado" && suUpload) body.upload_id = suUpload.upload_id;
       try {
         const r = await apiPost(getModuleApi(), body);
         if (!primerId) primerId = r.id;

@@ -73,8 +73,8 @@ def test_filtro_facturas_reduce_universo():
 
 
 def test_nombre_carpeta_y_archivo_safe(tmp_path):
-    """Las funciones de naming sanitizan tildes, espacios y caracteres inválidos."""
-    from efdi.services.extraction_pruebas import _nombre_archivo, _nombre_carpeta
+    """La carpeta usa el doc_key y dentro va un único PDF `{doc_key}.pdf`."""
+    from efdi.services.extraction_pruebas import _construir_tareas, _nombre_carpeta
     from efdi.domain.models import AfiliadoConPruebasRapidas, RespuestaPruebaRapida, TipoDocumento
 
     resp = RespuestaPruebaRapida(
@@ -95,16 +95,15 @@ def test_nombre_carpeta_y_archivo_safe(tmp_path):
         respuestas=[resp],
     )
     carpeta = _nombre_carpeta(af)
-    archivo = _nombre_archivo(resp)
-    assert carpeta.startswith("CC_1067839405_PEREZ_GOMEZ")
+    assert carpeta == "CC_1067839405"
     assert "Á" not in carpeta and "É" not in carpeta
-    assert archivo == "CC_1067839405_PRUEBA_DE_VIH1_2026-05-15"
+    tareas = _construir_tareas([af], tmp_path)
+    assert len(tareas) == 1
+    assert tareas[0][1] == tmp_path / "CC_1067839405" / "CC_1067839405.pdf"
 
 
-def test_dedup_archivo_dentro_de_misma_carpeta(tmp_path):
-    """Si dos pruebas distintas del mismo afiliado terminan con el mismo nombre
-    (VIH1 y VIH2 mismo nombre legible truncado), el _construir_tareas las
-    desambigua con `_seq{seq_respuesta}` antes de chocar en disco."""
+def test_un_pdf_por_afiliado_con_sus_pruebas(tmp_path):
+    """Aunque el afiliado tenga N pruebas, se genera 1 sola tarea (PDF único)."""
     from efdi.services.extraction_pruebas import _construir_tareas
     from efdi.domain.models import AfiliadoConPruebasRapidas, RespuestaPruebaRapida, TipoDocumento
 
@@ -115,7 +114,8 @@ def test_dedup_archivo_dentro_de_misma_carpeta(tmp_path):
         nombre_completo="JUAN PEREZ", primer_nombre="JUAN", primer_apellido="PEREZ",
         num_documento="100", des_prueba_rapida="PRUEBA DE VIH",
     )
-    b = a.model_copy(update={"seq_respuesta": 101, "seq_prueba_rapida": 5})
+    b = a.model_copy(update={"seq_respuesta": 101, "seq_prueba_rapida": 5,
+                             "des_prueba_rapida": "PRUEBA DE SIFILIS"})
     af = AfiliadoConPruebasRapidas(
         doc_key=a.doc_key, tipo_documento=a.tipo_documento,
         num_documento=a.num_documento, nombre_completo=a.nombre_completo,
@@ -123,5 +123,33 @@ def test_dedup_archivo_dentro_de_misma_carpeta(tmp_path):
         respuestas=[a, b],
     )
     tareas = _construir_tareas([af], tmp_path)
-    paths = {t[1] for t in tareas}
-    assert len(paths) == 2   # no chocan
+    assert len(tareas) == 1
+    assert tareas[0][0] is af
+    assert tareas[0][1] == tmp_path / "CC_100" / "CC_100.pdf"
+
+
+def test_pdf_consolidado_con_varias_pruebas(tmp_path):
+    """El PDF consolidado de un afiliado con N pruebas se genera y contiene N hojas."""
+    from efdi.pdf.generator_pruebas import generar_pdf_pruebas_consolidado
+    from efdi.domain.models import AfiliadoConPruebasRapidas, RespuestaPruebaRapida, TipoDocumento
+
+    fecha = date(2026, 5, 15)
+    a = RespuestaPruebaRapida(
+        seq_seragil=1, seq_respuesta=100, seq_prueba_rapida=2,
+        tipo_documento=TipoDocumento.CC, fecha_realizacion=fecha,
+        nombre_completo="JUAN PEREZ", primer_nombre="JUAN", primer_apellido="PEREZ",
+        num_documento="100", des_prueba_rapida="PRUEBA DE VIH",
+        encuestador="ANA GARCIA", cargo_encuestador="ENFERMERA",
+    )
+    b = a.model_copy(update={"seq_respuesta": 101, "seq_prueba_rapida": 5,
+                             "des_prueba_rapida": "PRUEBA DE SIFILIS"})
+    af = AfiliadoConPruebasRapidas(
+        doc_key=a.doc_key, tipo_documento=a.tipo_documento,
+        num_documento=a.num_documento, nombre_completo=a.nombre_completo,
+        primer_nombre=a.primer_nombre, primer_apellido=a.primer_apellido,
+        respuestas=[a, b],
+    )
+    out = tmp_path / "CC_100.pdf"
+    generar_pdf_pruebas_consolidado(af, out, regimen_override="SUBSIDIADO")
+    assert out.exists()
+    assert out.stat().st_size > 1000

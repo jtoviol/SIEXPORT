@@ -32,6 +32,7 @@ MODULOS_VALIDOS: list[str] = [
     "caracterizacion-familiar",
     "pruebas-rapidas",
     "educacion-grupal",
+    "soporte-unificado",
 ]
 
 
@@ -225,6 +226,7 @@ class ExtraccionTipo(str, Enum):
     CARACTERIZACION_FAMILIAR = "caracterizacion_familiar"
     PRUEBAS_RAPIDAS = "pruebas_rapidas"
     EDUCACION_GRUPAL = "educacion_grupal"
+    SOPORTE_UNIFICADO = "soporte_unificado"
 
 
 # ─── Factores Clínicos del módulo Seguimiento Planificación Familiar ────────
@@ -809,8 +811,29 @@ class FamiliaCaracterizada(BaseModel):
         return len(self.registros)
 
     @property
+    def jefe(self) -> RegistroCaracterizacion | None:
+        """El representante de la familia: el JEFE DE FAMILIA.
+
+        Mismo criterio que los demás módulos y que Soporte Unificado: el
+        integrante con parentesco 'JEFE DE FAMILIA'; si no hay uno explícito,
+        cae al primer integrante con documento. None si nadie tiene documento.
+        """
+        for r in self.registros:
+            if (r.parentesco or "").strip().upper() == "JEFE DE FAMILIA":
+                return r
+        return next((r for r in self.registros if r.num_documento), None)
+
+    @property
     def doc_key(self) -> str:
-        """Nombre de carpeta dentro del lote."""
+        """Nombre de carpeta dentro del lote: TIPO_DOC_NUM_DOC del jefe.
+
+        Consistente con el resto de los módulos (CC_1143410989). Si el jefe no
+        tiene documento, cae al nombre con la llave de familia (FAM_<clave>).
+        """
+        jefe = self.jefe
+        if jefe is not None and jefe.num_documento:
+            tipo = (jefe.tipo_documento or "CC").strip()
+            return f"{tipo}_{jefe.num_documento}"
         return f"FAM_{safe_filename(self.familia_key, 'sin_clave')}"
 
     @property
