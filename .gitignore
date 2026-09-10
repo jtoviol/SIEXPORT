@@ -19,3 +19,6 @@ data/
 cap
 web/
 web.config
+
+# Worktrees de Claude Code (anidados, no deben versionarse)
+.claude/worktrees/
