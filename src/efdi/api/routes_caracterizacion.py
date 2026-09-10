@@ -10,6 +10,7 @@ from uuid import UUID, uuid4
 
 from fastapi import Depends, APIRouter, BackgroundTasks, HTTPException, Query, status
 from efdi.api.dependencies import current_user, require_modulo, require_no_viewer
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
 
 from efdi.api.schemas import CrearExtraccionReq, ExtraccionResp, RenombrarJobReq
@@ -53,7 +54,7 @@ async def contar_registros_caracterizacion(
     if reg is not None and reg not in ("SUBSIDIADO", "CONTRIBUTIVO"):
         raise HTTPException(status_code=400, detail="regimen debe ser SUBSIDIADO o CONTRIBUTIVO")
     repo = get_caracterizacion_repository()
-    total = repo.get_total(desde, hasta, regimen=reg)
+    total = await run_in_threadpool(repo.get_total, desde, hasta, regimen=reg)
     if total <= 0:
         return {"total_en_db": 0, "limite_efectivo": 0, "tamano_lote": 0, "lotes_estimados": 0, "capeado": False}
     limite_efectivo = total
@@ -96,7 +97,7 @@ async def crear_extraccion_caracterizacion(
     limite = req.limite
     if limite is None:
         repo = get_caracterizacion_repository()
-        total = repo.get_total(req.desde, req.hasta, regimen=reg)
+        total = await run_in_threadpool(repo.get_total, req.desde, req.hasta, regimen=reg)
         if total <= 0:
             sufijo = f" con régimen {reg}" if reg else ""
             raise HTTPException(

@@ -381,6 +381,7 @@ class SqlServerCaracterizacionRepository:
                                                  "regimen": regimen})
 
         with pyodbc.connect(settings.db_dsn_sibacom, timeout=60) as conn:
+            conn.timeout = 120  # timeout de ejecución de query, distinto del timeout de login de arriba
             cur = conn.cursor()
             # Params orden: fecha_ini, fecha_fin, [cod_regimen?], offset_lo, offset_hi
             params = [fecha_inicio, fecha_final, *reg_params, offset, offset + limite]
@@ -402,6 +403,7 @@ class SqlServerCaracterizacionRepository:
         sql = QUERY_CARACTERIZACION_COUNT.format(regimen_filter=reg_sql)
         try:
             with pyodbc.connect(settings.db_dsn_sibacom, timeout=30) as conn:
+                conn.timeout = 60  # timeout de ejecución de query, distinto del timeout de login de arriba
                 cur = conn.cursor()
                 cur.execute(sql, fecha_inicio, fecha_final, *reg_params)
                 row = cur.fetchone()
