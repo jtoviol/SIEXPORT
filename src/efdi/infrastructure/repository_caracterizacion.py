@@ -50,26 +50,34 @@ class CaracterizacionRepository(Protocol):
 #   - Correo vacío también 'N/A'.
 # `_parentes_cod` se expone solo para ordenar dentro de cada familia (JEFE
 # DE FAMILIA primero, después cónyuge, hijos, etc.); no llega al modelo.
-QUERY_CARACTERIZACION = """
-WITH regimen_familiar AS (
-    -- Régimen "representativo" de cada familia: el del JEFE DE FAMILIA
-    -- (parentes='1'). Si hay varios jefes, gana el de menor uid (orden BD).
-    -- Si NO hay ningún jefe, cae al primer integrante por uid.
-    SELECT ciuf, tipousua AS regimen_jefe
-    FROM (
-        SELECT
-            PC.ciuf, PC.tipousua,
-            ROW_NUMBER() OVER (
-                PARTITION BY PC.ciuf
-                ORDER BY
-                    CASE WHEN PC.parentes = '1' THEN 0 ELSE 1 END,
-                    PC.uid
-            ) AS rn
-        FROM SBW_PERSONA_CARACTERIZADA PC
-    ) X
-    WHERE rn = 1
-),
-X AS (
+# `regimen_familiar` (régimen representativo por familia, vía función de
+# ventana) se materializa en una tabla temporal indexada en vez de usarse
+# como CTE inline: con ~1600 familias, SQL Server no logra optimizar el JOIN
+# contra el CTE cuando el filtro de régimen no favorece un plan de bucle
+# anidado (verificado: CONTRIBUTIVO con CTE = timeout >60s; con tabla
+# temporal indexada = 0.6s — independiente de qué tan selectivo sea el
+# valor). #rf vive en el scope de la conexión; se limpia con DROP al final
+# y de todas formas SQL Server la descarta sola al cerrarse la conexión.
+_SETUP_RF = """
+SELECT ciuf, tipousua AS regimen_jefe
+INTO #rf
+FROM (
+    SELECT
+        PC.ciuf, PC.tipousua,
+        ROW_NUMBER() OVER (
+            PARTITION BY PC.ciuf
+            ORDER BY
+                CASE WHEN PC.parentes = '1' THEN 0 ELSE 1 END,
+                PC.uid
+        ) AS rn
+    FROM SBW_PERSONA_CARACTERIZADA PC
+) X
+WHERE rn = 1;
+CREATE UNIQUE CLUSTERED INDEX IX_rf_ciuf ON #rf(ciuf);
+"""
+
+QUERY_CARACTERIZACION = _SETUP_RF + """
+WITH X AS (
     SELECT
         DENSE_RANK() OVER (
             ORDER BY PC.[codniv1], PC.[codniv2], PC.[codniv3], PC.[codniv4],
@@ -133,7 +141,7 @@ X AS (
     LEFT JOIN AVS_MUNICIPIO_SALUD     M  ON M.COD_MUNICIPIO    = PC.codniv1 + PC.codniv2
     LEFT JOIN AVS_TIPO_FAMILIA        TF ON TF.COD_TIPO_FAMILIA = UF.tipofami
     LEFT JOIN SBW_TIPO_DISCAPACIDAD   TD ON TD.COD_TIPO_DISCAPACIDAD = PC.discap
-    INNER JOIN regimen_familiar       RF ON RF.ciuf              = PC.ciuf
+    INNER JOIN #rf                    RF ON RF.ciuf              = PC.ciuf
     WHERE UF.fecha_reg >= ?
       AND UF.fecha_reg <= ?
       {regimen_filter}
@@ -141,28 +149,14 @@ X AS (
 SELECT *
 FROM X
 WHERE X.FAM_NUM > ? AND X.FAM_NUM <= ?
-ORDER BY X.FAM_NUM, X._parentes_cod, X.num_documento
+ORDER BY X.FAM_NUM, X._parentes_cod, X.num_documento;
+DROP TABLE #rf;
 """
 
 # Mismo universo que el FETCH pero contando FAMILIAS (la unidad de PDF y de
 # paginación). El CONCAT replica exactamente las columnas del DENSE_RANK.
 # No incluye los joins de catálogos: no afectan la cantidad de familias.
-QUERY_CARACTERIZACION_COUNT = """
-WITH regimen_familiar AS (
-    SELECT ciuf, tipousua AS regimen_jefe
-    FROM (
-        SELECT
-            PC.ciuf, PC.tipousua,
-            ROW_NUMBER() OVER (
-                PARTITION BY PC.ciuf
-                ORDER BY
-                    CASE WHEN PC.parentes = '1' THEN 0 ELSE 1 END,
-                    PC.uid
-            ) AS rn
-        FROM SBW_PERSONA_CARACTERIZADA PC
-    ) X
-    WHERE rn = 1
-)
+QUERY_CARACTERIZACION_COUNT = _SETUP_RF + """
 SELECT COUNT(DISTINCT CONCAT(
     PC.[codniv1], '|', PC.[codniv2], '|', PC.[codniv3], '|', PC.[codniv4], '|',
     PC.[codniv5], '|', PC.[codniv6], '|', PC.[codvivi], '|', PC.[codfami], '|',
@@ -170,10 +164,11 @@ SELECT COUNT(DISTINCT CONCAT(
 )) AS total
 FROM SBW_PERSONA_CARACTERIZADA PC
 LEFT JOIN SBW_UBICACION_FAMILIA UF ON UF.UID = PC.uid AND UF.ciuf = PC.ciuf
-INNER JOIN regimen_familiar RF ON RF.ciuf = PC.ciuf
+INNER JOIN #rf RF ON RF.ciuf = PC.ciuf
 WHERE UF.fecha_reg >= ?
   AND UF.fecha_reg <= ?
-  {regimen_filter}
+  {regimen_filter};
+DROP TABLE #rf;
 """
 
 # Mapeo régimen humano → código de PC.tipousua (catálogo SBW_TIPO_REGIMEN_SGSSS)
@@ -372,6 +367,14 @@ class MockCaracterizacionRepository:
 
 # ─── SQL Server real (sibacom) ────────────────────────────────────────────────
 
+def _avanzar_a_resultado(cur) -> None:
+    """Salta los result-sets vacíos que dejan SELECT INTO / CREATE INDEX
+    dentro del batch de #rf, hasta el SELECT que sí devuelve filas."""
+    while cur.description is None:
+        if not cur.nextset():
+            raise RuntimeError("la consulta no devolvió ningún result set")
+
+
 class SqlServerCaracterizacionRepository:
     def obtener_registros(
         self, desde: date, hasta: date, limite: int, offset: int = 0,
@@ -395,6 +398,7 @@ class SqlServerCaracterizacionRepository:
             # Params orden: fecha_ini, fecha_fin, [cod_regimen?], offset_lo, offset_hi
             params = [fecha_inicio, fecha_final, *reg_params, offset, offset + limite]
             cur.execute(sql, *params)
+            _avanzar_a_resultado(cur)
             cols = [c[0] for c in cur.description]
             rows = [dict(zip(cols, r, strict=False)) for r in cur.fetchall()]
 
@@ -415,6 +419,7 @@ class SqlServerCaracterizacionRepository:
                 conn.timeout = 60  # timeout de ejecución de query, distinto del timeout de login de arriba
                 cur = conn.cursor()
                 cur.execute(sql, fecha_inicio, fecha_final, *reg_params)
+                _avanzar_a_resultado(cur)
                 row = cur.fetchone()
                 return int(row[0]) if row else 0
         except Exception:
