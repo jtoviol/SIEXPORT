@@ -181,13 +181,22 @@ _REGIMEN_TO_COD = {"SUBSIDIADO": "S", "CONTRIBUTIVO": "C"}
 
 
 def _regimen_filter(regimen: str | None) -> tuple[str, list]:
-    """Devuelve (sql_fragment, params_extra) para inyectar en la query."""
+    """Devuelve (sql_fragment, params_extra) para inyectar en la query.
+
+    `cod` se inyecta como LITERAL (no como parámetro `?`) porque SQL Server
+    no logra empujar un filtro parametrizado sobre `regimen_jefe` (columna
+    derivada de una función de ventana dentro del CTE regimen_familiar) y
+    genera un plan catastrófico (timeout con ~1600 familias; instantáneo con
+    el mismo valor como literal — verificado contra sibacom real). Es seguro:
+    `cod` sale siempre de _REGIMEN_TO_COD (whitelist fija 'S'/'C'), nunca de
+    texto libre del usuario.
+    """
     if regimen is None:
         return "", []
     cod = _REGIMEN_TO_COD.get(regimen.upper().strip())
     if cod is None:
         return "", []
-    return "AND RF.regimen_jefe = ?", [cod]
+    return f"AND RF.regimen_jefe = '{cod}'", []
 
 
 # ─── helpers ──────────────────────────────────────────────────────────────────
