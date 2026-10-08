@@ -5,6 +5,7 @@ from typing import Protocol
 
 from efdi.config import settings
 from efdi.domain.models import RegistroFindrisc, TipoDocumento
+from efdi.infrastructure.errors import RepositorioNoDisponibleError
 
 log = logging.getLogger(__name__)
 
@@ -390,8 +391,8 @@ class SqlServerFindriscRepository:
     def get_total(self, desde: date, hasta: date, facturas: list[str] | None = None) -> int:
         try:
             import pyodbc
-        except ImportError:
-            return 0
+        except ImportError as e:
+            raise RepositorioNoDisponibleError("Driver pyodbc no instalado") from e
         fecha_inicio, fecha_final = _fechas_dt(desde, hasta)
         sql = QUERY_FINDRISC_COUNT.format(factura_filter=_factura_filter_findrisc(facturas))
         params: list = [fecha_inicio, fecha_final]
@@ -403,9 +404,9 @@ class SqlServerFindriscRepository:
                 cur.execute(sql, *params)
                 row = cur.fetchone()
                 return int(row[0]) if row else 0
-        except Exception:
+        except Exception as e:
             log.exception("findrisc.get_total failed")
-            return 0
+            raise RepositorioNoDisponibleError("No se pudo consultar SQL Server") from e
 
 
 def get_findrisc_repository() -> FindriscRepository:

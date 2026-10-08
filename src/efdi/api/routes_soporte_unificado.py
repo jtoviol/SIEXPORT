@@ -9,6 +9,7 @@ Régimen en corridas separadas. Vacunación entra solo si se sube su Excel.
 """
 from __future__ import annotations
 
+import logging
 import math
 import shutil
 from datetime import date, datetime
@@ -25,6 +26,7 @@ from fastapi import (
     UploadFile,
     status,
 )
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
 
 from efdi.api.dependencies import current_user, require_modulo, require_no_viewer
@@ -58,6 +60,8 @@ router = APIRouter(
     tags=["soporte-unificado"],
     dependencies=[Depends(require_modulo("soporte-unificado"))],
 )
+
+log = logging.getLogger(__name__)
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -102,7 +106,7 @@ async def subir_excel_soporte_unificado(
         with dest.open("wb") as out:
             shutil.copyfileobj(file.file, out)
         repo = get_vacunacion_repository()
-        resumen = repo.resumen(dest)
+        resumen = await run_in_threadpool(repo.resumen, dest)
         return VacunacionUploadResp(
             upload_id=upload_id,
             filename=file.filename,
@@ -116,7 +120,11 @@ async def subir_excel_soporte_unificado(
         raise HTTPException(status_code=422, detail=str(e)) from e
     except Exception as e:  # noqa: BLE001
         dest.unlink(missing_ok=True)
-        raise HTTPException(status_code=500, detail=f"Error procesando el Excel: {e}") from e
+        log.exception("soporte_unif.upload_falló", extra={"filename": file.filename})
+        raise HTTPException(
+            status_code=500,
+            detail="No se pudo procesar el Excel. Verifica que el archivo no esté dañado o abierto en otro programa.",
+        ) from e
 
 
 # ─── Conteo previo (rápido, por módulo) ──────────────────────────────────────
@@ -153,7 +161,7 @@ async def contar_soporte_unificado(
         if not excel_path.exists():
             raise HTTPException(status_code=404, detail=f"Upload {upload_id} no existe")
 
-    conteo = conteo_por_modulo(desde, hasta, facturas=facturas, regimen=r, excel_path=excel_path)
+    conteo = await run_in_threadpool(conteo_por_modulo, desde, hasta, facturas=facturas, regimen=r, excel_path=excel_path)
     por_modulo = [
         {"modulo": mod_id, "label": MODULO_LABEL.get(mod_id, mod_id), "soportes": total}
         for mod_id, total in conteo.items()
@@ -196,13 +204,14 @@ async def crear_extraccion_soporte_unificado(
         if not excel_path.exists():
             raise HTTPException(status_code=404, detail=f"Upload {req.upload_id} no existe. Subí primero el .xlsx.")
 
-    facturas = _facturas_de(req.numero_factura)
+    facturas = _facturas_de(req.numero_factura) if req.numero_factura else None
     # `limite` = estimación de soportes (el orquestador no lo usa para cortar; procesa
     # todo el universo). Sirve para mostrarlo en la UI.
-    conteo = conteo_por_modulo(req.desde, req.hasta, facturas=facturas, regimen=req.regimen, excel_path=excel_path)
+    conteo = await run_in_threadpool(conteo_por_modulo, req.desde, req.hasta, facturas=facturas, regimen=req.regimen, excel_path=excel_path)
     limite = max(1, sum(conteo.values()))
 
-    nombre = req.nombre or f"Soporte Unificado {req.desde}—{req.hasta} · {req.regimen} · F{req.numero_factura}"
+    sufijo_factura = f" · F{req.numero_factura}" if req.numero_factura else ""
+    nombre = req.nombre or f"Soporte Unificado {req.desde}—{req.hasta} · {req.regimen}{sufijo_factura}"
 
     job = Extraccion(
         id=uuid4(),

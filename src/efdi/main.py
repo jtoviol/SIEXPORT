@@ -5,7 +5,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, Form, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from efdi import __version__
@@ -47,6 +47,22 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.exception_handler(Exception)
+async def _unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    """Red de seguridad: cualquier excepción que una ruta no haya envuelto en
+    HTTPException cae acá. Sin esto, Starlette devuelve texto plano
+    "Internal Server Error" (no JSON), y el frontend — que asume
+    `{"detail": "..."}` en toda respuesta de error — falla al parsear la
+    respuesta en vez de mostrar un mensaje claro."""
+    logging.getLogger(__name__).exception(
+        "unhandled_exception", extra={"path": request.url.path, "method": request.method}
+    )
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Error interno del servidor. Si el problema persiste, contacta a soporte."},
+    )
 
 # ── Autenticación con cookie firmada (HMAC-SHA256) ─────────────────────────────
 # Stateless: funciona con --workers N sin estado compartido entre procesos.

@@ -165,8 +165,15 @@ class CrearSoporteUnificadoReq(BaseModel):
 
     desde: date = Field(description="Fecha inicial del rango")
     hasta: date = Field(description="Fecha final del rango")
-    numero_factura: str = Field(
-        description="Sufijo numérico de la factura del régimen (ej '11502'). Backend arma CABn+FABn.",
+    numero_factura: str | None = Field(
+        default=None,
+        description=(
+            "Sufijo numérico de la factura del régimen (ej '11502'). Backend arma "
+            "CABn+FABn. Opcional: solo lo usan los módulos facturables (Demanda "
+            "Inducida, FINDRISC, Planificación Familiar, Pruebas Rápidas). Sin "
+            "esto, esos módulos simplemente no aportan al universo unificado — "
+            "igual que en el preview de conteo."
+        ),
     )
     regimen: str = Field(description="SUBSIDIADO o CONTRIBUTIVO — corrida separada por régimen")
     upload_id: UUID | None = Field(
@@ -187,12 +194,11 @@ class CrearSoporteUnificadoReq(BaseModel):
         if r not in ("SUBSIDIADO", "CONTRIBUTIVO"):
             raise ValueError("regimen debe ser SUBSIDIADO o CONTRIBUTIVO")
         self.regimen = r
-        n = (self.numero_factura or "").strip().upper()
-        if n.startswith("CAB") or n.startswith("FAB"):
-            n = n[3:]
-        if not n:
-            raise ValueError("numero_factura no puede ser vacío")
-        self.numero_factura = n
+        if self.numero_factura:
+            n = self.numero_factura.strip().upper()
+            if n.startswith("CAB") or n.startswith("FAB"):
+                n = n[3:]
+            self.numero_factura = n or None
         return self
 
 

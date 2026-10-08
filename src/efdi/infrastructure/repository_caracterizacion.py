@@ -13,6 +13,7 @@ from typing import Protocol
 
 from efdi.config import settings
 from efdi.domain.models import RegistroCaracterizacion
+from efdi.infrastructure.errors import RepositorioNoDisponibleError
 
 log = logging.getLogger(__name__)
 
@@ -409,8 +410,8 @@ class SqlServerCaracterizacionRepository:
     def get_total(self, desde: date, hasta: date, regimen: str | None = None) -> int:
         try:
             import pyodbc
-        except ImportError:
-            return 0
+        except ImportError as e:
+            raise RepositorioNoDisponibleError("Driver pyodbc no instalado") from e
         fecha_inicio, fecha_final = _fechas_dt(desde, hasta)
         reg_sql, reg_params = _regimen_filter(regimen)
         sql = QUERY_CARACTERIZACION_COUNT.format(regimen_filter=reg_sql)
@@ -422,9 +423,9 @@ class SqlServerCaracterizacionRepository:
                 _avanzar_a_resultado(cur)
                 row = cur.fetchone()
                 return int(row[0]) if row else 0
-        except Exception:
+        except Exception as e:
             log.exception("caracterizacion.get_total failed")
-            return 0
+            raise RepositorioNoDisponibleError("No se pudo consultar SQL Server") from e
 
 
 def get_caracterizacion_repository() -> CaracterizacionRepository:

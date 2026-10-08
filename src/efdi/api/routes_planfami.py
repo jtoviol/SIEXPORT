@@ -7,11 +7,13 @@ from uuid import UUID, uuid4
 
 from fastapi import Depends, APIRouter, BackgroundTasks, HTTPException, Query, status
 from efdi.api.dependencies import current_user, require_modulo, require_no_viewer
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
 
 from efdi.api.schemas import CrearExtraccionReq, ExtraccionResp, RenombrarJobReq
 from efdi.config import settings
 from efdi.domain.models import User, EstadoExtraccion, Extraccion, ExtraccionTipo, Lote, ModoPdf, estado_label, safe_filename
+from efdi.infrastructure.errors import RepositorioNoDisponibleError
 from efdi.infrastructure.job_store import store
 from efdi.infrastructure.repository_planfami import get_planfami_repository
 from efdi.services.extraction_planfami import ejecutar_extraccion_planfami
@@ -52,7 +54,13 @@ async def contar_registros_planfami(
             raise HTTPException(status_code=400, detail="numero_factura no puede ser vacío")
         facturas = [f"CAB{n}", f"FAB{n}"]
     repo = get_planfami_repository()
-    total = repo.get_total(desde, hasta, facturas=facturas)
+    try:
+        total = await run_in_threadpool(repo.get_total, desde, hasta, facturas=facturas)
+    except RepositorioNoDisponibleError as e:
+        raise HTTPException(
+            status_code=503,
+            detail="No se pudo conectar a la base de datos. Verifica la conexión/VPN e intenta de nuevo.",
+        ) from e
     if total <= 0:
         return {"total_en_db": 0, "limite_efectivo": 0, "tamano_lote": 0, "lotes_estimados": 0, "capeado": False}
     limite_efectivo = total
@@ -89,7 +97,13 @@ async def crear_extraccion_planfami(
     limite = req.limite
     if limite is None:
         repo = get_planfami_repository()
-        total = repo.get_total(req.desde, req.hasta, facturas=facturas)
+        try:
+            total = await run_in_threadpool(repo.get_total, req.desde, req.hasta, facturas=facturas)
+        except RepositorioNoDisponibleError as e:
+            raise HTTPException(
+                status_code=503,
+                detail="No se pudo conectar a la base de datos. Verifica la conexión/VPN e intenta de nuevo.",
+            ) from e
         if total <= 0:
             raise HTTPException(
                 status_code=400,

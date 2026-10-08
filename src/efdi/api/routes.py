@@ -6,6 +6,7 @@ from pathlib import Path
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
 
 from efdi import __version__
@@ -22,6 +23,7 @@ from efdi.api.schemas import (
 from efdi.config import settings
 from efdi.domain.models import User, Atencion, EstadoExtraccion, Extraccion, ExtraccionTipo, Lote, estado_label, safe_filename
 from efdi.infrastructure.db import db
+from efdi.infrastructure.errors import RepositorioNoDisponibleError
 from efdi.infrastructure.job_store import store
 from efdi.infrastructure.repository import SqlServerRepository, get_repository
 from efdi.services.extraction import ejecutar_extraccion
@@ -58,7 +60,7 @@ async def health() -> HealthResp:
 async def db_ping() -> dict[str, object]:
     """Ejecuta SELECT 1 contra SQL Server. No depende del modo mock."""
     repo = SqlServerRepository()
-    ok = repo.ping()
+    ok = await run_in_threadpool(repo.ping)
     return {
         "host": settings.db_host,
         "database": settings.db_name,
@@ -102,7 +104,7 @@ async def diagnostics() -> DiagnosticsResp:
     # 3. SQL Server (solo si no es mock)
     if not settings.use_mock:
         try:
-            ok_sql = SqlServerRepository().ping()
+            ok_sql = await run_in_threadpool(SqlServerRepository().ping)
             checks["sqlserver"] = DiagCheck(
                 ok=ok_sql,
                 descripcion=f"{'Conexión OK' if ok_sql else 'Sin conexión'} a {settings.db_host}",
@@ -205,7 +207,13 @@ async def contar_registros(
             raise HTTPException(status_code=400, detail="numero_factura no puede ser vacío")
         facturas = [f"CAB{n}", f"FAB{n}"]
     repo = get_repository()
-    total = repo.get_total(desde, hasta, facturas=facturas)
+    try:
+        total = await run_in_threadpool(repo.get_total, desde, hasta, facturas=facturas)
+    except RepositorioNoDisponibleError as e:
+        raise HTTPException(
+            status_code=503,
+            detail="No se pudo conectar a la base de datos. Verifica la conexión/VPN e intenta de nuevo.",
+        ) from e
     if total <= 0:
         return {"total_en_db": 0, "limite_efectivo": 0, "tamano_lote": 0, "lotes_estimados": 0, "capeado": False}
     # Sin cap — el sistema procesa todo el universo que el filtro devuelva.
@@ -298,7 +306,7 @@ async def contar_por_facturas(
 
     normalizados = _validar_pares_facturas(aplanados)
     repo = get_repository()
-    resultado = repo.contar_por_facturas(normalizados, cod_diag=cod_diag)
+    resultado = await run_in_threadpool(repo.contar_por_facturas, normalizados, cod_diag=cod_diag)
     return ConteoFacturasResp(**resultado)
 
 
@@ -331,7 +339,13 @@ async def crear_extraccion(
     limite = req.limite
     if limite is None:
         repo = get_repository()
-        total = repo.get_total(req.desde, req.hasta, facturas=facturas)  # type: ignore[attr-defined]
+        try:
+            total = await run_in_threadpool(repo.get_total, req.desde, req.hasta, facturas=facturas)  # type: ignore[attr-defined]
+        except RepositorioNoDisponibleError as e:
+            raise HTTPException(
+                status_code=503,
+                detail="No se pudo conectar a la base de datos. Verifica la conexión/VPN e intenta de nuevo.",
+            ) from e
         if total <= 0:
             raise HTTPException(
                 status_code=400,

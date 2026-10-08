@@ -6,28 +6,25 @@
   <title>SIEDFASER — Sistema Inteligente de Exportación de Datos para Facturación de Seragil</title>
   <link rel="icon" type="image/png" href="/static/siedfaser_logo.png" />
   <script src="https://unpkg.com/@lottiefiles/dotlottie-wc@0.9.14/dist/dotlottie-wc.js" type="module"></script>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          colors: {
-            brand: {
-              50:"#eff5fb", 100:"#dae6f3", 500:"#3b6ea8",
-              600:"#2e5786", 700:"#234674", 800:"#1a3960", 900:"#13294a"
-            }
-          }
-        }
-      }
-    };
-  </script>
+  <!-- CSS de Tailwind compilado localmente (ver src/efdi/web/tailwind-input.css
+       y "Regenerar el CSS de Tailwind" en el README) — antes se cargaba desde
+       cdn.tailwindcss.com, que compila en el navegador en cada carga y no está
+       pensado para producción (provoca FOUC y depende de red externa). -->
+  <link rel="stylesheet" href="/static/dist/app.css" />
   <style>
+    /* Los navegadores NO ponen cursor de manita en <button> por defecto (solo en
+       <a href>) — sin esto, cualquier botón sin la clase utilitaria "cursor-pointer"
+       puesta a mano se ve con flecha, como si no fuera clicable. */
+    button:not(:disabled) { cursor: pointer; }
+    button:disabled { cursor: not-allowed; }
     @keyframes spin      { to { transform: rotate(360deg); } }
     @keyframes pdot      { 0%,100%{opacity:1} 50%{opacity:.35} }
     @keyframes float-up  { 0%{transform:translateY(0);opacity:.7} 100%{transform:translateY(-48px);opacity:0} }
     @keyframes shimmer   { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
     @keyframes bar-grow  { from{width:0} to{width:var(--w)} }
     @keyframes lote-prog { from{width:0%} to{width:95%} }
+    @keyframes lote-prog-pulse { 0%,100%{width:85%;opacity:.55} 50%{width:95%;opacity:1} }
+    .lote-prog-indeterminate { animation: lote-prog-pulse 1.4s ease-in-out infinite; }
     @keyframes fade-in   { from{opacity:0;transform:translateY(4px)} to{opacity:1;transform:translateY(0)} }
     .spin  { animation: spin 1s linear infinite; }
     .pdot  { animation: pdot 1.5s ease-in-out infinite; }
@@ -158,10 +155,6 @@
 
     /* Tabs con scroll horizontal (desktop y móvil): sin scrollbar visible,
        centrados cuando caben y deslizables cuando no. */
-    .tabs-scroll { overflow-x: auto; scrollbar-width: none; -ms-overflow-style: none; }
-    .tabs-scroll::-webkit-scrollbar { display: none; }
-    .tabs-scroll > :first-child { margin-left: auto; }
-    .tabs-scroll > :last-child  { margin-right: auto; }
 
     /* ─── MOBILE ─── */
     @media (max-width: 639px) {
@@ -185,9 +178,6 @@
     }
 
     /* Bottom tab bar (mobile only) */
-    .mob-tab { transition: color .15s; color: #94a3b8; }
-    .mob-tab.active { color: #234674; }
-    .mob-tab span { font-size: 10px; line-height: 1.2; }
     /* Quick stats chips (franja B) */
     .qs-chip {
       display: inline-flex; align-items: center; gap: 4px;
@@ -354,7 +344,11 @@
       display: flex; align-items: center; justify-content: space-between;
     }
     .modal-header h2 { font-size: 15px; font-weight: 700; color: #0f172a; }
-    .modal-body { padding: 16px 18px; overflow-y: auto; }
+    /* overflow-x: auto — las tablas (usuarios, audit log) tienen más columnas
+       de las que caben en una pantalla angosta; sin esto las columnas de la
+       derecha (Estado, Último login, acciones) quedaban cortadas sin forma de
+       verlas en móvil. */
+    .modal-body { padding: 16px 18px; overflow-y: auto; overflow-x: auto; }
     .modal-footer {
       padding: 12px 18px; border-top: 1px solid #e2e8f0;
       display: flex; justify-content: flex-end; gap: 8px;
@@ -419,7 +413,10 @@
     .btn-icon:hover { background: #f1f5f9; }
 
     /* Tabla users */
-    .users-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    /* min-width asegura que en pantallas angostas la tabla scrollee (gracias
+       a overflow-x:auto en .modal-body) en vez de aplastar las columnas hasta
+       volverlas ilegibles. */
+    .users-table { width: 100%; min-width: 640px; border-collapse: collapse; font-size: 13px; }
     .users-table th {
       text-align: left; font-size: 10.5px; font-weight: 700;
       color: #64748b; text-transform: uppercase; letter-spacing: .05em;
@@ -614,11 +611,15 @@
   <span id="qs-fallidas" class="qs-chip"></span>
   <span id="qs-pdfs-hoy" class="qs-chip"></span>
   <span id="qs-pdfs-mes" class="qs-chip"></span>
+  <span id="qs-error" class="qs-chip qs-danger hidden">⚠ No se pudo actualizar</span>
   <span id="qs-modo"     class="qs-chip ml-auto"></span>
 </div>
 
 <!-- ═══ VISTA DASHBOARD ═══ -->
 <div id="dashboard-view" class="flex-1 overflow-y-auto bg-slate-50/40 px-4 sm:px-6 py-5">
+  <div id="db-error-banner" class="hidden mb-3 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-800">
+    ⚠ No se pudo actualizar el panel. Mostrando los últimos datos conocidos — reintentando…
+  </div>
   <!-- KPIs grandes -->
   <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
     <div class="bg-white rounded-xl border border-slate-200 p-4 flex flex-col gap-1">
@@ -920,6 +921,35 @@
                 Marcá uno o ambos. Con los 2 marcados se crean 2 jobs separados.
                 Sin marcar nada se trae el universo completo (todos los regímenes).
               </p>
+            </div>
+          </div>
+          <!-- Filtros de Soporte Unificado: régimen obligatorio (corridas separadas
+               por régimen, igual que los demás módulos) + factura OPCIONAL (solo la
+               usan los módulos facturables dentro del universo unificado). -->
+          <div id="su-regimen-section" class="hidden pt-0.5 space-y-1.5">
+            <label class="text-xs font-medium text-slate-500 block mb-1">
+              Régimen <span class="text-red-500">*</span>
+              <span class="text-[10px] text-slate-400 font-normal">(obligatorio · corrida separada por régimen)</span>
+            </label>
+            <div class="flex gap-3">
+              <label class="flex items-center gap-1.5 cursor-pointer text-xs text-slate-700">
+                <input type="radio" name="su-regimen" id="su-regimen-sub" value="SUBSIDIADO" onchange="fetchAutoPreview()" class="accent-brand-600 h-4 w-4">
+                <span class="font-semibold uppercase tracking-wide">Subsidiado</span>
+              </label>
+              <label class="flex items-center gap-1.5 cursor-pointer text-xs text-slate-700">
+                <input type="radio" name="su-regimen" id="su-regimen-cont" value="CONTRIBUTIVO" onchange="fetchAutoPreview()" class="accent-brand-600 h-4 w-4">
+                <span class="font-semibold uppercase tracking-wide">Contributivo</span>
+              </label>
+            </div>
+            <div>
+              <label class="text-xs font-medium text-slate-500 block mb-1">
+                Número de factura
+                <span class="text-[10px] text-slate-400 font-normal">(opcional · solo aplica a los módulos facturables)</span>
+              </label>
+              <input id="su-numero-factura" type="text" maxlength="20" placeholder="ej: 11502" autocomplete="off"
+                     oninput="fetchAutoPreview()"
+                     class="w-full h-7 px-2 rounded-md border border-slate-300 text-xs font-mono bg-white
+                            outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500"/>
             </div>
           </div>
           <!-- Excel de vacunación OPCIONAL (solo Soporte Unificado) -->
@@ -1406,85 +1436,6 @@
   </div>
 </div>
 
-<!-- ═══ MOBILE BOTTOM NAV (reemplazado por sidebar drawer + Cmd+K) ═══ -->
-<nav class="hidden shrink-0 bg-white border-t border-slate-100 z-20"
-     style="padding-bottom: env(safe-area-inset-bottom, 0px)">
-  <div class="tabs-scroll flex">
-    <button data-mob-tab="dashboard" onclick="switchTab('dashboard')"
-            class="mob-tab active flex-1 min-w-[68px] flex flex-col items-center gap-0.5 py-2.5 transition-colors">
-      <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
-        <path stroke-linecap="round" stroke-linejoin="round"
-              d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
-      </svg>
-      <span class="font-medium">Inicio</span>
-    </button>
-    <button data-mob-tab="demanda-inducida" onclick="switchTab('demanda-inducida')"
-            class="mob-tab flex-1 min-w-[68px] flex flex-col items-center gap-0.5 py-2.5 transition-colors">
-      <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
-        <path stroke-linecap="round" stroke-linejoin="round"
-              d="M9 12h6m-6 4h6M9 8h6m-3 12H7a2 2 0 01-2-2V6a2 2 0 012-2h7l5 5v9a2 2 0 01-2 2h-2"/>
-      </svg>
-      <span class="font-medium">Demanda</span>
-    </button>
-    <button data-mob-tab="findrisc" onclick="switchTab('findrisc')"
-            class="mob-tab flex-1 min-w-[68px] flex flex-col items-center gap-0.5 py-2.5 transition-colors">
-      <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
-        <path stroke-linecap="round" stroke-linejoin="round"
-              d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
-      </svg>
-      <span>FINDRISC</span>
-    </button>
-    <button data-mob-tab="gestion-captacion" onclick="switchTab('gestion-captacion')"
-            class="mob-tab flex-1 min-w-[68px] flex flex-col items-center gap-0.5 py-2.5 transition-colors">
-      <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
-        <path stroke-linecap="round" stroke-linejoin="round"
-              d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/>
-      </svg>
-      <span>Captación</span>
-    </button>
-    <button data-mob-tab="planificacion-familiar" onclick="switchTab('planificacion-familiar')"
-            class="mob-tab flex-1 min-w-[68px] flex flex-col items-center gap-0.5 py-2.5 transition-colors">
-      <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
-        <path stroke-linecap="round" stroke-linejoin="round"
-              d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/>
-      </svg>
-      <span>PlanFami</span>
-    </button>
-    <button data-mob-tab="vacunacion" onclick="switchTab('vacunacion')"
-            class="mob-tab flex-1 min-w-[68px] flex flex-col items-center gap-0.5 py-2.5 transition-colors">
-      <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
-        <path stroke-linecap="round" stroke-linejoin="round"
-              d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"/>
-      </svg>
-      <span>Vacunación</span>
-    </button>
-    <button data-mob-tab="caracterizacion-familiar" onclick="switchTab('caracterizacion-familiar')"
-            class="mob-tab flex-1 min-w-[68px] flex flex-col items-center gap-0.5 py-2.5 transition-colors">
-      <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
-        <path stroke-linecap="round" stroke-linejoin="round"
-              d="M3 12l9-9 9 9M5 10v10a1 1 0 001 1h12a1 1 0 001-1V10M9 21v-6a1 1 0 011-1h4a1 1 0 011 1v6"/>
-      </svg>
-      <span>Caract. Fam.</span>
-    </button>
-    <button data-mob-tab="pruebas-rapidas" onclick="switchTab('pruebas-rapidas')"
-            class="mob-tab flex-1 min-w-[68px] flex flex-col items-center gap-0.5 py-2.5 transition-colors">
-      <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
-        <path stroke-linecap="round" stroke-linejoin="round"
-              d="M9 3h6l-1 4h-4L9 3zm1 4v3a4 4 0 11-1.999 7.535L8 17l-2-4V7m6 0v3a4 4 0 102 7.535L14 17l2-4V7"/>
-      </svg>
-      <span>Pruebas R.</span>
-    </button>
-    <button data-mob-tab="educacion-grupal" onclick="switchTab('educacion-grupal')"
-            class="mob-tab flex-1 min-w-[68px] flex flex-col items-center gap-0.5 py-2.5 transition-colors">
-      <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
-        <path stroke-linecap="round" stroke-linejoin="round"
-              d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/>
-      </svg>
-      <span>Educac.</span>
-    </button>
-  </div>
-</nav>
-
 </div><!-- /flex-1 wrapper (header+main) -->
 
 <!-- ═══ MODAL: Mi perfil ═══ -->
@@ -1740,14 +1691,20 @@ const $ = id => document.getElementById(id);
 // ═══════════════════════════════════════════════════════════════════
 // Para agregar un módulo nuevo:
 //   1. Agregar entrada acá (clave = tabId con guiones)
-//   2. Agregar botón en el nav desktop (data-tab) y nav móvil (data-mob-tab)
+//   2. Agregar botón en el nav desktop (data-tab)
 //   3. Agregar card en el dashboard (data-mod con el tipoBackend)
 // El resto del JS (api, badge, color, unidad, factura, excel) se resuelve
 // automáticamente desde este registry — sin tocar ramas if/else.
 //
 // Las clases tipo `bg-{color}-100 text-{color}-700` y `hover:border-{color}-400`
-// ya viven en el HTML literal de las cards/badges, así que el JIT de Tailwind
-// CDN las genera. NO agregar colores acá sin agregar también clases literales.
+// viven como texto literal en el HTML de las cards/badges, así que el escaneo
+// estático de Tailwind (ver tailwind-input.css) las detecta solo. Las dos
+// excepciones (`modBadge` acá y el badge de módulo del dashboard) arman la
+// clase interpolando `m.color` en JS — esas quedan en el `@source inline(...)`
+// de tailwind-input.css. NO agregar un color nuevo sin: (a) agregar sus shades
+// -100/-700 al safelist de tailwind-input.css si se usan en esos dos lugares,
+// y (b) agregar también las clases `hover:border-{color}-400` literales donde
+// se necesiten.
 // Heroicons outline paths (24x24, stroke-width 1.8).
 const ICONS = {
   home:    `<path stroke-linecap="round" stroke-linejoin="round" d="M3 12l9-9 9 9M5 10v10a1 1 0 001 1h12a1 1 0 001-1V10M9 21v-6a1 1 0 011-1h4a1 1 0 011 1v6"/>`,
@@ -1808,8 +1765,16 @@ const MODULES = {
     categoria: "Seguimiento", badge: "EG",
     usaFactura: false, usaRegimen: true, usaExcel: false, unidad: "afiliados",
   },
-  // "soporte-unificado" fue retirado del frontend: el módulo queda inaccesible
-  // desde la UI (sidebar, Cmd+K, cards y nav móvil) para evitar unificaciones.
+  "soporte-unificado": {
+    tipoBackend: "soporte_unificado", label: "Soporte Unificado",
+    api: "/soporte-unificado/extractions", color: "slate", icon: "doc",
+    categoria: "Transversal", badge: "SU",
+    // No usa las variantes genéricas de factura/régimen (usaFactura/usaRegimen
+    // en false): tiene su propia sección de filtros (#su-regimen-section +
+    // #su-excel-section) porque combina régimen obligatorio + factura opcional
+    // + Excel opcional, algo que ningún otro módulo necesita a la vez.
+    usaFactura: false, usaRegimen: false, usaExcel: false, unidad: "personas",
+  },
 };
 
 // Orden de categorías en el sidebar (los que no estén acá quedan al final).
@@ -2095,8 +2060,14 @@ async function loadDashboard() {
     const data = await r.json();
     renderDashboard(data);
     renderQuickStats(data);
+    $("db-error-banner")?.classList.add("hidden");
+    $("qs-error")?.classList.add("hidden");
   } catch (e) {
-    // silencioso — refrescamos en el próximo tick
+    // No se pudo refrescar — los KPIs quedan con el último valor conocido en
+    // vez de congelarse en "—" sin explicación; avisamos con un banner/chip
+    // discreto que se oculta solo en el próximo refresh exitoso.
+    $("db-error-banner")?.classList.remove("hidden");
+    $("qs-error")?.classList.remove("hidden");
   }
   // Auto-refresh cada 10s cuando el usuario está mirando el dashboard
   if (activeTab === "dashboard") {
@@ -2201,8 +2172,14 @@ async function loadQuickStats() {
   clearTimeout(_qsTimer);
   try {
     const r = await fetch("/api/dashboard/summary", { credentials: "same-origin" });
-    if (r.ok) renderQuickStats(await r.json());
-  } catch {}
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    renderQuickStats(await r.json());
+    $("qs-error")?.classList.add("hidden");
+  } catch {
+    // Igual que loadDashboard: avisar en vez de dejar los chips congelados
+    // sin ninguna señal de que algo falló.
+    $("qs-error")?.classList.remove("hidden");
+  }
   // Refresca cada 15s cuando el usuario NO está en dashboard (en dashboard ya hay otro timer)
   if (activeTab !== "dashboard") {
     _qsTimer = setTimeout(loadQuickStats, 15000);
@@ -2268,9 +2245,6 @@ function switchTab(tabId) {
   document.querySelectorAll(".tab-btn").forEach(btn =>
     btn.classList.toggle("active", btn.dataset.tab === tabId)
   );
-  document.querySelectorAll(".mob-tab").forEach(btn =>
-    btn.classList.toggle("active", btn.dataset.mobTab === tabId)
-  );
   // Sidebar nav: sincronizar item activo + cerrar drawer en mobile
   document.querySelectorAll("#app-sidebar-nav .sidebar-item").forEach(el =>
     el.classList.toggle("active", el.dataset.tab === tabId)
@@ -2324,10 +2298,17 @@ function switchTab(tabId) {
     if (rCont) rCont.checked = false;
   }
 
-  // Soporte Unificado: dropzone opcional del Excel de vacunación
+  // Soporte Unificado: régimen obligatorio + factura opcional + Excel opcional
   const esSU = tabId === "soporte-unificado";
+  $("su-regimen-section")?.classList.toggle("hidden", !esSU);
   $("su-excel-section")?.classList.toggle("hidden", !esSU);
   if (!esSU && typeof suResetUpload === "function") suResetUpload();
+  if (!esSU) {
+    const rSubSU = $("su-regimen-sub"), rContSU = $("su-regimen-cont"), facSU = $("su-numero-factura");
+    if (rSubSU)  rSubSU.checked  = false;
+    if (rContSU) rContSU.checked = false;
+    if (facSU)   facSU.value     = "";
+  }
 
   // ── Form SQL ↔ form de upload Excel (módulos con usaExcel=true, ej: Vacunación) ──
   const usaExcel = modByTab(tabId)?.usaExcel || false;
@@ -2524,6 +2505,8 @@ async function loadJobs() {
     const empty = $("jempty"), list = $("jlist");
     if (!data.length) {
       list.innerHTML = ""; empty.classList.remove("hidden");
+      const p = empty.querySelector("p");
+      if (p) p.textContent = "Sin extracciones aun";
     } else {
       empty.classList.add("hidden");
       list.innerHTML = data.map(jobHtml).join("");
@@ -2572,6 +2555,16 @@ async function loadJobs() {
     clearTimeout(_poll);
     _poll = setTimeout(loadJobs, active ? 45000 : 5000);
   } catch {
+    // No se pudo consultar el backend. Si la lista ya tenía datos de un tick
+    // anterior los dejamos (puede ser un hiccup de red de 1 tick), pero si
+    // está vacía mostramos el motivo real en vez de un panel en blanco que
+    // parece roto.
+    const empty = $("jempty"), list = $("jlist");
+    if (list && !list.children.length && empty) {
+      empty.classList.remove("hidden");
+      const p = empty.querySelector("p");
+      if (p) p.textContent = "No se pudo conectar con el servidor. Reintentando…";
+    }
     clearTimeout(_poll);
     _poll = setTimeout(loadJobs, 45000);
   }
@@ -2951,12 +2944,22 @@ function renderProgress(job, lotes) {
           const elapsed = l.iniciado_en
             ? Math.max(0, (Date.now() - new Date(l.iniciado_en).getTime()) / 1000)
             : 0;
-          barraHtml = `
-            <div class="mt-1.5 h-1 bg-slate-200 rounded-full overflow-hidden">
-              <div style="height:100%;background:#234674;border-radius:9999px;
-                          animation:lote-prog ${durSeg}s linear forwards;
-                          animation-delay:-${elapsed}s"></div>
-            </div>`;
+          if (elapsed < durSeg) {
+            barraHtml = `
+              <div class="mt-1.5 h-1 bg-slate-200 rounded-full overflow-hidden">
+                <div style="height:100%;background:#234674;border-radius:9999px;
+                            animation:lote-prog ${durSeg}s linear forwards;
+                            animation-delay:-${elapsed}s"></div>
+              </div>`;
+          } else {
+            // Superó el tiempo estimado: no sabemos el % real, pero el lote
+            // sigue corriendo (ver `fase` arriba) — barra indeterminada en vez
+            // de quedar clavada en 95%, que se leía como "se colgó".
+            barraHtml = `
+              <div class="mt-1.5 h-1 bg-slate-200 rounded-full overflow-hidden">
+                <div class="lote-prog-indeterminate" style="height:100%;background:#234674;border-radius:9999px;"></div>
+              </div>`;
+          }
         }
 
         return `
@@ -3401,14 +3404,15 @@ function fetchAutoPreview() {
   const params = new URLSearchParams({desde, hasta});
   if (facN)         params.set("numero_factura", facN);
   if (regimenParam) params.set("regimen", regimenParam);
-  // Soporte Unificado: el régimen sale de cuál input de factura está lleno, y
-  // adjuntamos el upload_id del Excel si hay uno, para que el preview de raros +
-  // vacunación refleje lo que se va a generar.
+  // Soporte Unificado: régimen viene de su propio radio (obligatorio, corrida
+  // separada por régimen) y la factura de su propio input (opcional, solo
+  // aplica a los módulos facturables). Adjuntamos el upload_id del Excel si
+  // hay uno, para que el preview de personas + vacunación refleje lo real.
   if (activeTab === "soporte-unificado") {
-    if (!regimenParam) {
-      if (subN && !contN)      params.set("regimen", "SUBSIDIADO");
-      else if (contN && !subN) params.set("regimen", "CONTRIBUTIVO");
-    }
+    const suReg = document.querySelector('input[name="su-regimen"]:checked')?.value || "";
+    const suFac = _facturaFormSufijo($("su-numero-factura")?.value || "");
+    if (suReg) params.set("regimen", suReg); else params.delete("regimen");
+    if (suFac) params.set("numero_factura", suFac); else params.delete("numero_factura");
     if (typeof suUpload !== "undefined" && suUpload) params.set("upload_id", suUpload.upload_id);
   }
   const url = `${getModuleApi()}/count?${params.toString()}`;
@@ -3835,7 +3839,17 @@ $("fext").addEventListener("submit", async ev => {
   const moduloAceptaRegimen   = !!_modCfg?.usaRegimen;
 
   const lanzamientos = [];
-  if (moduloRequiereFactura) {
+  if (activeTab === "soporte-unificado") {
+    // Régimen obligatorio (corrida separada por régimen, igual que los demás
+    // módulos); factura opcional (solo la usan los módulos facturables).
+    const suReg = document.querySelector('input[name="su-regimen"]:checked')?.value || "";
+    if (!suReg) {
+      $("ferr").textContent = "Selecciona un régimen (Subsidiado o Contributivo) antes de generar.";
+      $("ferr").classList.remove("hidden"); return;
+    }
+    const suFac = _facturaFormSufijo($("su-numero-factura")?.value || "");
+    lanzamientos.push({regimen: suReg, numero: suFac || null});
+  } else if (moduloRequiereFactura) {
     // Variante A: cruce contra AVS_REGISTROS_AP — número CAB/FAB requerido.
     const subN  = _facturaFormSufijo($("fac-form-sub")?.value || "");
     const contN = _facturaFormSufijo($("fac-form-cont")?.value || "");
@@ -3979,7 +3993,7 @@ function renderAppSidebar() {
       html += `
         <div class="sidebar-item ${cls}" data-tab="${m.tabId}"
              onclick="navTo('${m.tabId}')">
-          <div class="sidebar-icon-box" style="background:rgb(var(--c-${m.color},241 245 249));">
+          <div class="sidebar-icon-box" style="background:var(--color-${m.color}-100, #f1f5f9); color:var(--color-${m.color}-700, #64748b);">
             ${_iconSvg(m.icon)}
           </div>
           <span class="truncate">${m.label}</span>
@@ -4031,13 +4045,25 @@ function _cmdkRender() {
   }
   box.innerHTML = _cmdkItems.map((it, i) => `
     <div class="cmdk-item ${i === _cmdkIdx ? "cmdk-active" : ""}"
-         data-tab="${it.tabId}" onmouseenter="_cmdkIdx=${i};_cmdkRender()"
+         data-tab="${it.tabId}" onmouseenter="_cmdkSetActive(${i})"
          onclick="navTo('${it.tabId}')">
       <div class="sidebar-icon-box">${_iconSvg(it.icon)}</div>
       <span>${it.label}</span>
       <span class="cmdk-cat">${it.categoria}</span>
     </div>
   `).join("");
+}
+
+// Resalta el ítem bajo el mouse SIN reconstruir el HTML de la lista: antes,
+// `onmouseenter` llamaba a `_cmdkRender()` completo (innerHTML = ...), lo que
+// destruía y reemplazaba el <div> justo mientras el mouse estaba encima — el
+// click que seguía "caía" sobre un nodo que ya no era el mismo, y el navegador
+// no disparaba el onclick. Acá solo togglea la clase sobre los nodos existentes.
+function _cmdkSetActive(i) {
+  _cmdkIdx = i;
+  $("cmdk-results").querySelectorAll(".cmdk-item").forEach((el, idx) => {
+    el.classList.toggle("cmdk-active", idx === i);
+  });
 }
 
 function cmdkFilter(query) {
@@ -4157,7 +4183,7 @@ renderAppSidebar = function() {
       html += `
         <div class="sidebar-item ${cls}" data-tab="${m.tabId}"
              onclick="navTo('${m.tabId}')">
-          <div class="sidebar-icon-box">${_iconSvg(m.icon)}</div>
+          <div class="sidebar-icon-box" style="background:var(--color-${m.color}-100, #f1f5f9); color:var(--color-${m.color}-700, #64748b);">${_iconSvg(m.icon)}</div>
           <span class="truncate">${m.label}</span>
         </div>
       `;

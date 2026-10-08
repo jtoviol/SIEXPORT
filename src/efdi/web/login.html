@@ -5,22 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>SIEDFASER — Acceso</title>
   <link rel="icon" type="image/png" href="/static/siedfaser_logo.png" />
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          colors: {
-            brand: {
-              50:"#eff5fb", 100:"#dae6f3", 200:"#b5d0e8",
-              500:"#3b6ea8", 600:"#2e5786", 700:"#234674",
-              800:"#1a3960", 900:"#13294a"
-            }
-          }
-        }
-      }
-    };
-  </script>
+  <!-- CSS de Tailwind compilado localmente — ver src/efdi/web/tailwind-input.css
+       y "Regenerar el CSS de Tailwind" en el README. -->
+  <link rel="stylesheet" href="/static/dist/app.css" />
   <style>
     @keyframes shake {
       0%,100% { transform:translateX(0); }
@@ -45,10 +32,12 @@
       33%     { border-radius:40% 60% 30% 70% / 60% 40% 60% 40%; transform:scale(1.05); }
       66%     { border-radius:70% 30% 50% 50% / 30% 70% 50% 60%; transform:scale(.97); }
     }
+    @keyframes spin { to { transform: rotate(360deg); } }
     .shake   { animation: shake .5s cubic-bezier(.36,.07,.19,.97) both; }
     .fade-up { animation: fade-up .55s cubic-bezier(.22,1,.36,1) both; }
     .logo-float { animation: float 5s ease-in-out infinite; }
     .blob    { animation: blob 7s ease-in-out infinite; }
+    .spin-ico { animation: spin 1s linear infinite; }
 
     .inp {
       transition: border-color .18s, box-shadow .18s, background .18s;
@@ -269,8 +258,7 @@
     lbl.textContent = "Verificando...";
     ico.innerHTML = `<path stroke-linecap="round"
       d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>`;
-    ico.style.animation = "spin 1s linear infinite";
-    ico.style.cssText += ";@keyframes spin{to{transform:rotate(360deg)}}";
+    ico.classList.add("spin-ico");
   });
 </script>
 </body>

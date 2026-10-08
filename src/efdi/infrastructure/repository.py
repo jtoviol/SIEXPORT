@@ -5,6 +5,7 @@ from typing import Protocol
 
 from efdi.config import settings
 from efdi.domain.models import Atencion, ModoIngreso, Regimen, Sexo, TipoDocumento
+from efdi.infrastructure.errors import RepositorioNoDisponibleError
 from efdi.infrastructure.mock_data import generar_atenciones
 
 log = logging.getLogger(__name__)
@@ -401,11 +402,15 @@ class SqlServerRepository:
         return atenciones
 
     def get_total(self, desde: date, hasta: date, facturas: list[str] | None = None) -> int:
-        """Retorna el total de registros para el rango — misma lógica que SERAGIL CAN_REGISTROS."""
+        """Retorna el total de registros para el rango — misma lógica que SERAGIL CAN_REGISTROS.
+
+        Lanza `RepositorioNoDisponibleError` si la consulta falla por un problema
+        de infraestructura (conexión/timeout) — un 0 legítimo (sin resultados)
+        nunca pasa por esa excepción."""
         try:
             import pyodbc
-        except ImportError:
-            return 0
+        except ImportError as e:
+            raise RepositorioNoDisponibleError("Driver pyodbc no instalado") from e
         fecha_inicio, fecha_final = _fechas_dt(desde, hasta)
         sql = QUERY_COUNT.format(factura_filter=_factura_filter_sql(facturas))
         params: list = [fecha_inicio, fecha_final]
@@ -417,9 +422,9 @@ class SqlServerRepository:
                 cur.execute(sql, *params)
                 row = cur.fetchone()
                 return int(row[0]) if row else 0
-        except Exception:
+        except Exception as e:
             log.exception("sqlserver.get_total failed")
-            return 0
+            raise RepositorioNoDisponibleError("No se pudo consultar SQL Server") from e
 
     def contar_por_facturas(
         self, codigos: list[str], cod_diag: str | None = None,

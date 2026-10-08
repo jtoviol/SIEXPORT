@@ -36,7 +36,6 @@ from efdi.domain.models import (
     Extraccion,
     FamiliaCaracterizada,
     Lote,
-    RegistroCaracterizacion,
 )
 from efdi.infrastructure.job_store import store
 from efdi.infrastructure.repository import get_repository
@@ -187,25 +186,24 @@ def conteo_por_modulo(
     return out
 
 
-def _jefe_doc_key(fam: FamiliaCaracterizada) -> tuple[str, str] | None:
-    """Devuelve (doc_key, nombre) del jefe de la familia, o None si no se puede.
+def _jefe_doc_key(fam: FamiliaCaracterizada) -> tuple[str, str | None]:
+    """Devuelve (doc_key, nombre) para anclar la familia en el índice unificado.
 
-    El jefe es el integrante con parentesco 'JEFE DE FAMILIA'. Si no hay uno
-    explícito, cae al primer integrante con documento (misma tolerancia que el
-    repo real: "familias sin jefe caen al primer integrante por orden natural").
+    Usa el mismo criterio que el módulo individual (`FamiliaCaracterizada.doc_key`
+    en `domain/models.py`): ancla al integrante con parentesco 'JEFE DE FAMILIA'
+    si tiene documento, si no al primer integrante con documento, y si NADIE en
+    la familia tiene documento usa `FAM_<clave_familia>` — igual que el PDF
+    standalone (carpeta `FAM_...`).
+
+    Antes esta función devolvía `None` en ese último caso y la familia se
+    descartaba (`continue`) del índice unificado sin aviso, mientras el módulo
+    standalone sí la incluía — eso hacía que el conteo de Caracterización
+    Familiar en el unificado diera menos que `get_total()` individual. Ahora
+    nunca se pierde una familia: siempre devuelve un doc_key válido.
     """
-    jefe: RegistroCaracterizacion | None = None
-    for r in fam.registros:
-        if (r.parentesco or "").strip().upper() == "JEFE DE FAMILIA":
-            jefe = r
-            break
-    if jefe is None:
-        jefe = next((r for r in fam.registros if r.num_documento), None)
-    if jefe is None or not jefe.num_documento:
-        return None
-    tipo = (jefe.tipo_documento or "CC").strip()
-    doc_key = f"{tipo}_{jefe.num_documento}"
-    return doc_key, (jefe.nombres_apellidos or "").strip() or None
+    jefe = fam.jefe
+    nombre = ((jefe.nombres_apellidos or "").strip() or None) if jefe else None
+    return fam.doc_key, nombre
 
 
 def recolectar_universo(
@@ -259,10 +257,7 @@ def recolectar_universo(
             familias = services.agrupar_por_familia_caracterizacion(filas)
             anclados = 0
             for fam in familias:
-                jefe = _jefe_doc_key(fam)
-                if jefe is None:
-                    continue
-                doc_key, nombre = jefe
+                doc_key, nombre = _jefe_doc_key(fam)
                 idx.agregar(doc_key, "caracterizacion-familiar", fam, nombre=nombre)
                 anclados += 1
             log.info("soporte_unif.modulo", extra={"modulo": "caracterizacion-familiar", "familias": len(familias), "anclados": anclados})

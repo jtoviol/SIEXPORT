@@ -17,8 +17,12 @@ data/
 *.log
 .DS_Store
 cap
-web/
-web.config
+# Ancladas a la raíz: sin esto, "web/" ignora también src/efdi/web/ (el
+# frontend real) porque gitignore matchea por nombre de carpeta en
+# cualquier profundidad. Esta regla era para un web/ o web.config de
+# IIS/.NET en la raíz del proyecto, que hoy no existe.
+/web/
+/web.config
 
 # Worktrees de Claude Code (anidados, no deben versionarse)
 .claude/worktrees/

@@ -60,6 +60,8 @@ Vista inicial: **Dashboard** con KPIs cross-módulo y actividad reciente (no se 
 | ![#f1f5f9](https://placehold.co/14x14/f1f5f9/f1f5f9.png) **Slate 100** | `#f1f5f9` | Fondos suaves |
 | ![#64748b](https://placehold.co/14x14/64748b/64748b.png) **Slate 500** | `#64748b` | Texto secundario |
 
+Además de estos acentos de marca, **cada módulo tiene su propio color de identificación** (campo `color` en el registry `MODULES` de `index.html`) usado en badges, bordes de hover de las cards y el ícono del sidebar: `brand` (Demanda Inducida), `emerald` (FINDRISC), `amber` (Gestión Captación), `rose` (Planificación Familiar), `cyan` (Vacunación), `indigo` (Caracterización Familiar), `violet` (Pruebas Rápidas), `teal` (Educación Grupal), `slate` (Soporte Unificado — color neutro, por ser un módulo transversal). Es una decisión de diseño intencional para distinguir módulos a simple vista, no una inconsistencia.
+
 ---
 
 ## Política de fidelidad a la BD
@@ -212,6 +214,36 @@ lote_001.zip
 
 ---
 
+### Soporte Unificado
+
+Módulo **transversal**: no tiene query ni generador propios. Orquesta los 8 módulos de arriba y reorganiza la salida **por afiliado** en vez de por módulo — una carpeta por documento, con un PDF adentro por cada módulo donde esa persona tenga soportes.
+
+```
+lote_001.zip
+├── CC_12345678/
+│   ├── demanda_inducida_2026-05-15.pdf
+│   ├── findrisc_2026-05-10.pdf
+│   └── vacunacion.pdf
+├── FAM_13|001|1|00|002|03|0001|1|100001/   ← familia sin ningún documento (ver abajo)
+│   └── caracterizacion_familiar.pdf
+└── …
+```
+
+**Universo** = unión de los 8 módulos: una persona entra al índice si aparece en **cualquiera** de ellos. El total de personas **nunca es la suma** de los conteos individuales — si alguien tiene soporte en 2 módulos, ahí cuenta 1 vez (deduplicado), mientras que cada módulo por separado la cuenta 1 vez cada uno. El endpoint de conteo previo lo advierte explícitamente (`"nota"` en la respuesta).
+
+**Filtro según el grupo de módulo** (fecha siempre obligatoria; régimen siempre obligatorio — corrida separada por régimen, igual que los demás módulos):
+- **Facturables** (Demanda Inducida, FINDRISC, Planificación Familiar, Pruebas Rápidas): además del régimen, aceptan un **número de factura opcional** (CAB/FAB). Sin factura, esos 4 módulos simplemente no aportan al universo.
+- **Régimen simple** (Gestión Captación, Educación Grupal) y **Caracterización Familiar**: solo fecha + régimen, nunca factura.
+- **Vacunación**: solo entra si se sube su Excel (opcional, mismo flujo que el módulo Vacunación standalone).
+
+**Caracterización Familiar se ancla al JEFE DE FAMILIA** (mismo criterio que el módulo individual): si nadie tiene parentesco "JEFE DE FAMILIA" explícito, cae al primer integrante con documento; si **nadie** en la familia tiene documento, la familia **igual se incluye**, bajo la carpeta `FAM_<clave_familia>` — idéntico al fallback que ya usa el módulo standalone. (Antes de corregirse, esas familias se descartaban en silencio del unificado, dando un conteo menor al de Caracterización Familiar individual sin que fuera por la deduplicación esperada.)
+
+**API:** `/soporte-unificado/extractions/...`, `/soporte-unificado/uploads` (Excel de vacunación), `/soporte-unificado/extractions/count` (preview con desglose `por_modulo`).
+
+**Permisos:** usa el mismo sistema de roles/módulos que el resto (`"soporte-unificado"` en `MODULOS_VALIDOS`) — un administrador debe habilitarlo explícitamente por usuario desde la gestión de usuarios, igual que cualquier otro módulo.
+
+---
+
 ## Vista de Inicio (Dashboard)
 
 Al loguearte aterrizás en la pestaña **Inicio** (no en un módulo específico). Muestra:
@@ -308,7 +340,26 @@ El nombre se sanitiza vía `safe_filename()` en `domain/models.py`:
 | **Excel** | openpyxl — solo módulo Vacunación |
 | **Persistencia jobs/users** | SQLite WAL — sobrevive reinicios |
 | **Auth** | bcrypt + cookie HMAC (multi-user, RBAC) |
-| **Frontend** | HTML + Tailwind CDN + Vanilla JS — SPA sin build step, sidebar lateral + Cmd+K palette |
+| **Frontend** | HTML + Tailwind (compilado localmente) + Vanilla JS — SPA sin build step en runtime, sidebar lateral + Cmd+K palette |
+
+---
+
+### Regenerar el CSS de Tailwind
+
+El frontend (`src/efdi/web/index.html`, `login.html`) **ya no** carga Tailwind desde `cdn.tailwindcss.com` (ese CDN compila en el navegador en cada carga — provoca un parpadeo sin estilos y depende de red externa; no apto para producción). En su lugar, el CSS se compila una sola vez a `src/efdi/web/dist/app.css` (estático, servido desde `/static/dist/app.css`) usando el **binario standalone de Tailwind CLI** (no requiere Node/npm).
+
+Solo hace falta regenerarlo cuando se agregan clases Tailwind nuevas al HTML:
+
+```bash
+# 1. Descargar el binario standalone (una vez; Windows x64 — ver releases de
+#    tailwindlabs/tailwindcss para otras plataformas)
+curl -sL -o tailwindcss.exe https://github.com/tailwindlabs/tailwindcss/releases/latest/download/tailwindcss-windows-x64.exe
+
+# 2. Compilar (desde la raíz del repo)
+./tailwindcss.exe -i src/efdi/web/tailwind-input.css -o src/efdi/web/dist/app.css --minify
+```
+
+`src/efdi/web/tailwind-input.css` define la paleta `brand` (antes vivía en un `tailwind.config` inline del CDN) y un **safelist** (`@source inline(...)`) para las pocas clases que el HTML arma dinámicamente en JS (ej. `bg-${m.color}-100`, que el escaneo estático no puede detectar como texto literal). Si se agrega un color de módulo nuevo a `MODULES` en `index.html`, hay que agregar sus shades al safelist de `tailwind-input.css` también.
 
 ---
 
@@ -568,6 +619,30 @@ curl -X POST -b cookie.txt \
   http://127.0.0.1:8765/educacion-grupal/extractions
 ```
 
+### Módulo Soporte Unificado
+
+Bajo el prefijo `/soporte-unificado/`. `regimen` es **obligatorio** (corrida separada por régimen); `numero_factura` es **opcional** (solo lo usan los módulos facturables dentro del universo). El conteo (`count`) devuelve además `por_modulo` (desglose) y `total_soportes` (cota superior de personas — ver nota de la respuesta).
+
+```
+POST   /soporte-unificado/uploads              Subir .xlsx de vacunación (opcional, multipart/form-data)
+GET    /soporte-unificado/extractions/count    Preview rápido por módulo, sin deduplicar
+POST   /soporte-unificado/extractions          Crear (1 job por régimen)
+GET    /soporte-unificado/extractions/...      Mismos endpoints de estado/lotes/descarga que los demás módulos
+```
+
+```bash
+# Conteo previo: régimen obligatorio, sin factura (no incluye los facturables)
+curl -b cookie.txt "http://127.0.0.1:8765/soporte-unificado/extractions/count?desde=2026-05-01&hasta=2026-05-31&regimen=SUBSIDIADO"
+# → {"total_soportes":...,"por_modulo":[{"modulo":"gestion-captacion","label":"Gestión Captación","soportes":...}, ...],
+#    "nota":"El total es cota superior de personas distintas; el número exacto se sabe al correr."}
+
+# Crear extracción incluyendo los módulos facturables (con factura) + Vacunación (con upload_id ya subido)
+curl -X POST -b cookie.txt \
+  -H "Content-Type: application/json" \
+  -d '{"desde":"2026-05-01","hasta":"2026-05-31","regimen":"SUBSIDIADO","numero_factura":"11502","upload_id":"<uuid del upload>"}' \
+  http://127.0.0.1:8765/soporte-unificado/extractions
+```
+
 ### Autenticación / Usuarios
 
 ```
@@ -699,7 +774,7 @@ D:\proyecto\
 ├── Dockerfile / docker-compose.yml     # Imagen siedfaser con ODBC Driver 17 preinstalado
 ├── tests/                              # Tests con pytest (ver sección Testing)
 └── src/efdi/
-    ├── main.py                         # FastAPI app — registra 7 routers + auth/users + dashboard
+    ├── main.py                         # FastAPI app — registra 8 routers + auth/users + dashboard
     ├── config.py                       # Settings desde .env (incluye DB_*_SIBACOM para Caracterización)
     ├── api/
     │   ├── dependencies.py             # Auth/RBAC: current_user, require_admin, require_modulo, …
@@ -710,6 +785,7 @@ D:\proyecto\
     │   ├── routes_vacunacion.py        # Endpoints Vacunación (incluye upload .xlsx)
     │   ├── routes_caracterizacion.py   # Endpoints Caracterización Familiar (sibacom)
     │   ├── routes_educacion_grupal.py  # Endpoints Educación Grupal
+    │   ├── routes_soporte_unificado.py # Endpoints Soporte Unificado (transversal, por afiliado)
     │   ├── routes_dashboard.py         # GET /api/dashboard/summary
     │   ├── routes_users.py             # /api/users — CRUD (solo ADMIN)
     │   ├── routes_me.py                # /api/me — perfil + cambiar password
@@ -750,13 +826,16 @@ D:\proyecto\
     │   ├── extraction_vacunacion.py    # Orquestador Vacunación
     │   ├── extraction_caracterizacion.py # Orquestador Caracterización Familiar
     │   ├── extraction_educacion_grupal.py # Orquestador Educación Grupal
+    │   ├── extraction_soporte_unificado.py # Orquestador transversal: reindexa los 8 módulos por afiliado
     │   └── auth_service.py             # bcrypt hash/verify + bootstrap admin + login
     ├── templates/
     │   ├── logo.png                    # Logo Mutualser (usado en headers de los PDFs)
     │   └── programas.txt               # 124 códigos + descripciones de programas DI
     └── web/
-        ├── index.html                  # SPA — sidebar + 7 módulos + Cmd+K + modales de usuarios
+        ├── index.html                  # SPA — sidebar + 8 módulos + Cmd+K + modales de usuarios
         ├── login.html                  # Pantalla de acceso
+        ├── tailwind-input.css          # Fuente del build de Tailwind (paleta brand + safelist)
+        ├── dist/app.css                # CSS de Tailwind compilado (ver "Regenerar el CSS de Tailwind")
         └── siedfaser_logo.png          # Logo del producto
 ```
 
@@ -797,6 +876,7 @@ asyncio_mode = "auto"     # tests async se marcan automáticamente
 | `tests/test_findrisc.py` (6) | Mock FINDRISC: cantidad, determinismo, offset, agrupación, generación PDF, filtro facturas. |
 | `tests/test_planfami.py` (5) | Mock PlanFami: cantidad, determinismo, agrupación por `(doc, fecha_gestion)`, PDF con `regimen_override`. |
 | `tests/test_auth_rbac.py` (23) | **Críticos del sistema multi-user**: bcrypt hash/verify, bootstrap admin con creds del `.env`, login válido/inválido, `GET /api/me` sin auth → 401, RBAC por módulo (403 sin permiso), viewer no puede POST, no-admin no puede `/api/users`, anti self-lockout del último admin, cambio password / reset password, password < 8 chars → 422, audit log captura `user.create` / `user.delete` y es admin-only. |
+| `tests/test_soporte_unificado.py` (5) | `_jefe_doc_key` ancla cada familia de Caracterización al mismo `doc_key` que usaría el módulo standalone, **incluyendo el caso de familias sin ningún integrante con documento** (antes se perdían del índice unificado en silencio; ahora usan el fallback `FAM_<clave>`). |
 
 ### Smoke tests rápidos sin pytest
 
@@ -853,6 +933,15 @@ tests/
 ├── test_vacunacion.py          # pendiente (smoke + parsing Excel)
 └── test_educacion_grupal.py    # pendiente (smoke + filtro régimen)
 ```
+
+`tests/test_soporte_unificado.py` cubre el bug de datos corregido (familias sin
+documento) a nivel unitario, pero **falta** cobertura de integración más amplia:
+- Endpoints de `routes_soporte_unificado.py` (count/crear/estado) via `TestClient`.
+- Comparar, con datos mock, `personas_por_modulo`/`soportes_por_modulo` del
+  unificado contra el `get_total()` individual de cada uno de los 8 módulos con
+  el mismo filtro — para detectar a futuro si un cambio en cualquier repositorio
+  rompe el unificado en silencio.
+- `CrearSoporteUnificadoReq` con `numero_factura` ausente (ya es opcional).
 
 ---
 

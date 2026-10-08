@@ -11,6 +11,7 @@ Flujo:
 """
 from __future__ import annotations
 
+import logging
 import math
 import shutil
 from datetime import date, datetime
@@ -19,6 +20,7 @@ from uuid import UUID, uuid4
 
 from fastapi import Depends, APIRouter, BackgroundTasks, File, HTTPException, UploadFile, status
 from efdi.api.dependencies import current_user, require_modulo, require_no_viewer
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
 
 from efdi.api.schemas import (
@@ -43,6 +45,8 @@ from efdi.infrastructure.repository_vacunacion import get_vacunacion_repository
 from efdi.services.extraction_vacunacion import ejecutar_extraccion_vacunacion
 
 router = APIRouter(prefix="/vacunacion", tags=["vacunacion"], dependencies=[Depends(require_modulo("vacunacion"))])
+
+log = logging.getLogger(__name__)
 
 
 # ─── Helpers ────────────────────────────────────────────────────────────────
@@ -99,7 +103,7 @@ async def subir_excel_vacunacion(
         size = dest.stat().st_size
 
         repo = get_vacunacion_repository()
-        resumen = repo.resumen(dest)
+        resumen = await run_in_threadpool(repo.resumen, dest)
         return VacunacionUploadResp(
             upload_id=upload_id,
             filename=file.filename,
@@ -114,7 +118,11 @@ async def subir_excel_vacunacion(
         raise HTTPException(status_code=422, detail=str(e)) from e
     except Exception as e:  # noqa: BLE001
         dest.unlink(missing_ok=True)
-        raise HTTPException(status_code=500, detail=f"Error procesando el Excel: {e}") from e
+        log.exception("vacunacion.upload_falló", extra={"filename": file.filename})
+        raise HTTPException(
+            status_code=500,
+            detail="No se pudo procesar el Excel. Verifica que el archivo no esté dañado o abierto en otro programa.",
+        ) from e
 
 
 @router.get(
@@ -127,7 +135,7 @@ async def obtener_upload_vacunacion(upload_id: UUID) -> VacunacionUploadResp:
     if not dest.exists():
         raise HTTPException(status_code=404, detail="Upload no encontrado")
     repo = get_vacunacion_repository()
-    resumen = repo.resumen(dest)
+    resumen = await run_in_threadpool(repo.resumen, dest)
     return VacunacionUploadResp(
         upload_id=upload_id,
         filename=dest.name,
@@ -178,7 +186,7 @@ async def crear_extraccion_vacunacion(
     repo = get_vacunacion_repository()
     jobs: list[ExtraccionResp] = []
     for regimen in req.regimenes:
-        total = repo.get_total(excel_path, regimen=regimen)
+        total = await run_in_threadpool(repo.get_total, excel_path, regimen=regimen)
         if total <= 0:
             # No hay filas para este régimen — saltamos sin error duro
             continue

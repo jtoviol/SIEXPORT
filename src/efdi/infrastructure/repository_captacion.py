@@ -5,6 +5,7 @@ from typing import Protocol
 
 from efdi.config import settings
 from efdi.domain.models import RegistroCaptacion, TipoDocumento
+from efdi.infrastructure.errors import RepositorioNoDisponibleError
 
 log = logging.getLogger(__name__)
 
@@ -421,8 +422,8 @@ class SqlServerCaptacionRepository:
     ) -> int:
         try:
             import pyodbc
-        except ImportError:
-            return 0
+        except ImportError as e:
+            raise RepositorioNoDisponibleError("Driver pyodbc no instalado") from e
         fecha_inicio, fecha_final = _fechas_dt(desde, hasta)
         sql = QUERY_CAPTACION_COUNT.format(
             factura_filter=_factura_filter_captacion(facturas),
@@ -440,9 +441,9 @@ class SqlServerCaptacionRepository:
                 cur.execute(sql, *params)
                 row = cur.fetchone()
                 return int(row[0]) if row else 0
-        except Exception:
+        except Exception as e:
             log.exception("captacion.get_total failed")
-            return 0
+            raise RepositorioNoDisponibleError("No se pudo consultar SQL Server") from e
 
 
 def get_captacion_repository() -> CaptacionRepository:

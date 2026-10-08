@@ -1,0 +1,27 @@
+@import "tailwindcss";
+
+@source "./index.html";
+@source "./login.html";
+
+/* Paleta de marca "brand" — antes se definía vía `tailwind.config.colors.brand`
+   en el <script> inline del Play CDN (index.html y login.html). En Tailwind
+   v4 el theme se declara en CSS. Unifica los shades de ambos archivos. */
+@theme {
+  --color-brand-50:  #eff5fb;
+  --color-brand-100: #dae6f3;
+  --color-brand-200: #b5d0e8;
+  --color-brand-300: #8cafd3;
+  --color-brand-400: #648fbd;
+  --color-brand-500: #3b6ea8;
+  --color-brand-600: #2e5786;
+  --color-brand-700: #234674;
+  --color-brand-800: #1a3960;
+  --color-brand-900: #13294a;
+}
+
+/* Safelist: estas clases Tailwind se arman dinámicamente en JS interpolando
+   el color de cada módulo (ej. `bg-${m.color}-100`), así que el escaneo
+   estático no las puede detectar como texto literal — hay que declararlas
+   a mano. Si se agrega un color nuevo a MODULES en index.html, agregarlo
+   también acá. */
+@source inline("{bg,text}-{brand,emerald,amber,rose,cyan,indigo,violet,teal}-{100,700}");

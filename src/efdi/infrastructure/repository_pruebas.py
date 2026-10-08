@@ -17,6 +17,7 @@ from typing import Protocol
 
 from efdi.config import settings
 from efdi.domain.models import RespuestaPruebaRapida, TipoDocumento
+from efdi.infrastructure.errors import RepositorioNoDisponibleError
 
 log = logging.getLogger(__name__)
 
@@ -411,8 +412,8 @@ class SqlServerPruebasRapidasRepository:
     def get_total(self, desde: date, hasta: date, facturas: list[str] | None = None) -> int:
         try:
             import pyodbc
-        except ImportError:
-            return 0
+        except ImportError as e:
+            raise RepositorioNoDisponibleError("Driver pyodbc no instalado") from e
         fecha_inicio, fecha_final = _fechas_dt(desde, hasta)
         sql = QUERY_PRUEBAS_COUNT.format(factura_filter=_factura_filter_pruebas(facturas))
         params: list = [fecha_inicio, fecha_final]
@@ -424,9 +425,9 @@ class SqlServerPruebasRapidasRepository:
                 cur.execute(sql, *params)
                 row = cur.fetchone()
                 return int(row[0]) if row else 0
-        except Exception:
+        except Exception as e:
             log.exception("pruebas.get_total failed")
-            return 0
+            raise RepositorioNoDisponibleError("No se pudo consultar SQL Server") from e
 
 
 def get_pruebas_repository() -> PruebasRapidasRepository:
