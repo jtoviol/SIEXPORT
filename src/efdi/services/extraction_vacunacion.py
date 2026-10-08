@@ -1,8 +1,7 @@
-"""Orquestador Vacunación: lotes → leer Excel → agrupar por afiliado → PDFs → zip.
+"""Orquestador Vacunación: lotes → consultar SQL Server → agrupar por afiliado → PDFs → zip.
 
-Mismo patrón que extraction_findrisc pero con dos diferencias:
-- Repository: lee `.xlsx` en vez de SQL Server. `excel_path` en el job.
-- Filtro régimen: viene del propio Excel (columna REGIMEN), no de AVS_REGISTROS_AP.
+Mismo patrón que extraction_educacion_grupal/extraction_captacion: filtro por
+fecha + régimen (AVS_AFILIADO_MUTUALSER_HIS.AFIC_REGIMEN), sin factura.
 """
 import logging
 import math
@@ -53,18 +52,14 @@ def _procesar_lote_vacunacion(
     store.save_lote(lote)
 
     try:
-        if not job.excel_path:
-            raise ValueError("job.excel_path es obligatorio en Vacunación")
-        excel_path = Path(job.excel_path)
-
-        lote.fase = "Leyendo Excel…"
+        lote.fase = "Consultando base de datos…"
         store.save_lote(lote)
         repo = get_vacunacion_repository()
         registros = repo.obtener_registros(
-            excel_path=excel_path,
-            regimen=job.regimen,
+            job.desde, job.hasta,
             limite=lote.tamano,
             offset=lote.offset_inicio,
+            regimen=job.regimen,
         )
         lote.total_atenciones = len(registros)
 

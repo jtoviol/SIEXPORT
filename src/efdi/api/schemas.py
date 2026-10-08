@@ -87,6 +87,8 @@ class ExtraccionResp(BaseModel):
     completado_en: datetime | None = None
     mensaje_error: str | None = None
     created_by_username: str | None = None
+    origen_job_id: UUID | None = None
+    resumen_json: str | None = None
 
 
 class RenombrarJobReq(BaseModel):
@@ -108,55 +110,6 @@ class ConteoFacturasResp(BaseModel):
     )
 
 
-# ─── Vacunación ──────────────────────────────────────────────────────────────
-
-
-class VacunacionUploadResp(BaseModel):
-    """Respuesta al subir el .xlsx — resumen para que la UI muestre el preview."""
-
-    upload_id: UUID
-    filename: str = Field(description="Nombre original del archivo subido")
-    size_bytes: int
-    total_filas: int
-    por_regimen: dict[str, int] = Field(
-        description="Filas por régimen: SUBSIDIADO / CONTRIBUTIVO / OTRO",
-    )
-    afiliados_por_regimen: dict[str, int] = Field(
-        description="Afiliados únicos por régimen (= PDFs estimados por régimen)",
-    )
-
-
-class CrearVacunacionReq(BaseModel):
-    """Crea uno o dos jobs (uno por régimen) a partir de un upload."""
-
-    upload_id: UUID = Field(description="UUID del .xlsx ya subido vía POST /vacunacion/uploads")
-    regimenes: list[str] = Field(
-        min_length=1,
-        description="Al menos uno: 'SUBSIDIADO' y/o 'CONTRIBUTIVO'. Cada uno lanza un job.",
-    )
-    nombre: str | None = Field(
-        default=None,
-        description="Nombre custom del job. Si no viene, se arma 'VACUNACION <regimen>'.",
-    )
-    tamano_lote: int | None = Field(
-        default=None, ge=1, le=50_000,
-        description="None=Auto según el total",
-    )
-
-    @model_validator(mode="after")
-    def validar_regimenes(self) -> "CrearVacunacionReq":
-        validos = {"SUBSIDIADO", "CONTRIBUTIVO"}
-        norm = []
-        for r in self.regimenes:
-            u = (r or "").strip().upper()
-            if u not in validos:
-                raise ValueError(f"regimen invalido '{r}'. Debe ser SUBSIDIADO o CONTRIBUTIVO")
-            if u not in norm:
-                norm.append(u)
-        self.regimenes = norm
-        return self
-
-
 # ─── Soporte Unificado ───────────────────────────────────────────────────────
 
 
@@ -176,10 +129,6 @@ class CrearSoporteUnificadoReq(BaseModel):
         ),
     )
     regimen: str = Field(description="SUBSIDIADO o CONTRIBUTIVO — corrida separada por régimen")
-    upload_id: UUID | None = Field(
-        default=None,
-        description="UUID de un .xlsx de vacunación ya subido (opcional). Si viene, incluye Vacunación.",
-    )
     tamano_lote: int | None = Field(
         default=None, ge=1, le=50_000,
         description="Afiliados por lote. None=default (1000).",
@@ -199,6 +148,28 @@ class CrearSoporteUnificadoReq(BaseModel):
             if n.startswith("CAB") or n.startswith("FAB"):
                 n = n[3:]
             self.numero_factura = n or None
+        return self
+
+
+class CrearAjusteSoportesReq(BaseModel):
+    """Fusiona y renombra los PDFs de un Soporte Unificado ya completado.
+
+    Régimen NO se pide: se hereda del job de origen (ya es fijo). La factura
+    SÍ es obligatoria acá — el frontend la pre-llena con la del job de origen
+    si existe, pero el usuario la confirma siempre (cambia cada mes)."""
+
+    numero_factura: str = Field(
+        description="Sufijo numérico de la factura (ej '11502'). Backend arma CABn+FABn.",
+    )
+
+    @model_validator(mode="after")
+    def _validar(self) -> "CrearAjusteSoportesReq":
+        n = (self.numero_factura or "").strip().upper()
+        if n.startswith("CAB") or n.startswith("FAB"):
+            n = n[3:]
+        if not n:
+            raise ValueError("numero_factura no puede ser vacío")
+        self.numero_factura = n
         return self
 
 

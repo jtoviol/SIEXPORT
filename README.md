@@ -38,7 +38,7 @@
 | FINDRISC | `SRG_FORMATO_FINDRISC` | `FLG_FORMATO_COLDRISC = 'SI'` + rango fechas | `/findrisc/...` |
 | Gestión Captación | `srg_captacion_afiliados` | rango `fec_captacion_afiliado` | `/gestion-captacion/...` |
 | Planificación Familiar | `SRG_POBLACION_RIESGO_REPRODUCTIVO` + `SRG_DETALLE_RIESGO_REPRODUCTIVO` | rango `fec_gestion_seguimiento` | `/planificacion-familiar/...` |
-| Vacunación | Excel `.xlsx` subido (sin SQL) | régimen del propio Excel | `/vacunacion/...` |
+| Vacunación | `AVS_REGISTRO_SERAGIL` + `AVS_PROGRAMA_ASOCIADO_DEMIND` (códigos de programa de vacunación) | rango fechas + régimen — sin factura | `/vacunacion/...` |
 | Caracterización Familiar | `SBW_PERSONA_CARACTERIZADA` + `SBW_UBICACION_FAMILIA` (**base sibacom**, servidor aparte) | rango `fecha_reg` — sin factura | `/caracterizacion-familiar/...` |
 | Educación Grupal | `SRG_EDUCACION_GRUPAL` + `SRG_ASISTENTE_EDUCACION_GRUPAL` | rango `fec_educacion_grupal` — sin factura | `/educacion-grupal/...` |
 
@@ -75,7 +75,7 @@ Para **FINDRISC**, **Captación**, **Planificación Familiar** y **Caracterizaci
 
 Demanda Inducida es distinto: tiene un catálogo fijo de 124 programas, y el PDF resalta los que la persona tiene asignados.
 
-**Vacunación** rompe el patrón: no consulta SQL sino que carga un Excel `.xlsx` con la data ya cocinada (mismo shape que la query de DI pero solo programas de vacunación). El usuario sube el archivo desde la UI con dropzone.
+**Vacunación** reutiliza la misma consulta base de Demanda Inducida, acotada a los códigos de programa de vacunación (`COD_PROGRAMA_DEMIND IN (...)`, esquema regular + COVID-19) y filtrada por régimen — igual que Captación/Educación Grupal, sin factura.
 
 ---
 
@@ -163,13 +163,13 @@ Extrae registros de `SRG_POBLACION_RIESGO_REPRODUCTIVO` + `SRG_DETALLE_RIESGO_RE
 
 ### Vacunación
 
-Único módulo que **no consulta SQL**: el usuario sube un Excel `.xlsx` con la data de aplicaciones de vacuna (mismo shape que la query de DI pero solo programas de vacunación). El backend lee con `openpyxl`, agrupa por afiliado (1 PDF por persona = carné de vacunas, no 1 por fecha) y empaqueta el ZIP.
+Consulta `AVS_REGISTRO_SERAGIL` + `AVS_PROGRAMA_ASOCIADO_DEMIND`, acotada a los códigos de programa de vacunación (esquema regular + COVID-19), igual que Demanda Inducida pero con otro filtro de programas. Agrupa por afiliado (1 PDF por persona = carné de vacunas, no 1 por fecha) y empaqueta el ZIP.
 
-- Filtro principal: **régimen** se lee del propio Excel (columna REGIMEN). El usuario marca SUB/CONT en la UI y se generan 1 o 2 jobs separados.
+- Filtro principal: **rango de fechas + régimen** (`AVS_AFILIADO_MUTUALSER_HIS.AFIC_REGIMEN`) — mismo patrón que Educación Grupal/Gestión Captación. El usuario solo elige régimen y fechas, no sube nada.
 - Sin factura (porque no cruza con `AVS_REGISTROS_AP`).
-- 1 PDF por persona con **todas sus vacunas** del Excel (formato carné).
+- 1 PDF por persona con **todas sus vacunas** del rango (formato carné).
 
-**Fuente:** archivo `.xlsx` subido vía `POST /vacunacion/uploads`.
+**Fuente:** SQL Server, filtro por fecha + régimen (sin Excel, sin factura).
 **API:** `/vacunacion/...`
 
 ### Caracterización Familiar
@@ -232,15 +232,36 @@ lote_001.zip
 **Universo** = unión de los 8 módulos: una persona entra al índice si aparece en **cualquiera** de ellos. El total de personas **nunca es la suma** de los conteos individuales — si alguien tiene soporte en 2 módulos, ahí cuenta 1 vez (deduplicado), mientras que cada módulo por separado la cuenta 1 vez cada uno. El endpoint de conteo previo lo advierte explícitamente (`"nota"` en la respuesta).
 
 **Filtro según el grupo de módulo** (fecha siempre obligatoria; régimen siempre obligatorio — corrida separada por régimen, igual que los demás módulos):
-- **Facturables** (Demanda Inducida, FINDRISC, Planificación Familiar, Pruebas Rápidas): además del régimen, aceptan un **número de factura opcional** (CAB/FAB). Sin factura, esos 4 módulos simplemente no aportan al universo.
-- **Régimen simple** (Gestión Captación, Educación Grupal) y **Caracterización Familiar**: solo fecha + régimen, nunca factura.
-- **Vacunación**: solo entra si se sube su Excel (opcional, mismo flujo que el módulo Vacunación standalone).
+- **Facturables** (Demanda Inducida, FINDRISC, Planificación Familiar, Pruebas Rápidas): el `regimen` del formulario **no los filtra** (sus repos ni siquiera reciben ese parámetro) — lo único que los filtra es el `numero_factura`, opcional. **Sin factura**: traen su universo **completo** del rango de fechas, mezclando ambos regímenes. **Con factura**: se filtran por `EXISTS ... NRO_FACTURA IN (CAB<n>, FAB<n>)` contra `AVS_REGISTROS_AP` — ambos prefijos siempre, sin importar qué régimen se eligió en el formulario (CAB y FAB son los dos lotes de facturación de una misma factura, uno por régimen).
+- **Régimen simple** (Gestión Captación, Educación Grupal, Vacunación) y **Caracterización Familiar**: solo fecha + régimen, nunca factura. Vacunación entra automáticamente por consulta SQL — no requiere ningún upload.
 
 **Caracterización Familiar se ancla al JEFE DE FAMILIA** (mismo criterio que el módulo individual): si nadie tiene parentesco "JEFE DE FAMILIA" explícito, cae al primer integrante con documento; si **nadie** en la familia tiene documento, la familia **igual se incluye**, bajo la carpeta `FAM_<clave_familia>` — idéntico al fallback que ya usa el módulo standalone. (Antes de corregirse, esas familias se descartaban en silencio del unificado, dando un conteo menor al de Caracterización Familiar individual sin que fuera por la deduplicación esperada.)
 
-**API:** `/soporte-unificado/extractions/...`, `/soporte-unificado/uploads` (Excel de vacunación), `/soporte-unificado/extractions/count` (preview con desglose `por_modulo`).
+**API:** `/soporte-unificado/extractions/...`, `/soporte-unificado/extractions/count` (preview con desglose `por_modulo`).
 
 **Permisos:** usa el mismo sistema de roles/módulos que el resto (`"soporte-unificado"` en `MODULOS_VALIDOS`) — un administrador debe habilitarlo explícitamente por usuario desde la gestión de usuarios, igual que cualquier otro módulo.
+
+#### Ajustar Soportes — fusionar en un solo PDF por afiliado
+
+Sobre un job de Soporte Unificado **ya completado**, el botón **"Ajustar soportes"** (panel derecho de detalle) dispara un segundo job que toma todos los PDF sueltos de cada afiliado y los fusiona en **un solo PDF**, renombrado para facturación:
+
+```
+HEV_900422757_<FACTURA>_<TIPODOC><NUMERODOC>.pdf
+```
+
+Reemplaza el uso manual de un script externo (`unificar_soportes.py`) que corría por fuera del sistema sobre los ZIP ya descargados — acá opera directo sobre los archivos que el propio backend generó, sin descargar ni descomprimir nada.
+
+- **Régimen**: no se pide — se hereda del job de origen (ya es fijo y obligatorio desde que se creó el Soporte Unificado).
+- **Factura**: se pide en el momento (pre-llenada con la del job de origen si tenía una, pero siempre editable — cambia cada mes).
+- **Identificador de afiliado**: se valida con el mismo criterio `^[A-Za-z]+_\d+$` sobre el `doc_key` que ya arma el sistema — excluye automáticamente carpetas `FAM_<clave>` (familias de Caracterización sin ningún integrante con documento) y documentos con número no puramente numérico (ej. menores sin documento propio, tipo `MS`). Nunca se pierde un afiliado en silencio: todo excluido queda en el resumen.
+- **PDF fuente corrupto/ilegible**: se salta ese archivo puntual y sigue con los demás del mismo afiliado; si *todos* los PDF de un afiliado fallan, no se genera nada para él (también reportado).
+- **Orden de fusión**: alfabético por nombre de archivo dentro de la carpeta del afiliado — como cada PDF ya se llama `<modulo>_<fecha_iso>.pdf` o `<modulo>.pdf`, esto agrupa por módulo y, dentro del mismo módulo, cronológicamente.
+- **Salida**: `job_<id>/lote_NNN/<REGIMEN>/HEV_900422757_<factura>_<tipo><numero>.pdf`, empaquetada en ZIP por lote igual que cualquier otro job — mismos endpoints de descarga (`/download`, `/files`, etc.) que Soporte Unificado, porque comparten tipo de almacenamiento.
+- **Resumen**: al completarse, el panel de detalle muestra PDF generados, páginas totales, excluidos por identificador (con ejemplos) y PDFs fuente con error de lectura — guardado en el campo `resumen_json` del job.
+
+**API:** `POST /soporte-unificado/extractions/{job_id}/ajuste-soportes` con `{"numero_factura": "..."}` — crea un job `tipo=ajuste_soportes` enlazado al `origen_job_id`. El resto de endpoints (`/{id}`, `/lotes`, `/download`, `/files`, etc.) son los mismos de Soporte Unificado — aceptan ambos tipos indistintamente.
+
+**Pendiente (deuda técnica):** no se replica la verificación "misma persona en los 2 regímenes" que sí hacía el script externo (exigiría comparar contra OTRO job de régimen distinto — fuera de alcance de esta fase).
 
 ---
 
@@ -337,7 +358,6 @@ El nombre se sanitiza vía `safe_filename()` en `domain/models.py`:
 | **PDF** | ReportLab (multiprocessing Pool) |
 | **DB clínica** | pyodbc — SQL Server (Seragil) via ODBC Driver 17 |
 | **DB caracterización** | pyodbc — SQL Server (sibacom, servidor aparte) |
-| **Excel** | openpyxl — solo módulo Vacunación |
 | **Persistencia jobs/users** | SQLite WAL — sobrevive reinicios |
 | **Auth** | bcrypt + cookie HMAC (multi-user, RBAC) |
 | **Frontend** | HTML + Tailwind (compilado localmente) + Vanilla JS — SPA sin build step en runtime, sidebar lateral + Cmd+K palette |
@@ -503,7 +523,7 @@ uvicorn efdi.main:app --host 0.0.0.0 --port 8765 --workers 4
    - **FINDRISC**
    - **Gestión Captación**
    - **Planificación Familiar**
-   - **Vacunación** — usa dropzone Excel, no SQL
+   - **Vacunación** — SQL, filtro por fecha + régimen (sin factura)
    - **Caracterización Familiar** — sibacom, 1 PDF por familia
    - **Educación Grupal** — sesiones educativas grupales
 5. Dentro de un módulo: clic en **Nueva extracción** → elegir rango de fechas → (opcional) régimen → Generar.
@@ -520,7 +540,7 @@ El badge superior derecho indica si la conexión es **SQL Server** o **Mock**.
 | DI, FINDRISC, Captación, PlanFami | Inputs CAB/FAB **requeridos** | Cruza contra `AVS_REGISTROS_AP`. El usuario ingresa el sufijo del código (ej. `11502`) y el backend arma `CAB11502` + `FAB11502`. Genera 1 o 2 jobs (uno por cada régimen ingresado). |
 | Caracterización Familiar | Checkboxes SUB/CONT **opcionales** | No usa factura. Filtra familias por el régimen del **JEFE DE FAMILIA** (ver sección del módulo). Sin marcar nada → trae el universo completo. |
 | Educación Grupal | Checkboxes SUB/CONT **opcionales** | Filtra sesiones por régimen del afiliado (`h.AFIC_REGIMEN`). Sin marcar nada → trae el universo completo. |
-| Vacunación | Checkboxes SUB/CONT **requeridos** | Régimen viene del propio Excel subido. |
+| Vacunación | Checkboxes SUB/CONT **opcionales** | Filtra por régimen del afiliado (`AFIC_REGIMEN`), igual que Educación Grupal. Sin marcar nada → trae el universo completo. |
 
 ---
 
@@ -579,12 +599,18 @@ Bajo el prefijo `/planificacion-familiar/`. Mismos 11 endpoints que FINDRISC.
 
 ### Módulo Vacunación
 
-Bajo el prefijo `/vacunacion/`. Mismos endpoints que FINDRISC + dos extras para el upload de Excel:
+Bajo el prefijo `/vacunacion/`. Mismos 11 endpoints que Educación Grupal. El `count` y `POST extractions` aceptan opcionalmente `regimen=SUBSIDIADO|CONTRIBUTIVO` que filtra por `AFIC_REGIMEN`.
 
-```
-POST   /vacunacion/uploads                     Subir .xlsx (multipart/form-data)
-GET    /vacunacion/uploads/{upload_id}         Preview: filas por régimen / afiliados únicos
-POST   /vacunacion/extractions                 Crear (1 o 2 jobs según régimenes marcados)
+```bash
+# Conteo previo filtrado por régimen
+curl -b cookie.txt "http://127.0.0.1:8765/vacunacion/extractions/count?desde=2026-05-01&hasta=2026-05-31&regimen=SUBSIDIADO"
+# → {"total_en_db":...,"limite_efectivo":...,"tamano_lote":...}
+
+# Crear extracción solo de vacunación subsidiada
+curl -X POST -b cookie.txt \
+  -H "Content-Type: application/json" \
+  -d '{"desde":"2026-05-01","hasta":"2026-05-31","regimen":"SUBSIDIADO"}' \
+  http://127.0.0.1:8765/vacunacion/extractions
 ```
 
 ### Módulo Caracterización Familiar
@@ -624,7 +650,6 @@ curl -X POST -b cookie.txt \
 Bajo el prefijo `/soporte-unificado/`. `regimen` es **obligatorio** (corrida separada por régimen); `numero_factura` es **opcional** (solo lo usan los módulos facturables dentro del universo). El conteo (`count`) devuelve además `por_modulo` (desglose) y `total_soportes` (cota superior de personas — ver nota de la respuesta).
 
 ```
-POST   /soporte-unificado/uploads              Subir .xlsx de vacunación (opcional, multipart/form-data)
 GET    /soporte-unificado/extractions/count    Preview rápido por módulo, sin deduplicar
 POST   /soporte-unificado/extractions          Crear (1 job por régimen)
 GET    /soporte-unificado/extractions/...      Mismos endpoints de estado/lotes/descarga que los demás módulos
@@ -636,11 +661,21 @@ curl -b cookie.txt "http://127.0.0.1:8765/soporte-unificado/extractions/count?de
 # → {"total_soportes":...,"por_modulo":[{"modulo":"gestion-captacion","label":"Gestión Captación","soportes":...}, ...],
 #    "nota":"El total es cota superior de personas distintas; el número exacto se sabe al correr."}
 
-# Crear extracción incluyendo los módulos facturables (con factura) + Vacunación (con upload_id ya subido)
+# Crear extracción incluyendo los módulos facturables (con factura) + Vacunación (automática, por régimen+fecha)
 curl -X POST -b cookie.txt \
   -H "Content-Type: application/json" \
-  -d '{"desde":"2026-05-01","hasta":"2026-05-31","regimen":"SUBSIDIADO","numero_factura":"11502","upload_id":"<uuid del upload>"}' \
+  -d '{"desde":"2026-05-01","hasta":"2026-05-31","regimen":"SUBSIDIADO","numero_factura":"11502"}' \
   http://127.0.0.1:8765/soporte-unificado/extractions
+
+# Ajustar Soportes: fusionar los PDFs de un Soporte Unificado YA COMPLETADO
+# (régimen se hereda del job de origen, no se pide de nuevo)
+curl -X POST -b cookie.txt \
+  -H "Content-Type: application/json" \
+  -d '{"numero_factura":"11502"}' \
+  http://127.0.0.1:8765/soporte-unificado/extractions/<job_id_del_soporte_unificado>/ajuste-soportes
+# → 202, nuevo job con tipo "ajuste_soportes" y origen_job_id=<job_id_del_soporte_unificado>
+# Al completarse, GET .../extractions/{nuevo_id} trae resumen_json con el detalle
+# (generados, excluidos_identificador, pdfs_fuente_error, paginas_totales, etc.)
 ```
 
 ### Autenticación / Usuarios
@@ -782,7 +817,7 @@ D:\proyecto\
     │   ├── routes_findrisc.py          # Endpoints FINDRISC
     │   ├── routes_captacion.py         # Endpoints Captación
     │   ├── routes_planfami.py          # Endpoints PlanFami
-    │   ├── routes_vacunacion.py        # Endpoints Vacunación (incluye upload .xlsx)
+    │   ├── routes_vacunacion.py        # Endpoints Vacunación (consulta SQL por régimen+fecha)
     │   ├── routes_caracterizacion.py   # Endpoints Caracterización Familiar (sibacom)
     │   ├── routes_educacion_grupal.py  # Endpoints Educación Grupal
     │   ├── routes_soporte_unificado.py # Endpoints Soporte Unificado (transversal, por afiliado)
@@ -805,7 +840,7 @@ D:\proyecto\
     │   ├── repository_findrisc.py      # Consulta FINDRISC
     │   ├── repository_captacion.py     # Consulta Captación
     │   ├── repository_planfami.py      # Consulta Planificación Familiar
-    │   ├── repository_vacunacion.py    # Lectura .xlsx de Vacunación
+    │   ├── repository_vacunacion.py    # Consulta Vacunación (SQL Server, filtro régimen+fecha)
     │   ├── repository_educacion_grupal.py # Consulta SRG_EDUCACION_GRUPAL + asistentes
     │   └── repository_caracterizacion.py  # Consulta sibacom — paginación por familia + filtro régimen jefe
     ├── pdf/
@@ -827,6 +862,7 @@ D:\proyecto\
     │   ├── extraction_caracterizacion.py # Orquestador Caracterización Familiar
     │   ├── extraction_educacion_grupal.py # Orquestador Educación Grupal
     │   ├── extraction_soporte_unificado.py # Orquestador transversal: reindexa los 8 módulos por afiliado
+    │   ├── extraction_ajuste_soportes.py # Fusiona los PDFs de un Soporte Unificado completado en 1 por afiliado
     │   └── auth_service.py             # bcrypt hash/verify + bootstrap admin + login
     ├── templates/
     │   ├── logo.png                    # Logo Mutualser (usado en headers de los PDFs)
@@ -877,6 +913,8 @@ asyncio_mode = "auto"     # tests async se marcan automáticamente
 | `tests/test_planfami.py` (5) | Mock PlanFami: cantidad, determinismo, agrupación por `(doc, fecha_gestion)`, PDF con `regimen_override`. |
 | `tests/test_auth_rbac.py` (23) | **Críticos del sistema multi-user**: bcrypt hash/verify, bootstrap admin con creds del `.env`, login válido/inválido, `GET /api/me` sin auth → 401, RBAC por módulo (403 sin permiso), viewer no puede POST, no-admin no puede `/api/users`, anti self-lockout del último admin, cambio password / reset password, password < 8 chars → 422, audit log captura `user.create` / `user.delete` y es admin-only. |
 | `tests/test_soporte_unificado.py` (5) | `_jefe_doc_key` ancla cada familia de Caracterización al mismo `doc_key` que usaría el módulo standalone, **incluyendo el caso de familias sin ningún integrante con documento** (antes se perdían del índice unificado en silencio; ahora usan el fallback `FAM_<clave>`). |
+| `tests/test_ajuste_soportes.py` (13) | Ajuste de Soportes: validación de identificador (`CC_...` válido, `FAM_...`/`MS_<alfanumérico>` excluidos), nombre de archivo final, fusión de PDFs con manejo de corruptos (se salta uno, sigue con el resto; si todos fallan no se escribe nada), y `recolectar_afiliados` separando válidos de excluidos sobre una estructura de carpetas real. |
+| `tests/test_vacunacion.py` (6) | Mock Vacunación (SQL por régimen+fecha, sin Excel): cantidad, determinismo, filtro por régimen, `get_total` con/sin régimen, agrupación por `doc_key` (1 carné por persona, sin separar por fecha), generación de PDF. |
 
 ### Smoke tests rápidos sin pytest
 
@@ -930,7 +968,6 @@ Cobertura actual buena en: DI, FINDRISC, PlanFami, Caracterización, auth/RBAC. 
 ```
 tests/
 ├── test_captacion.py           # pendiente (smoke como findrisc/planfami)
-├── test_vacunacion.py          # pendiente (smoke + parsing Excel)
 └── test_educacion_grupal.py    # pendiente (smoke + filtro régimen)
 ```
 

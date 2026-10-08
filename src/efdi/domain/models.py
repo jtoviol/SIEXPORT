@@ -227,6 +227,7 @@ class ExtraccionTipo(str, Enum):
     PRUEBAS_RAPIDAS = "pruebas_rapidas"
     EDUCACION_GRUPAL = "educacion_grupal"
     SOPORTE_UNIFICADO = "soporte_unificado"
+    AJUSTE_SOPORTES = "ajuste_soportes"
 
 
 # ─── Factores Clínicos del módulo Seguimiento Planificación Familiar ────────
@@ -889,6 +890,15 @@ class Extraccion(BaseModel):
     excel_path: str | None = Field(
         default=None,
         description="Ruta absoluta al .xlsx subido en data/uploads/vacunacion/<uuid>.xlsx",
+    )
+    # ── Ajuste de Soportes (fusión + renombrado de un Soporte Unificado) ──
+    origen_job_id: UUID | None = Field(
+        default=None,
+        description="Para tipo=ajuste_soportes: el job de Soporte Unificado ya completado del que se origina.",
+    )
+    resumen_json: str | None = Field(
+        default=None,
+        description="JSON con contadores de resumen (generados, excluidos, errores, etc.) — genérico, lo usa Ajuste de Soportes.",
     )
     estado: EstadoExtraccion = EstadoExtraccion.PENDING
     total_atenciones: int = 0

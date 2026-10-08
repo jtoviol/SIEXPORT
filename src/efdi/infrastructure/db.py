@@ -7,7 +7,7 @@ from threading import Lock
 
 from efdi.config import settings
 
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_version (version INTEGER PRIMARY KEY);
@@ -154,6 +154,18 @@ class Database:
                 "CREATE INDEX IF NOT EXISTS idx_audit_actor  ON audit_log(actor_username)",
                 "CREATE INDEX IF NOT EXISTS idx_audit_target ON audit_log(target_type, target_id)",
                 "CREATE INDEX IF NOT EXISTS idx_extracciones_creador ON extracciones(created_by_username)",
+            ):
+                try:
+                    conn.execute(ddl)
+                except Exception:
+                    pass
+        if current_version < 8:
+            # Ajuste de Soportes: origen_job_id enlaza el job de fusión con el
+            # Soporte Unificado del que viene; resumen_json guarda los contadores
+            # finales (genérico, nullable — jobs anteriores quedan en NULL).
+            for ddl in (
+                "ALTER TABLE extracciones ADD COLUMN origen_job_id TEXT",
+                "ALTER TABLE extracciones ADD COLUMN resumen_json TEXT",
             ):
                 try:
                     conn.execute(ddl)

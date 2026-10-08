@@ -1,64 +1,46 @@
-"""Repository de Vacunación — lee el Excel uploadeado, NO consulta SQL.
+"""Repository de Vacunación — consulta SQL Server (AVS_REGISTRO_SERAGIL +
+AVS_PROGRAMA_ASOCIADO_DEMIND filtrado por códigos de programa de vacunación).
 
-A diferencia de los otros 4 módulos, Vacunación no toca AVS_REGISTROS_SERAGIL.
-El operador sube un .xlsx con la estructura que ya vimos (32 columnas, mismo
-shape que la query DI pero solo programas de vacunación) y este repository lo
-parsea fila a fila.
+Antes este módulo leía un .xlsx subido a mano porque no había query conectada;
+ahora usa la misma consulta base de Demanda Inducida, acotada a los códigos de
+programa de vacunación (`COD_PROGRAMA_DEMIND IN (...)`, esquema regular +
+COVID-19) y filtrada por régimen igual que Captación/Educación Grupal — sin
+factura, porque Vacunación no se factura por CAB/FAB.
 
-El régimen viene en la columna `REGIMEN` del Excel — no hay cruce contra
-AVS_REGISTROS_AP ni se usa el filtro CAB/FAB.
+El régimen sale de `AVS_AFILIADO_MUTUALSER_HIS.AFIC_REGIMEN` (S/C/V), igual que
+los demás módulos de régimen simple.
 """
 from __future__ import annotations
 
 import logging
 from datetime import date, datetime
-from pathlib import Path
 from typing import Protocol
 
+from efdi.config import settings
 from efdi.domain.models import (
-    RegistroVacuna,
     Regimen,
+    RegistroVacuna,
     Sexo,
     TipoDocumento,
 )
+from efdi.infrastructure.errors import RepositorioNoDisponibleError
 
 log = logging.getLogger(__name__)
-
-
-# Columnas mínimas que el Excel DEBE tener. Si falta alguna, error explícito al
-# subir. Las demás son opcionales y se rellenan con None si no vienen.
-COLUMNAS_REQUERIDAS: set[str] = {
-    "SEQ_SERAGIL",
-    "REGIMEN",
-    "AFL_PRIMER_NOMBRE",
-    "AFL_PRIMER_APELLIDO",
-    "DES_TIPO_IDENTIFICACION",
-    "NRO_TIPO_IDENTIFICACION",
-    "DES_PROGRAMA_DEMIND",
-    "FEC_REGISTRO_INFORMACION",
-    "FEC_NACIMIENTO_PERSONA",
-    "VLR_EDAD_ACTUAL",
-    "DES_GENERO",
-}
 
 
 class VacunacionRepository(Protocol):
     """Contrato del repository."""
 
-    def get_total(self, excel_path: Path, regimen: str | None = None) -> int: ...
+    def get_total(self, desde: date, hasta: date, regimen: str | None = None) -> int: ...
 
     def obtener_registros(
-        self,
-        excel_path: Path,
+        self, desde: date, hasta: date, limite: int, offset: int = 0,
         regimen: str | None = None,
-        limite: int = 0,
-        offset: int = 0,
     ) -> list[RegistroVacuna]: ...
 
-    def resumen(self, excel_path: Path) -> dict: ...
 
-
-# ─── Helpers de normalización ───────────────────────────────────────────────
+# ─── Helpers de normalización (sin cambios respecto a la versión Excel —  ────
+# ─── el shape de columnas es el mismo, solo cambia la fuente de las filas) ───
 
 
 def _normalizar_sexo(des: str | None) -> Sexo:
@@ -141,37 +123,11 @@ def _int_or_none(v: object) -> int | None:
         return None
 
 
-# ─── Loader del Excel ───────────────────────────────────────────────────────
-
-
-def _open_workbook(excel_path: Path):
-    """Abre el .xlsx en modo read_only (no carga todo en memoria)."""
-    try:
-        from openpyxl import load_workbook
-    except ImportError as e:
-        raise RuntimeError(
-            "openpyxl no instalado. Instalar con: pip install '.[excel]'"
-        ) from e
-    return load_workbook(excel_path, read_only=True, data_only=True)
-
-
-def _validar_columnas(headers: list[str], excel_path: Path) -> dict[str, int]:
-    """Verifica que todas las columnas requeridas estén presentes.
-    Devuelve mapa {nombre_columna: indice}.
-    """
-    idx = {h: i for i, h in enumerate(headers) if h}
-    faltantes = COLUMNAS_REQUERIDAS - set(idx.keys())
-    if faltantes:
-        raise ValueError(
-            f"El Excel '{excel_path.name}' no tiene las columnas requeridas: "
-            f"{sorted(faltantes)}. Columnas presentes: {sorted(idx.keys())}"
-        )
-    return idx
-
-
-def _row_a_registro(row: tuple, idx: dict[str, int]) -> RegistroVacuna | None:
-    """Convierte una fila del Excel a RegistroVacuna. Devuelve None si la fila
-    es inválida (faltan campos críticos)."""
+def _row_a_registro(row, idx: dict[str, int]) -> RegistroVacuna | None:
+    """Convierte una fila (tupla indexable por posición, ej. de pyodbc) a
+    RegistroVacuna usando `idx` (nombre de columna -> posición). Devuelve None
+    si la fila es inválida (faltan campos críticos) — se descarta y se cuenta,
+    nunca se revienta el lote completo por una fila mala."""
 
     def g(col: str) -> object:
         i = idx.get(col)
@@ -221,145 +177,249 @@ def _row_a_registro(row: tuple, idx: dict[str, int]) -> RegistroVacuna | None:
         return None
 
 
-def _filtro_regimen_matchea(reg: Regimen | None, filtro: str | None) -> bool:
-    """`filtro` puede ser 'SUBSIDIADO', 'CONTRIBUTIVO' o None (sin filtro)."""
-    if not filtro:
-        return True
-    f = filtro.upper().strip()
-    if reg is None:
-        return False
-    return str(reg).upper() == f or reg.value.upper() == f
+# ─── SQL ──────────────────────────────────────────────────────────────────────
+
+# Códigos de programa de vacunación (esquema regular + COVID-19) — dados por
+# el área de Planeación/TIC, confirmados contra la consulta real en producción.
+_COD_PROGRAMAS_VACUNACION = (
+    "'01','02','03','04','05','06','07','08','09','10','89','90','91','92','93','94',"
+    "'95','96','97','98','99','A2','A3','A4','A5','A6',"
+    "'00','A1','B7'"
+)
+
+_FROM_JOINS = """
+FROM AVS_REGISTRO_SERAGIL AS B
+    INNER JOIN AVS_AFILIADO_MUTUALSER_HIS AS A ON (A.COD_TIPO_IDENTIFICACION = B.COD_TIPO_IDENTIFICACION_PERSONA
+        AND A.NRO_TIPO_IDENTIFICACION = B.NUM_TIPO_IDENTIFICACION_PERSONA)
+    LEFT JOIN AVS_CURSO_VIDA AS C ON B.COD_CURSO_VIDA_ASOCIADO = C.COD_CURSO_VIDA_ASOCIADO
+    LEFT JOIN AVS_DEPARTAMENTO AS D ON A.COD_DEPARTAMENTO = D.COD_DEPARTAMENTO
+    LEFT JOIN AVS_TIPO_IDENTIFICACION_USUARIO AS E ON A.COD_TIPO_IDENTIFICACION = E.COD_TIPO_IDENTIFICACION
+    LEFT JOIN AVS_GENERO AS F ON A.COD_GENERO = F.COD_GENERO
+    LEFT JOIN AVS_MUNICIPIO AS G ON A.COD_MUNICIPIO = G.COD_MUNICIPIO
+    LEFT JOIN AVS_PRESTADOR_SERVICIOS AS H ON B.COD_IPS_AQUESE_REMITE = H.COD_PRESTADOR_SERVICIOS
+    LEFT JOIN AVS_USUARIO_SISTEMA AS I ON B.SEQ_ENCUESTADOR_CARACTERIZACION = I.SEQ_USUARIO_SISTEMA
+    LEFT JOIN AVS_EVENTO_NOTIFICACION AS J ON B.COD_EVENTO_NOTIFICACION_REMITE = J.COD_EVENTO_NOTIFICACION
+    LEFT JOIN AVS_RIAS_GRUPO_RIESGO AS K ON B.COD_RIAS_GRUPO_RIESGO = K.COD_RIAS_GRUPO_RIESGO
+    LEFT JOIN AVS_REMITENTE_INICIAL AS L ON B.COD_TIPO_REMITENTE_INICIAL = L.COD_REMITENTE_INICIAL
+    LEFT JOIN AVS_CARGO_USUARIO AS M ON B.COD_CARGO_ENCUESTADOR = M.COD_CARGO_USUARIO
+    INNER JOIN AVS_PROGRAMA_ASOCIADO_DEMIND AS O ON O.SEQ_SERAGIL = B.SEQ_SERAGIL
+    INNER JOIN AVS_PROGRAMAS_DEMIND AS P ON O.COD_PROGRAMA_DEMIND = P.COD_PROGRAMA_DEMIND
+"""
 
 
-# ─── Implementación ─────────────────────────────────────────────────────────
+def _build_wheres(regimen: str | None) -> tuple[list[str], list]:
+    """Single source of truth del WHERE — compartido entre COUNT y FETCH
+    (evita que diverjan, mismo criterio que Educación Grupal/Captación)."""
+    wheres = [
+        "B.FLG_REGIND_DEMIND = 'SI'",
+        "B.FEC_REGISTRO_INFORMACION >= ?",
+        "B.FEC_REGISTRO_INFORMACION <= ?",
+    ]
+    params: list = []
+    if regimen:
+        wheres.append("A.AFIC_REGIMEN = ?")
+        params.append("S" if regimen.upper() == "SUBSIDIADO" else "C")
+    wheres.append(f"O.COD_PROGRAMA_DEMIND IN ({_COD_PROGRAMAS_VACUNACION})")
+    return wheres, params
 
 
-class ExcelVacunacionRepository:
-    """Lee del Excel uploadeado. NO mock — el flujo depende del archivo real."""
+def _build_count_sql(regimen: str | None) -> str:
+    wheres, _ = _build_wheres(regimen)
+    where_clause = "\n      AND ".join(wheres)
+    return f"SELECT COUNT(*) AS total {_FROM_JOINS} WHERE {where_clause}"
 
-    def resumen(self, excel_path: Path) -> dict:
-        """Cuenta filas y desglosa por régimen. Útil para el preview post-upload."""
-        if not excel_path.exists():
-            raise FileNotFoundError(f"Excel no encontrado: {excel_path}")
-        wb = _open_workbook(excel_path)
-        ws = wb[wb.sheetnames[0]]
-        headers_row = next(ws.iter_rows(values_only=True))
-        headers = [str(h).strip() if h else "" for h in headers_row]
-        idx = _validar_columnas(headers, excel_path)
 
-        total = 0
-        por_regimen: dict[str, int] = {"SUBSIDIADO": 0, "CONTRIBUTIVO": 0, "OTRO": 0}
-        afiliados_por_regimen: dict[str, set[str]] = {"SUBSIDIADO": set(), "CONTRIBUTIVO": set(), "OTRO": set()}
+def _build_query_sql(regimen: str | None) -> str:
+    wheres, _ = _build_wheres(regimen)
+    where_str = "\n      AND ".join(wheres)
+    return f"""
+WITH X AS (
+    SELECT ROW_NUMBER() OVER (
+               ORDER BY B.SEQ_ENCUESTADOR_CARACTERIZACION ASC, B.FEC_REGISTRO_INFORMACION DESC
+           ) AS NUM_REGISTRO,
+           A.COD_TIPO_IDENTIFICACION, A.NRO_TIPO_IDENTIFICACION, B.SEQ_SERAGIL,
+           A.AFL_PRIMER_NOMBRE, ISNULL(A.AFL_SEGUNDO_NOMBRE,'') AS AFL_SEGUNDO_NOMBRE,
+           ISNULL(A.AFL_PRIMER_APELLIDO,'') AS AFL_PRIMER_APELLIDO,
+           CONVERT(CHAR, B.FEC_REGISTRO_INFORMACION,23) AS FEC_REGISTRO_INFORMACION,
+           ISNULL(A.AFL_SEGUNDO_APELLIDO,'') AS AFL_SEGUNDO_APELLIDO,
+           A.COD_GENERO, A.COD_DEPARTAMENTO, A.COD_MUNICIPIO,
+           CONVERT(CHAR(10),B.FEC_NACIMIENTO_PERSONA) AS FEC_NACIMIENTO_PERSONA,
+           B.DES_DIRECCION_ACTUAL, A.ZONA_AFILIADO, B.DES_TELEFONO_UNO, B.DES_TELEFONO_DOS,
+           B.DES_CORREO_ELECTRONICO, B.COD_IPS_AQUESE_REMITE, B.SEQ_ENCUESTADOR_CARACTERIZACION,
+           ISNULL(E.DES_TIPO_IDENTIFICACION,'') AS DES_TIPO_IDENTIFICACION,
+           ISNULL(D.DES_DEPARTAMENTO,'') AS DES_DEPARTAMENTO,
+           ISNULL(G.DES_MUNICIPIO,'') AS DES_MUNICIPIO,
+           ISNULL(F.DES_GENERO,'') AS DES_GENERO, M.DES_CARGO_USUARIO,
+           ISNULL(C.DES_CURSO_VIDA_ASOCIADO,'') AS DES_CURSO_VIDA_ASOCIADO,
+           ISNULL(J.DES_EVENTO_NOTIFICACION,'') AS DES_EVENTO_NOTIFICACION,
+           B.FLG_NOTIFICACION_OBLIGATORIA, B.FLG_RECUPERACION_URGENCIAS,
+           B.FLG_RECUPERACION_CONSULTA_EXTERNA, B.DES_OTRO_REMITENTE_INICIAL,
+           ISNULL(K.DES_RIAS_GRUPO_RIESGO,'') AS DES_RIAS_GRUPO_RIESGO,
+           ISNULL(H.DES_PRESTADOR_SERVICIOS,'') AS DES_PRESTADOR_SERVICIOS,
+           ISNULL(B.DES_OTRA_RIAS_GRUPO_RIESGO,'') AS DES_OTRA_RIAS_GRUPO_RIESGO,
+           ISNULL(L.DES_REMITENTE_INICIAL,'') AS DES_REMITENTE_INICIAL,
+           REGIMEN = CASE
+                        WHEN A.AFIC_REGIMEN = 'C' THEN 'CONTRIBUTIVO'
+                        WHEN A.AFIC_REGIMEN = 'S' THEN 'SUBSIDIADO'
+                        WHEN A.AFIC_REGIMEN = 'V' THEN 'VINCULADO'
+                        ELSE '' END,
+           I.TXT_PRIMER_NOMBRE+' '+ISNULL(I.TXT_SEGUNDO_NOMBRE,'')+' '+ISNULL(I.TXT_PRIMER_APELLIDO,'')+' '+ISNULL(I.TXT_SEGUNDO_APELLIDO,'') AS ENCUESTADOR,
+           DATEDIFF(YEAR, B.FEC_NACIMIENTO_PERSONA, B.FEC_REGISTRO_INFORMACION) AS VLR_EDAD_ACTUAL,
+           DES_MODO_INGRESO = CASE
+                        WHEN B.FLG_MODO_INGRESO = 'CO' THEN 'COMUNIDAD'
+                        WHEN B.FLG_MODO_INGRESO = 'TE' THEN 'TELEFONICO'
+                        WHEN B.FLG_MODO_INGRESO = 'VI' THEN 'VIRTUAL'
+                        ELSE '' END,
+           O.COD_PROGRAMA_DEMIND, P.DES_PROGRAMA_DEMIND
+    {_FROM_JOINS}
+    WHERE {where_str}
+)
+SELECT X.SEQ_SERAGIL, X.DES_MODO_INGRESO, X.ENCUESTADOR, X.DES_CARGO_USUARIO, X.FEC_REGISTRO_INFORMACION,
+       X.DES_DEPARTAMENTO, X.DES_MUNICIPIO, X.REGIMEN, X.AFL_PRIMER_NOMBRE, X.AFL_SEGUNDO_NOMBRE,
+       X.AFL_PRIMER_APELLIDO, X.AFL_SEGUNDO_APELLIDO, X.DES_GENERO, X.FEC_NACIMIENTO_PERSONA, X.VLR_EDAD_ACTUAL,
+       X.DES_TIPO_IDENTIFICACION, X.NRO_TIPO_IDENTIFICACION, X.DES_DIRECCION_ACTUAL, X.ZONA_AFILIADO,
+       X.DES_TELEFONO_UNO, X.DES_TELEFONO_DOS, X.DES_CORREO_ELECTRONICO, X.DES_CURSO_VIDA_ASOCIADO,
+       X.DES_EVENTO_NOTIFICACION, X.FLG_NOTIFICACION_OBLIGATORIA, X.FLG_RECUPERACION_URGENCIAS,
+       X.FLG_RECUPERACION_CONSULTA_EXTERNA, X.DES_RIAS_GRUPO_RIESGO, X.DES_OTRA_RIAS_GRUPO_RIESGO,
+       X.DES_REMITENTE_INICIAL, X.DES_OTRO_REMITENTE_INICIAL, X.DES_PROGRAMA_DEMIND
+FROM X
+ORDER BY X.NUM_REGISTRO
+OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
+"""
 
-        col_reg = idx["REGIMEN"]
-        col_tipo_doc = idx["DES_TIPO_IDENTIFICACION"]
-        col_num_doc = idx["NRO_TIPO_IDENTIFICACION"]
 
-        for row in ws.iter_rows(min_row=2, values_only=True):
-            if not row or all(c is None for c in row):
-                continue
-            total += 1
-            reg_val = str(row[col_reg]).upper().strip() if col_reg < len(row) and row[col_reg] else ""
-            bucket = reg_val if reg_val in ("SUBSIDIADO", "CONTRIBUTIVO") else "OTRO"
-            por_regimen[bucket] += 1
-            tipo = row[col_tipo_doc] if col_tipo_doc < len(row) else None
-            num = row[col_num_doc] if col_num_doc < len(row) else None
-            if tipo and num:
-                afiliados_por_regimen[bucket].add(f"{tipo}|{num}")
+def _fechas_dt(desde: date, hasta: date) -> tuple[datetime, datetime]:
+    return (
+        datetime(desde.year, desde.month, desde.day, 0, 0, 0),
+        datetime(hasta.year, hasta.month, hasta.day, 23, 59, 59),
+    )
 
-        wb.close()
-        return {
-            "total_filas": total,
-            "por_regimen": {k: por_regimen[k] for k in ("SUBSIDIADO", "CONTRIBUTIVO", "OTRO")},
-            "afiliados_por_regimen": {
-                k: len(afiliados_por_regimen[k])
-                for k in ("SUBSIDIADO", "CONTRIBUTIVO", "OTRO")
-            },
-        }
 
-    def get_total(self, excel_path: Path, regimen: str | None = None) -> int:
-        """Cuenta filas-programa del Excel filtradas por régimen.
-        Es el `limite` que va a usar la paginación: misma unidad que devuelve
-        `obtener_registros`.
-        """
-        if not excel_path.exists():
-            return 0
-        wb = _open_workbook(excel_path)
-        ws = wb[wb.sheetnames[0]]
-        headers_row = next(ws.iter_rows(values_only=True))
-        headers = [str(h).strip() if h else "" for h in headers_row]
-        idx = _validar_columnas(headers, excel_path)
+# ─── Implementación SQL Server ────────────────────────────────────────────────
 
-        col_reg = idx["REGIMEN"]
-        filtro_upper = regimen.upper().strip() if regimen else None
-        total = 0
-        for row in ws.iter_rows(min_row=2, values_only=True):
-            if not row or all(c is None for c in row):
-                continue
-            if filtro_upper:
-                reg_val = str(row[col_reg]).upper().strip() if col_reg < len(row) and row[col_reg] else ""
-                if reg_val != filtro_upper:
-                    continue
-            total += 1
-        wb.close()
-        return total
+
+class SqlServerVacunacionRepository:
+    def get_total(self, desde: date, hasta: date, regimen: str | None = None) -> int:
+        try:
+            import pyodbc
+        except ImportError as e:
+            raise RepositorioNoDisponibleError("Driver pyodbc no instalado") from e
+        fecha_inicio, fecha_final = _fechas_dt(desde, hasta)
+        sql = _build_count_sql(regimen)
+        _, regimen_params = _build_wheres(regimen)
+        full_params = [fecha_inicio, fecha_final, *regimen_params]
+        try:
+            with pyodbc.connect(settings.db_dsn, timeout=30) as conn:
+                cur = conn.cursor()
+                cur.execute(sql, *full_params)
+                row = cur.fetchone()
+                return int(row[0]) if row else 0
+        except Exception as e:
+            log.exception("vacunacion.get_total failed")
+            raise RepositorioNoDisponibleError("No se pudo consultar SQL Server") from e
 
     def obtener_registros(
-        self,
-        excel_path: Path,
+        self, desde: date, hasta: date, limite: int, offset: int = 0,
         regimen: str | None = None,
-        limite: int = 0,
-        offset: int = 0,
     ) -> list[RegistroVacuna]:
-        """Devuelve hasta `limite` filas a partir de `offset`, ya filtradas por régimen.
-        Filas con datos incompletos se descartan silenciosamente (log warning).
-        """
-        if not excel_path.exists():
-            return []
-        wb = _open_workbook(excel_path)
-        ws = wb[wb.sheetnames[0]]
-        headers_row = next(ws.iter_rows(values_only=True))
-        headers = [str(h).strip() if h else "" for h in headers_row]
-        idx = _validar_columnas(headers, excel_path)
+        try:
+            import pyodbc
+        except ImportError as e:
+            raise RepositorioNoDisponibleError("Driver pyodbc no instalado") from e
 
-        col_reg = idx["REGIMEN"]
-        filtro_upper = regimen.upper().strip() if regimen else None
+        fecha_inicio, fecha_final = _fechas_dt(desde, hasta)
+        sql = _build_query_sql(regimen)
+        _, regimen_params = _build_wheres(regimen)
+        params: list = [fecha_inicio, fecha_final, *regimen_params, offset, limite]
+
+        log.info("vacunacion.query", extra={"desde": str(desde), "hasta": str(hasta),
+                                             "limite": limite, "offset": offset, "regimen": regimen})
+
+        with pyodbc.connect(settings.db_dsn, timeout=60) as conn:
+            cur = conn.cursor()
+            cur.execute(sql, *params)
+            cols = [c[0] for c in cur.description]
+            idx = {name: i for i, name in enumerate(cols)}
+            rows = cur.fetchall()
 
         registros: list[RegistroVacuna] = []
-        salteadas = 0
         descartadas = 0
-        for row in ws.iter_rows(min_row=2, values_only=True):
-            if not row or all(c is None for c in row):
-                continue
-            if filtro_upper:
-                reg_val = str(row[col_reg]).upper().strip() if col_reg < len(row) and row[col_reg] else ""
-                if reg_val != filtro_upper:
-                    continue
-            if salteadas < offset:
-                salteadas += 1
-                continue
-            if limite > 0 and len(registros) >= limite:
-                break
+        for row in rows:
             r = _row_a_registro(row, idx)
             if r is None:
                 descartadas += 1
                 continue
             registros.append(r)
 
-        wb.close()
-        log.info(
-            "vacunacion.fetched",
-            extra={
-                "rows": len(registros),
-                "descartadas": descartadas,
-                "regimen": regimen or "all",
-                "excel": str(excel_path),
-            },
-        )
+        log.info("vacunacion.fetched", extra={"rows": len(registros), "descartadas": descartadas})
+        return registros
+
+
+# ─── Mock ──────────────────────────────────────────────────────────────────────
+
+
+class MockVacunacionRepository:
+    """Datos ficticios para USE_MOCK=true — mismo patrón que los demás módulos
+    de régimen simple (MockEducacionGrupalRepository)."""
+
+    def get_total(self, desde: date, hasta: date, regimen: str | None = None) -> int:
+        base = 300
+        if regimen:
+            base = base // 2
+        return base
+
+    def obtener_registros(
+        self, desde: date, hasta: date, limite: int, offset: int = 0,
+        regimen: str | None = None,
+    ) -> list[RegistroVacuna]:
+        import random
+        from datetime import timedelta
+
+        nombres = ["LUIS", "MARIA", "PEDRO", "ANA", "CARLOS", "SOFIA", "JUAN", "ELENA"]
+        apellidos = ["GARCIA", "LOPEZ", "MARTINEZ", "RODRIGUEZ", "GONZALEZ"]
+        regimenes = ["SUBSIDIADO", "CONTRIBUTIVO", "SUBSIDIADO", "SUBSIDIADO"]
+        programas = ["VACUNACION VPH", "VACUNACION INFLUENZA", "VACUNACION COVID 19", "VACUNACION FIEBRE AMARILLA"]
+        deptos = ["BOLIVAR", "ATLANTICO", "CORDOBA", "SUCRE"]
+        municipios = ["CARTAGENA", "BARRANQUILLA", "MONTERIA", "SINCELEJO"]
+        modos = ["COMUNIDAD", "TELEFONICO", "VIRTUAL"]
+
+        registros: list[RegistroVacuna] = []
+        dias = max((hasta - desde).days, 0)
+        for i in range(limite):
+            seq = offset + i + 1
+            rng = random.Random(seq * 23)
+            reg = rng.choice(regimenes)
+            if regimen and reg != regimen.upper():
+                continue
+            fec_aplicacion = desde + timedelta(days=rng.randint(0, dias))
+            fec_nac = date(rng.randint(1950, 2023), rng.randint(1, 12), rng.randint(1, 28))
+            registros.append(RegistroVacuna(
+                seq_seragil=seq,
+                tipo_documento=TipoDocumento.CC,
+                num_documento=str(1_000_000_000 + seq),
+                tipo_identificacion_desc="CEDULA DE CIUDADANIA",
+                primer_nombre=rng.choice(nombres),
+                primer_apellido=rng.choice(apellidos),
+                segundo_apellido=rng.choice(apellidos),
+                sexo=rng.choice([Sexo.M, Sexo.F]),
+                edad=max(0, min(120, fec_aplicacion.year - fec_nac.year)),
+                fecha_nacimiento=fec_nac,
+                departamento=rng.choice(deptos),
+                municipio=rng.choice(municipios),
+                zona_afiliado=rng.choice([1, 2]),
+                regimen=_normalizar_regimen(reg),
+                fecha_aplicacion=fec_aplicacion,
+                programa=rng.choice(programas),
+                modo_ingreso=rng.choice(modos),
+                encuestador="ENCUESTADOR DE PRUEBA",
+                cargo_encuestador="AUXILIAR DE ENFERMERIA",
+            ))
         return registros
 
 
 def get_vacunacion_repository() -> VacunacionRepository:
-    """Por ahora solo hay implementación de Excel. No hay mock — para probar
-    el flujo, dejar un .xlsx de muestra en data/uploads/vacunacion/."""
-    return ExcelVacunacionRepository()
+    if settings.use_mock:
+        log.info("vacunacion repo: MOCK")
+        return MockVacunacionRepository()
+    log.info("vacunacion repo: SQL Server")
+    return SqlServerVacunacionRepository()

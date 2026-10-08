@@ -6,8 +6,8 @@ existentes y reindexa TODO por afiliado (`doc_key`).
 Filtro nativo de cada módulo (no se toca la lógica de ninguno):
 - Facturables (factura + su CIEX propio, vía repo): Demanda Inducida, FINDRISC,
   Planificación Familiar, Pruebas Rápidas, Gestión Captación.
-- Régimen (fecha + régimen): Caracterización Familiar, Educación Grupal.
-- Excel (upload + régimen): Vacunación (solo si se sube el .xlsx).
+- Régimen (fecha + régimen): Caracterización Familiar, Educación Grupal,
+  Vacunación (consulta SQL — ya no requiere Excel).
 
 Universo = unión de todos: una persona entra al índice si aparece en CUALQUIER
 módulo. Caracterización se ancla al JEFE de familia (parentesco = "JEFE DE
@@ -78,6 +78,7 @@ _FACTURABLES: list[tuple] = [
 _REGIMEN_SIMPLE: list[tuple] = [
     ("gestion-captacion", get_captacion_repository,        "obtener_registros", services.agrupar_por_afiliado_captacion),
     ("educacion-grupal",  get_educacion_grupal_repository, "obtener_registros", services.agrupar_por_afiliado_educacion_grupal),
+    ("vacunacion",        get_vacunacion_repository,       "obtener_registros", services.agrupar_por_afiliado_vacunacion),
 ]
 
 
@@ -149,7 +150,6 @@ def conteo_por_modulo(
     *,
     facturas: list[str] | None,
     regimen: str | None,
-    excel_path: Path | None = None,
 ) -> dict[str, int]:
     """Conteo RÁPIDO por módulo (solo COUNTs, sin traer filas ni deduplicar).
 
@@ -177,12 +177,6 @@ def conteo_por_modulo(
     except Exception:  # noqa: BLE001
         log.exception("soporte_unif.conteo_falló", extra={"modulo": "caracterizacion-familiar"})
         out["caracterizacion-familiar"] = 0
-    if excel_path is not None:
-        try:
-            out["vacunacion"] = get_vacunacion_repository().get_total(excel_path, regimen=regimen)
-        except Exception:  # noqa: BLE001
-            log.exception("soporte_unif.conteo_falló", extra={"modulo": "vacunacion"})
-            out["vacunacion"] = 0
     return out
 
 
@@ -212,7 +206,6 @@ def recolectar_universo(
     *,
     facturas: list[str] | None,
     regimen: str | None,
-    excel_path: Path | None = None,
 ) -> IndiceUnificado:
     """Recorre los 8 módulos con su filtro nativo y arma el índice por afiliado.
 
@@ -263,19 +256,6 @@ def recolectar_universo(
             log.info("soporte_unif.modulo", extra={"modulo": "caracterizacion-familiar", "familias": len(familias), "anclados": anclados})
     except Exception:  # noqa: BLE001
         log.exception("soporte_unif.modulo_falló", extra={"modulo": "caracterizacion-familiar"})
-
-    # ── Vacunación (solo si hay Excel) ────────────────────────────────────
-    if excel_path is not None:
-        try:
-            repo = get_vacunacion_repository()
-            total = repo.get_total(excel_path, regimen=regimen)
-            if total > 0:
-                filas = repo.obtener_registros(excel_path=excel_path, regimen=regimen, limite=total, offset=0)
-                for g in services.agrupar_por_afiliado_vacunacion(filas):
-                    idx.agregar(g.doc_key, "vacunacion", g, nombre=getattr(g, "nombre_completo", None))
-                log.info("soporte_unif.modulo", extra={"modulo": "vacunacion", "filas": len(filas)})
-        except Exception:  # noqa: BLE001
-            log.exception("soporte_unif.modulo_falló", extra={"modulo": "vacunacion"})
 
     log.info(
         "soporte_unif.universo",
@@ -351,10 +331,9 @@ def ejecutar_extraccion_soporte_unificado(job: Extraccion) -> None:
         store.save(job)
 
         # ── Fase A: recolectar el universo una sola vez ──
-        excel = Path(job.excel_path) if job.excel_path else None
         idx = recolectar_universo(
             job.desde, job.hasta,
-            facturas=job.facturas, regimen=job.regimen, excel_path=excel,
+            facturas=job.facturas, regimen=job.regimen,
         )
         personas = sorted(idx.personas.values(), key=lambda p: p.doc_key)
         n = len(personas)

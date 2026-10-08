@@ -1,34 +1,29 @@
 """Endpoints REST para el módulo Vacunación.
 
-A diferencia de los otros 4 módulos: NO hay consulta SQL. El operador sube un
-.xlsx, el archivo se guarda en data/uploads/vacunacion/<uuid>.xlsx, y los jobs
-de extracción leen del Excel filtrando por régimen.
+Consulta SQL Server (AVS_REGISTRO_SERAGIL + AVS_PROGRAMA_ASOCIADO_DEMIND
+filtrado por códigos de programa de vacunación) — filtro por fecha + régimen,
+sin factura. Mismo patrón que Educación Grupal/Gestión Captación.
 
-Flujo:
-1. POST /vacunacion/uploads  (multipart .xlsx)  →  upload_id + resumen
-2. POST /vacunacion/extractions  (upload_id, regimenes)  →  1 o 2 jobs
-3. GET .../{job_id}, .../lotes, .../download, etc. — igual a los otros módulos
+Antes este módulo requería subir un .xlsx porque no había query conectada;
+ese flujo (uploads, CrearVacunacionReq, VacunacionUploadResp) ya no existe.
 """
 from __future__ import annotations
 
 import logging
 import math
+import re
 import shutil
+from collections import defaultdict
 from datetime import date, datetime
 from pathlib import Path
 from uuid import UUID, uuid4
 
-from fastapi import Depends, APIRouter, BackgroundTasks, File, HTTPException, UploadFile, status
+from fastapi import Depends, APIRouter, BackgroundTasks, HTTPException, Query, status
 from efdi.api.dependencies import current_user, require_modulo, require_no_viewer
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
 
-from efdi.api.schemas import (
-    CrearVacunacionReq,
-    ExtraccionResp,
-    RenombrarJobReq,
-    VacunacionUploadResp,
-)
+from efdi.api.schemas import CrearExtraccionReq, ExtraccionResp, RenombrarJobReq
 from efdi.config import settings
 from efdi.domain.models import (
     EstadoExtraccion,
@@ -40,6 +35,7 @@ from efdi.domain.models import (
     estado_label,
     safe_filename,
 )
+from efdi.infrastructure.errors import RepositorioNoDisponibleError
 from efdi.infrastructure.job_store import store
 from efdi.infrastructure.repository_vacunacion import get_vacunacion_repository
 from efdi.services.extraction_vacunacion import ejecutar_extraccion_vacunacion
@@ -49,22 +45,7 @@ router = APIRouter(prefix="/vacunacion", tags=["vacunacion"], dependencies=[Depe
 log = logging.getLogger(__name__)
 
 
-# ─── Helpers ────────────────────────────────────────────────────────────────
-
-
-def _uploads_dir() -> Path:
-    """Directorio donde se guardan los .xlsx subidos."""
-    d = settings.data_dir / "uploads" / "vacunacion"
-    d.mkdir(parents=True, exist_ok=True)
-    return d
-
-
-def _excel_path_for(upload_id: UUID) -> Path:
-    return _uploads_dir() / f"{upload_id}.xlsx"
-
-
 def _auto_tamano_lote(limite: int) -> int:
-    """Misma curva que los otros módulos — coherencia operativa."""
     if limite <= 50:      return limite
     if limite <= 500:     return max(1, limite // 5)
     if limite <= 5_000:   return 500
@@ -74,152 +55,102 @@ def _auto_tamano_lote(limite: int) -> int:
     return 12_000
 
 
-# ─── Upload ─────────────────────────────────────────────────────────────────
-
-
-@router.post(
-    "/uploads",
-    response_model=VacunacionUploadResp,
-    status_code=status.HTTP_201_CREATED,
-    summary="Subir un .xlsx con datos de vacunación",
-    dependencies=[Depends(require_no_viewer)],
-)
-async def subir_excel_vacunacion(
-    file: UploadFile = File(..., description="Archivo .xlsx exportado del sistema"),
-) -> VacunacionUploadResp:
-    """Recibe el .xlsx vía multipart, lo guarda en data/uploads/vacunacion/<uuid>.xlsx
-    y devuelve un resumen (filas totales, distribución por régimen, afiliados únicos)."""
-    if not file.filename or not file.filename.lower().endswith(".xlsx"):
-        raise HTTPException(
-            status_code=400,
-            detail="Solo se acepta .xlsx (Excel moderno). Convertí si el archivo es .xls o .csv.",
-        )
-
-    upload_id = uuid4()
-    dest = _excel_path_for(upload_id)
-    try:
-        with dest.open("wb") as out:
-            shutil.copyfileobj(file.file, out)
-        size = dest.stat().st_size
-
-        repo = get_vacunacion_repository()
-        resumen = await run_in_threadpool(repo.resumen, dest)
-        return VacunacionUploadResp(
-            upload_id=upload_id,
-            filename=file.filename,
-            size_bytes=size,
-            total_filas=resumen["total_filas"],
-            por_regimen=resumen["por_regimen"],
-            afiliados_por_regimen=resumen["afiliados_por_regimen"],
-        )
-    except ValueError as e:
-        # Falta de columnas requeridas u otro error de validación: borrar el archivo
-        dest.unlink(missing_ok=True)
-        raise HTTPException(status_code=422, detail=str(e)) from e
-    except Exception as e:  # noqa: BLE001
-        dest.unlink(missing_ok=True)
-        log.exception("vacunacion.upload_falló", extra={"filename": file.filename})
-        raise HTTPException(
-            status_code=500,
-            detail="No se pudo procesar el Excel. Verifica que el archivo no esté dañado o abierto en otro programa.",
-        ) from e
-
-
 @router.get(
-    "/uploads/{upload_id}",
-    response_model=VacunacionUploadResp,
-    summary="Resumen de un upload existente",
+    "/extractions/count",
+    summary="Conteo previo de registros de Vacunación para un rango de fechas",
 )
-async def obtener_upload_vacunacion(upload_id: UUID) -> VacunacionUploadResp:
-    dest = _excel_path_for(upload_id)
-    if not dest.exists():
-        raise HTTPException(status_code=404, detail="Upload no encontrado")
+async def contar_registros_vacunacion(
+    desde: date = Query(...),
+    hasta: date = Query(...),
+    regimen: str | None = Query(None, description="SUBSIDIADO o CONTRIBUTIVO"),
+) -> dict:
+    if hasta < desde:
+        raise HTTPException(status_code=400, detail="hasta debe ser >= desde")
+    if regimen:
+        r = regimen.strip().upper()
+        if r not in ("SUBSIDIADO", "CONTRIBUTIVO"):
+            raise HTTPException(status_code=400, detail="regimen debe ser SUBSIDIADO o CONTRIBUTIVO")
+        regimen = r
     repo = get_vacunacion_repository()
-    resumen = await run_in_threadpool(repo.resumen, dest)
-    return VacunacionUploadResp(
-        upload_id=upload_id,
-        filename=dest.name,
-        size_bytes=dest.stat().st_size,
-        total_filas=resumen["total_filas"],
-        por_regimen=resumen["por_regimen"],
-        afiliados_por_regimen=resumen["afiliados_por_regimen"],
-    )
-
-
-@router.delete(
-    "/uploads/{upload_id}",
-    summary="Borrar un upload (libera disco)",
-    dependencies=[Depends(require_no_viewer)],
-)
-async def borrar_upload_vacunacion(upload_id: UUID) -> dict:
-    dest = _excel_path_for(upload_id)
-    if not dest.exists():
-        raise HTTPException(status_code=404, detail="Upload no encontrado")
-    dest.unlink()
-    return {"upload_id": str(upload_id), "borrado": True}
-
-
-# ─── Extracciones ───────────────────────────────────────────────────────────
+    try:
+        total = await run_in_threadpool(repo.get_total, desde, hasta, regimen=regimen)
+    except RepositorioNoDisponibleError as e:
+        raise HTTPException(
+            status_code=503,
+            detail="No se pudo conectar a la base de datos. Verifica la conexión/VPN e intenta de nuevo.",
+        ) from e
+    if total <= 0:
+        return {"total_en_db": 0, "limite_efectivo": 0, "tamano_lote": 0, "lotes_estimados": 0, "capeado": False}
+    limite_efectivo = total
+    tamano = _auto_tamano_lote(limite_efectivo)
+    lotes = math.ceil(limite_efectivo / tamano)
+    return {
+        "total_en_db": total,
+        "limite_efectivo": limite_efectivo,
+        "tamano_lote": tamano,
+        "lotes_estimados": lotes,
+        "capeado": False,
+    }
 
 
 @router.post(
     "/extractions",
-    response_model=list[ExtraccionResp],
+    response_model=ExtraccionResp,
     status_code=status.HTTP_202_ACCEPTED,
-    summary="Crear 1 o 2 jobs (uno por régimen) sobre un upload",
+    summary="Crear extracción de PDFs de Vacunación",
     dependencies=[Depends(require_no_viewer)],
 )
 async def crear_extraccion_vacunacion(
-    req: CrearVacunacionReq,
+    req: CrearExtraccionReq,
     background: BackgroundTasks,
     current: User = Depends(current_user),
-) -> list[ExtraccionResp]:
-    """Crea 1 job por cada régimen en `req.regimenes` (uno o ambos). Cada job
-    procesa el mismo Excel filtrando por su régimen."""
-    excel_path = _excel_path_for(req.upload_id)
-    if not excel_path.exists():
-        raise HTTPException(
-            status_code=404,
-            detail=f"Upload {req.upload_id} no existe. Subí primero el .xlsx.",
-        )
+) -> ExtraccionResp:
+    regimen: str | None = None
+    if req.regimen:
+        r = req.regimen.strip().upper()
+        if r not in ("SUBSIDIADO", "CONTRIBUTIVO"):
+            raise HTTPException(status_code=400, detail="regimen debe ser SUBSIDIADO o CONTRIBUTIVO")
+        regimen = r
 
-    repo = get_vacunacion_repository()
-    jobs: list[ExtraccionResp] = []
-    for regimen in req.regimenes:
-        total = await run_in_threadpool(repo.get_total, excel_path, regimen=regimen)
+    limite = req.limite
+    if limite is None:
+        repo = get_vacunacion_repository()
+        try:
+            total = await run_in_threadpool(repo.get_total, req.desde, req.hasta, regimen=regimen)
+        except RepositorioNoDisponibleError as e:
+            raise HTTPException(
+                status_code=503,
+                detail="No se pudo conectar a la base de datos. Verifica la conexión/VPN e intenta de nuevo.",
+            ) from e
         if total <= 0:
-            # No hay filas para este régimen — saltamos sin error duro
-            continue
-        tamano_lote = req.tamano_lote or _auto_tamano_lote(total)
-        nombre_default = req.nombre or f"VACUNACION · {regimen}"
-        hoy = date.today()
-        job = Extraccion(
-            id=uuid4(),
-            # `desde`/`hasta` son obligatorios en el modelo Extraccion (ge=1 en limite),
-            # pero no aplican a Vacunación. Usamos la fecha de hoy como placeholder
-            # para no tocar el modelo común; el servicio NO los usa.
-            desde=hoy,
-            hasta=hoy,
-            limite=total,
-            tamano_lote=tamano_lote,
-            tipo=ExtraccionTipo.VACUNACION,
-            modo_pdf=ModoPdf.UNO_POR_ATENCION,
-            nombre=nombre_default,
-            regimen=regimen,
-            excel_path=str(excel_path),
-            creado_en=datetime.now(),
-            created_by_username=current.username,
-        )
-        store.save(job)
-        background.add_task(ejecutar_extraccion_vacunacion, job)
-        jobs.append(ExtraccionResp(**job.model_dump()))
+            raise HTTPException(
+                status_code=400,
+                detail="No se encontraron registros de Vacunación para el rango indicado.",
+            )
+        limite = total
 
-    if not jobs:
-        raise HTTPException(
-            status_code=400,
-            detail="El Excel no tiene filas para los regímenes solicitados.",
-        )
-    return jobs
+    tamano_lote = req.tamano_lote or _auto_tamano_lote(limite)
+
+    nombre_base = f"Vacunación {req.desde}—{req.hasta}"
+    if regimen:
+        nombre_base += f" · {regimen}"
+
+    job = Extraccion(
+        id=uuid4(),
+        desde=req.desde,
+        hasta=req.hasta,
+        limite=limite,
+        tamano_lote=tamano_lote,
+        tipo=ExtraccionTipo.VACUNACION,
+        modo_pdf=ModoPdf.UNO_POR_ATENCION,
+        nombre=nombre_base,
+        regimen=regimen,
+        creado_en=datetime.now(),
+        created_by_username=current.username,
+    )
+    store.save(job)
+    background.add_task(ejecutar_extraccion_vacunacion, job)
+    return ExtraccionResp(**job.model_dump())
 
 
 @router.get(
@@ -401,8 +332,6 @@ async def listar_archivos_vacunacion(job_id: UUID) -> dict:
     if not job_dir.exists():
         raise HTTPException(status_code=410, detail="Directorio no disponible")
 
-    import re
-    from collections import defaultdict
     agrupado: dict[str, list[dict]] = defaultdict(list)
     for pdf in job_dir.rglob("*.pdf"):
         nombre = pdf.stem

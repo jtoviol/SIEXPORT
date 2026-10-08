@@ -933,54 +933,38 @@
             </label>
             <div class="flex gap-3">
               <label class="flex items-center gap-1.5 cursor-pointer text-xs text-slate-700">
-                <input type="radio" name="su-regimen" id="su-regimen-sub" value="SUBSIDIADO" onchange="fetchAutoPreview()" class="accent-brand-600 h-4 w-4">
+                <input type="radio" name="su-regimen" id="su-regimen-sub" value="SUBSIDIADO" onchange="onSuRegimenChange()" class="accent-brand-600 h-4 w-4">
                 <span class="font-semibold uppercase tracking-wide">Subsidiado</span>
               </label>
               <label class="flex items-center gap-1.5 cursor-pointer text-xs text-slate-700">
-                <input type="radio" name="su-regimen" id="su-regimen-cont" value="CONTRIBUTIVO" onchange="fetchAutoPreview()" class="accent-brand-600 h-4 w-4">
+                <input type="radio" name="su-regimen" id="su-regimen-cont" value="CONTRIBUTIVO" onchange="onSuRegimenChange()" class="accent-brand-600 h-4 w-4">
                 <span class="font-semibold uppercase tracking-wide">Contributivo</span>
               </label>
             </div>
-            <div>
+            <!-- Un campo de factura POR régimen — cada uno recuerda su propio número,
+                 porque en la operación real cada régimen factura con un número distinto
+                 (ej. 13100 subsidiado, 13101 contributivo). Antes era un solo campo
+                 compartido: al cambiar de régimen sin volver a escribir, se quedaba el
+                 número del régimen anterior y el preview comparaba mal. -->
+            <div id="su-factura-sub-wrap" class="hidden">
               <label class="text-xs font-medium text-slate-500 block mb-1">
-                Número de factura
+                Número de factura (Subsidiado)
                 <span class="text-[10px] text-slate-400 font-normal">(opcional · solo aplica a los módulos facturables)</span>
               </label>
-              <input id="su-numero-factura" type="text" maxlength="20" placeholder="ej: 11502" autocomplete="off"
+              <input id="su-numero-factura-sub" type="text" maxlength="20" placeholder="ej: 11502" autocomplete="off"
                      oninput="fetchAutoPreview()"
                      class="w-full h-7 px-2 rounded-md border border-slate-300 text-xs font-mono bg-white
                             outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500"/>
             </div>
-          </div>
-          <!-- Excel de vacunación OPCIONAL (solo Soporte Unificado) -->
-          <div id="su-excel-section" class="hidden border-t border-slate-200 pt-2.5">
-            <label class="text-xs font-medium text-slate-500 block mb-1.5">
-              Excel de vacunación
-              <span class="text-[10px] text-slate-400 font-normal">(opcional · incluye Vacunación en el soporte)</span>
-            </label>
-            <div id="su-dropzone"
-                 class="relative border-2 border-dashed border-slate-300 rounded-md p-3 text-center
-                        cursor-pointer hover:border-brand-500 hover:bg-brand-50/50 transition-colors">
-              <input id="su-file-input" type="file" accept=".xlsx"
-                     class="absolute inset-0 w-full h-full opacity-0 cursor-pointer"/>
-              <div id="su-dz-idle">
-                <p class="text-xs text-slate-600 font-medium">Arrastrá el .xlsx o clic para elegir</p>
-                <p class="text-[10px] text-slate-400 mt-0.5">Sin Excel, la corrida sale sin Vacunación</p>
-              </div>
-              <div id="su-dz-uploading" class="hidden">
-                <p class="text-xs text-slate-600 font-medium">Subiendo y analizando…</p>
-              </div>
-              <div id="su-dz-ready" class="hidden text-left">
-                <div class="flex items-center gap-2">
-                  <svg class="h-4 w-4 text-emerald-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                  </svg>
-                  <span id="su-file-name" class="text-xs font-semibold text-slate-700 truncate"></span>
-                  <span id="su-stat-filas" class="text-[10px] text-slate-400 tabular-nums"></span>
-                  <button type="button" onclick="suResetUpload()"
-                          class="ml-auto text-[10px] text-slate-400 hover:text-red-500 px-1 rounded">Quitar</button>
-                </div>
-              </div>
+            <div id="su-factura-cont-wrap" class="hidden">
+              <label class="text-xs font-medium text-slate-500 block mb-1">
+                Número de factura (Contributivo)
+                <span class="text-[10px] text-slate-400 font-normal">(opcional · solo aplica a los módulos facturables)</span>
+              </label>
+              <input id="su-numero-factura-cont" type="text" maxlength="20" placeholder="ej: 11502" autocomplete="off"
+                     oninput="fetchAutoPreview()"
+                     class="w-full h-7 px-2 rounded-md border border-slate-300 text-xs font-mono bg-white
+                            outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500"/>
             </div>
           </div>
           <!-- 2. Rango de fechas (siempre requeridas; con factura se autocompletan al mes anterior) -->
@@ -1043,108 +1027,6 @@
             <span class="blbl">Generar</span>
           </button>
         </form>
-      </div>
-    </div>
-
-    <!-- ═══ FORM Vacunación (visible solo en tab vacunacion) ═══ -->
-    <div id="vacunacion-form-wrap" class="hidden">
-      <div class="px-3 pb-3 space-y-2.5 border-b border-slate-200 bg-slate-50">
-        <div class="pt-0.5">
-          <label class="text-xs font-medium text-slate-500 block mb-1.5">
-            1. Subir Excel <span class="text-red-500">*</span>
-            <span class="text-[10px] text-slate-400 font-normal">(.xlsx con datos de vacunación)</span>
-          </label>
-          <!-- Dropzone -->
-          <div id="vac-dropzone"
-               class="relative border-2 border-dashed border-slate-300 rounded-md
-                      p-4 text-center cursor-pointer hover:border-cyan-500
-                      hover:bg-cyan-50/50 transition-colors">
-            <input id="vac-file-input" type="file" accept=".xlsx"
-                   class="absolute inset-0 w-full h-full opacity-0 cursor-pointer"/>
-            <div id="vac-dz-idle">
-              <svg class="h-7 w-7 mx-auto mb-1 text-slate-400" fill="none"
-                   viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
-                <path stroke-linecap="round" stroke-linejoin="round"
-                      d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
-              </svg>
-              <p class="text-xs text-slate-600 font-medium">
-                Arrastrá el .xlsx acá o clic para elegir
-              </p>
-              <p class="text-[10px] text-slate-400 mt-0.5">Solo Excel moderno (.xlsx)</p>
-            </div>
-            <div id="vac-dz-uploading" class="hidden">
-              <svg class="h-7 w-7 mx-auto mb-1 text-cyan-500 animate-spin" fill="none"
-                   viewBox="0 0 24 24">
-                <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" opacity="0.25"></circle>
-                <path fill="currentColor"
-                      d="M4 12a8 8 0 018-8v3l4-4-4-4v3a9 9 0 100 18v-3l-4 4 4 4v-3a8 8 0 01-8-8z"/>
-              </svg>
-              <p class="text-xs text-slate-600 font-medium">Subiendo y analizando…</p>
-            </div>
-            <div id="vac-dz-ready" class="hidden text-left">
-              <div class="flex items-center gap-2 mb-1.5">
-                <svg class="h-5 w-5 text-emerald-500 shrink-0" fill="none"
-                     viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                  <path stroke-linecap="round" stroke-linejoin="round"
-                        d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                </svg>
-                <span id="vac-file-name" class="text-xs font-semibold text-slate-700 truncate"></span>
-                <button type="button" onclick="vacResetUpload()"
-                        class="ml-auto text-[10px] text-slate-400 hover:text-red-500 px-1 rounded">
-                  Cambiar
-                </button>
-              </div>
-              <div class="grid grid-cols-3 gap-1.5 text-center">
-                <div class="bg-white rounded p-1.5 border border-slate-200">
-                  <div class="text-[9px] uppercase text-slate-400">Filas</div>
-                  <div id="vac-stat-filas" class="text-xs font-bold text-slate-700 tabular-nums">—</div>
-                </div>
-                <div class="bg-white rounded p-1.5 border border-slate-200">
-                  <div class="text-[9px] uppercase text-slate-400">SUB</div>
-                  <div id="vac-stat-sub" class="text-xs font-bold text-cyan-700 tabular-nums">—</div>
-                </div>
-                <div class="bg-white rounded p-1.5 border border-slate-200">
-                  <div class="text-[9px] uppercase text-slate-400">CONT</div>
-                  <div id="vac-stat-cont" class="text-xs font-bold text-cyan-700 tabular-nums">—</div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div id="vac-regimen-section" class="border-t border-slate-200 pt-2.5 hidden">
-          <label class="text-xs font-medium text-slate-500 block mb-1.5">
-            2. Régimen <span class="text-red-500">*</span>
-            <span class="text-[10px] text-slate-400 font-normal">(elegí uno o ambos)</span>
-          </label>
-          <div class="grid grid-cols-2 gap-1.5">
-            <label class="flex items-center gap-2 px-2 py-1.5 rounded-md border border-slate-300
-                          bg-white cursor-pointer hover:border-cyan-400 transition-colors text-xs">
-              <input id="vac-cb-sub" type="checkbox" checked class="accent-cyan-600 h-3.5 w-3.5"/>
-              <span class="font-semibold text-slate-700">Subsidiado</span>
-              <span id="vac-cb-sub-cnt" class="ml-auto text-[10px] text-slate-400 tabular-nums">—</span>
-            </label>
-            <label class="flex items-center gap-2 px-2 py-1.5 rounded-md border border-slate-300
-                          bg-white cursor-pointer hover:border-cyan-400 transition-colors text-xs">
-              <input id="vac-cb-cont" type="checkbox" class="accent-cyan-600 h-3.5 w-3.5"/>
-              <span class="font-semibold text-slate-700">Contributivo</span>
-              <span id="vac-cb-cont-cnt" class="ml-auto text-[10px] text-slate-400 tabular-nums">—</span>
-            </label>
-          </div>
-          <p id="vac-ferr" class="text-xs text-red-500 mt-1.5 hidden"></p>
-          <button type="button" id="vac-btn-gen" onclick="vacGenerar()"
-                  class="w-full h-8 mt-2 rounded-md bg-cyan-700 hover:bg-cyan-800 text-white
-                         text-xs font-semibold transition-colors disabled:opacity-50
-                         inline-flex items-center justify-center gap-1.5">
-            <span class="vac-bico">
-              <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24"
-                   stroke="currentColor" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round"
-                      d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
-              </svg>
-            </span>
-            <span class="vac-blbl">Generar carnés</span>
-          </button>
-        </div>
       </div>
     </div>
 
@@ -1215,6 +1097,15 @@
           <p id="exp-name" class="text-sm font-semibold text-slate-800 tracking-tight break-words"></p>
           <p id="exp-meta" class="text-xs text-slate-400 mt-0.5"></p>
         </div>
+        <button id="btn-ajustar-soportes" type="button" onclick="toggleAjustarSoportesForm()"
+           class="hidden shrink-0 inline-flex items-center gap-1.5 px-3 h-8 rounded-lg border
+                  border-brand-200 bg-brand-50 hover:bg-brand-100 text-xs font-medium text-brand-700 transition-colors">
+          <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+            <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M9 12h6m-6 4h6M9 8h6m-3 12H7a2 2 0 01-2-2V6a2 2 0 012-2h7l5 5v9a2 2 0 01-2 2h-2"/>
+          </svg>
+          <span class="hidden sm:inline">Ajustar soportes</span>
+        </button>
         <a id="exp-dl" href="#" download
            class="shrink-0 inline-flex items-center gap-1.5 px-3 h-8 rounded-lg border
                   border-slate-200 hover:bg-slate-50 text-xs font-medium text-slate-600 transition-colors">
@@ -1225,6 +1116,34 @@
           <span class="hidden sm:inline">Descargar</span> .zip
         </a>
       </div>
+
+      <!-- Ajustar soportes: fusiona los PDFs de este Soporte Unificado en uno
+           solo por afiliado y los renombra para facturación (HEV_...). Solo
+           visible sobre un job tipo "soporte_unificado" ya completado. -->
+      <div id="ajustar-soportes-panel" class="hidden shrink-0 px-5 py-3 border-b border-slate-100 bg-brand-50/40 space-y-2">
+        <p class="text-xs text-slate-600">
+          Fusiona todos los PDF de cada afiliado en uno solo, renombrado para facturación
+          (<code class="text-[10px]">HEV_900422757_&lt;factura&gt;_&lt;tipo&gt;&lt;numero&gt;.pdf</code>).
+        </p>
+        <div class="flex items-center gap-2">
+          <label class="text-xs font-medium text-slate-500 shrink-0">Número de factura</label>
+          <input id="ajustar-numero-factura" type="text" maxlength="20" placeholder="ej: 11502" autocomplete="off"
+                 class="w-28 h-8 px-2 rounded-md border border-slate-300 text-xs font-mono bg-white
+                        outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500"/>
+          <button type="button" onclick="confirmarAjustarSoportes()"
+                  class="h-8 px-3 rounded-md bg-brand-700 hover:bg-brand-800 text-white text-xs font-semibold transition-colors">
+            Confirmar
+          </button>
+          <button type="button" onclick="toggleAjustarSoportesForm()"
+                  class="h-8 px-3 rounded-md border border-slate-300 hover:bg-slate-50 text-xs font-medium text-slate-600 transition-colors">
+            Cancelar
+          </button>
+        </div>
+        <p id="ajustar-soportes-err" class="text-xs text-red-500 hidden"></p>
+      </div>
+
+      <!-- Resumen de un job de Ajuste de Soportes ya completado -->
+      <div id="ajustar-soportes-resumen" class="hidden shrink-0 px-5 py-3 border-b border-slate-100 bg-emerald-50/50 text-xs text-slate-700"></div>
 
       <!-- Filter bar (visible only when tree has data) -->
       <div id="filter-bar" class="hidden shrink-0 px-5 py-2.5 border-b border-slate-100 bg-slate-50/60 space-y-2">
@@ -1745,7 +1664,7 @@ const MODULES = {
     tipoBackend: "vacunacion", label: "Vacunación",
     api: "/vacunacion/extractions", color: "cyan", icon: "beaker",
     categoria: "Prevención", badge: "VAC",
-    usaFactura: false, usaRegimen: false, usaExcel: true, unidad: "afiliados",
+    usaFactura: false, usaRegimen: true, usaExcel: false, unidad: "afiliados",
   },
   "caracterizacion-familiar": {
     tipoBackend: "caracterizacion_familiar", label: "Caracterización Familiar",
@@ -1770,9 +1689,9 @@ const MODULES = {
     api: "/soporte-unificado/extractions", color: "slate", icon: "doc",
     categoria: "Transversal", badge: "SU",
     // No usa las variantes genéricas de factura/régimen (usaFactura/usaRegimen
-    // en false): tiene su propia sección de filtros (#su-regimen-section +
-    // #su-excel-section) porque combina régimen obligatorio + factura opcional
-    // + Excel opcional, algo que ningún otro módulo necesita a la vez.
+    // en false): tiene su propia sección de filtros (#su-regimen-section)
+    // porque combina régimen obligatorio + factura opcional, algo que ningún
+    // otro módulo necesita a la vez.
     usaFactura: false, usaRegimen: false, usaExcel: false, unidad: "personas",
   },
 };
@@ -2279,7 +2198,7 @@ function switchTab(tabId) {
       hint.textContent  = "(requerido · cruza con AVS_REGISTROS_AP)";
     } else {
       label.textContent = "Régimen";
-      hint.textContent  = tabId === "educacion-grupal"
+      hint.textContent  = (tabId === "educacion-grupal" || tabId === "vacunacion")
         ? "(opcional · filtra por régimen del afiliado)"
         : "(opcional · filtra por régimen del JEFE DE FAMILIA)";
     }
@@ -2298,24 +2217,19 @@ function switchTab(tabId) {
     if (rCont) rCont.checked = false;
   }
 
-  // Soporte Unificado: régimen obligatorio + factura opcional + Excel opcional
+  // Soporte Unificado: régimen obligatorio + factura opcional
   const esSU = tabId === "soporte-unificado";
   $("su-regimen-section")?.classList.toggle("hidden", !esSU);
-  $("su-excel-section")?.classList.toggle("hidden", !esSU);
-  if (!esSU && typeof suResetUpload === "function") suResetUpload();
   if (!esSU) {
-    const rSubSU = $("su-regimen-sub"), rContSU = $("su-regimen-cont"), facSU = $("su-numero-factura");
+    const rSubSU = $("su-regimen-sub"), rContSU = $("su-regimen-cont");
+    const facSub = $("su-numero-factura-sub"), facCont = $("su-numero-factura-cont");
     if (rSubSU)  rSubSU.checked  = false;
     if (rContSU) rContSU.checked = false;
-    if (facSU)   facSU.value     = "";
+    if (facSub)  facSub.value    = "";
+    if (facCont) facCont.value   = "";
+    $("su-factura-sub-wrap")?.classList.add("hidden");
+    $("su-factura-cont-wrap")?.classList.add("hidden");
   }
-
-  // ── Form SQL ↔ form de upload Excel (módulos con usaExcel=true, ej: Vacunación) ──
-  const usaExcel = modByTab(tabId)?.usaExcel || false;
-  const formSqlWrap  = $("form-wrap");
-  const formVacWrap  = $("vacunacion-form-wrap");
-  if (formSqlWrap) formSqlWrap.classList.toggle("hidden", usaExcel);
-  if (formVacWrap) formVacWrap.classList.toggle("hidden", !usaExcel);
 
   // ── Dashboard: vista exclusiva, ocultar módulos + franja B ──────────────
   const dbView = $("dashboard-view");
@@ -2384,7 +2298,9 @@ let selId = null, prevSt = {}, _poll = null;
 let activeTabsSet = new Set();
 function _tipoToTab(tipo) {
   // ExtraccionTipo usa underscores ('demanda_inducida'), los tabIds usan guiones
-  // ('demanda-inducida'). Mapeo trivial.
+  // ('demanda-inducida'). Mapeo trivial, con una excepción: "ajuste_soportes"
+  // no tiene tab propio — vive dentro de "soporte-unificado".
+  if (tipo === "ajuste_soportes") return "soporte-unificado";
   return tipo ? String(tipo).replace(/_/g, "-") : null;
 }
 
@@ -2601,6 +2517,8 @@ async function selJob(id) {
     $("exp-dl").classList.toggle("opacity-40", disabled);
     $("exp-dl").classList.toggle("pointer-events-none", disabled);
 
+    actualizarPanelAjustarSoportes(job);
+
     if (job.estado === "completed") {
       const creador = job.created_by_username ? ` · por ${job.created_by_username}` : "";
       $("exp-meta").textContent = `${job.total_afiliados} ${unidadAgrupacion()} · ${job.total_pdfs} PDFs · ${fmtRel(job.creado_en)}${creador}`;
@@ -2612,6 +2530,82 @@ async function selJob(id) {
       $("exp-meta").textContent = STATUS[job.estado]?.label || "";
       showProgress(job);  // ← vista de progreso con animaciones de lotes
     }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// AJUSTAR SOPORTES (fusión + renombrado de un Soporte Unificado completado)
+// ═══════════════════════════════════════════════════════════════════
+
+function actualizarPanelAjustarSoportes(job) {
+  const btn = $("btn-ajustar-soportes");
+  const panel = $("ajustar-soportes-panel");
+  const resumenBox = $("ajustar-soportes-resumen");
+  panel?.classList.add("hidden"); // el form siempre arranca cerrado al cambiar de job
+  $("ajustar-soportes-err")?.classList.add("hidden");
+
+  const esSoporteUnificadoCompletado = job.tipo === "soporte_unificado" && job.estado === "completed";
+  btn?.classList.toggle("hidden", !esSoporteUnificadoCompletado);
+
+  if (job.tipo === "ajuste_soportes" && job.estado === "completed" && job.resumen_json) {
+    let r = null;
+    try { r = JSON.parse(job.resumen_json); } catch { /* resumen inválido, se oculta abajo */ }
+    if (r) {
+      const detalle = r.excluidos_identificador_detalle || [];
+      const ejemplos = detalle.length
+        ? `<div class="mt-1 text-[10px] text-slate-500 truncate" title="${detalle.join(", ")}">Ejemplos excluidos: ${detalle.slice(0, 5).join(", ")}${detalle.length > 5 ? "…" : ""}</div>`
+        : "";
+      resumenBox.innerHTML = `
+        <div class="font-semibold text-emerald-700 mb-1">✓ Ajuste de soportes completado</div>
+        <div class="grid grid-cols-2 gap-x-4 gap-y-0.5">
+          <span>PDF generados:</span><span class="font-semibold tabular-nums">${(r.generados || 0).toLocaleString()}</span>
+          <span>Páginas totales:</span><span class="font-semibold tabular-nums">${(r.paginas_totales || 0).toLocaleString()}</span>
+          <span>Excluidos (identificador no válido):</span><span class="font-semibold tabular-nums">${(r.excluidos_identificador || 0).toLocaleString()}</span>
+          <span>Sin PDF por error de lectura:</span><span class="font-semibold tabular-nums">${(r.sin_pdf_por_error || 0).toLocaleString()}</span>
+          <span>PDFs fuente con error:</span><span class="font-semibold tabular-nums">${(r.pdfs_fuente_error || 0).toLocaleString()}</span>
+        </div>
+        ${ejemplos}
+      `;
+      resumenBox.classList.remove("hidden");
+      return;
+    }
+  }
+  resumenBox?.classList.add("hidden");
+}
+
+function toggleAjustarSoportesForm() {
+  const panel = $("ajustar-soportes-panel");
+  if (!panel) return;
+  const abrir = panel.classList.contains("hidden");
+  panel.classList.toggle("hidden", !abrir);
+  if (abrir && selId) {
+    // Pre-llenar con la factura del job de origen, si ya tenía una — siempre
+    // editable, porque la factura cambia cada mes.
+    apiGet(`${_selApiBase}/${selId}`).then(job => {
+      const factura = job.facturas?.[0] ? job.facturas[0].replace(/^CAB|^FAB/, "") : "";
+      $("ajustar-numero-factura").value = factura;
+    }).catch(() => {});
+  }
+}
+
+async function confirmarAjustarSoportes() {
+  const err = $("ajustar-soportes-err");
+  err.classList.add("hidden");
+  const numero = $("ajustar-numero-factura").value.trim();
+  if (!numero) {
+    err.textContent = "Debes ingresar el número de factura.";
+    err.classList.remove("hidden");
+    return;
+  }
+  try {
+    const r = await apiPost(`${_selApiBase}/${selId}/ajuste-soportes`, { numero_factura: numero });
+    toast("Ajuste de soportes iniciado", `ID ${r.id.slice(0, 8)}`, "success");
+    $("ajustar-soportes-panel").classList.add("hidden");
+    await loadJobs();
+    await selJob(r.id);
+  } catch (e) {
+    err.textContent = e.message || "No se pudo iniciar el ajuste.";
+    err.classList.remove("hidden");
   }
 }
 
@@ -2639,6 +2633,7 @@ async function showProgress(job, apiBase) {
         if (j.estado === "completed") {
           $("exp-meta").textContent = `${j.total_afiliados} ${unidadAgrupacion()} · ${j.total_pdfs} PDFs · ${fmtRel(j.creado_en)}`;
           $("exp-dl").classList.remove("opacity-40", "pointer-events-none");
+          actualizarPanelAjustarSoportes(j);
           toast("Extracción completada", `${j.total_pdfs.toLocaleString()} PDFs en ${j.total_lotes} lote${j.total_lotes > 1 ? "s" : ""}`, "success");
           loadTree(job.id);
         } else if (j.estado === "failed") {
@@ -3377,8 +3372,30 @@ function setModoLimite(modo) {
   if (esAuto) fetchAutoPreview(); else setAutoPreview(null);
 }
 
+// ── Soporte Unificado: un campo de factura por régimen ──────────────
+// Cada régimen factura con un número propio (ej. 13100 subsidiado,
+// 13101 contributivo) — por eso cada uno tiene su campo y se recuerdan
+// por separado en vez de compartir un solo input.
+function onSuRegimenChange() {
+  const esSub = $("su-regimen-sub")?.checked || false;
+  const esCont = $("su-regimen-cont")?.checked || false;
+  $("su-factura-sub-wrap")?.classList.toggle("hidden", !esSub);
+  $("su-factura-cont-wrap")?.classList.toggle("hidden", !esCont);
+  fetchAutoPreview();
+}
+
+function _suFacturaActual() {
+  const esSub = $("su-regimen-sub")?.checked || false;
+  const campo = esSub ? $("su-numero-factura-sub") : $("su-numero-factura-cont");
+  return _facturaFormSufijo(campo?.value || "");
+}
+
 // ── Preview de conteo en modo Auto ──────────────────────────────────
 let _previewTimer = null;
+let _previewSeq = 0;   // token anti-carrera: ignora respuestas viejas que
+                        // lleguen después de una más nueva (esta consulta
+                        // puede tardar varios segundos y no hay forma de
+                        // garantizar el orden de llegada de las respuestas).
 
 function fetchAutoPreview() {
   const desde = $("desde").value;
@@ -3406,35 +3423,52 @@ function fetchAutoPreview() {
   if (regimenParam) params.set("regimen", regimenParam);
   // Soporte Unificado: régimen viene de su propio radio (obligatorio, corrida
   // separada por régimen) y la factura de su propio input (opcional, solo
-  // aplica a los módulos facturables). Adjuntamos el upload_id del Excel si
-  // hay uno, para que el preview de personas + vacunación refleje lo real.
+  // aplica a los módulos facturables).
   if (activeTab === "soporte-unificado") {
     const suReg = document.querySelector('input[name="su-regimen"]:checked')?.value || "";
-    const suFac = _facturaFormSufijo($("su-numero-factura")?.value || "");
+    const suFac = _suFacturaActual();
     if (suReg) params.set("regimen", suReg); else params.delete("regimen");
     if (suFac) params.set("numero_factura", suFac); else params.delete("numero_factura");
-    if (typeof suUpload !== "undefined" && suUpload) params.set("upload_id", suUpload.upload_id);
   }
   const url = `${getModuleApi()}/count?${params.toString()}`;
   setAutoPreview("loading");
   setBtnGenDisabled(true);
   clearTimeout(_previewTimer);
+  const miSeq = ++_previewSeq;
   _previewTimer = setTimeout(async () => {
     try {
       const r = await fetch(url);
+      if (miSeq !== _previewSeq) return; // llegó una respuesta más nueva primero, descartar esta
       if (!r.ok) { setAutoPreview("err"); setBtnGenDisabled(false); return; }
       setAutoPreview(await r.json());
-    } catch { setAutoPreview("err"); }
-    finally { setBtnGenDisabled(false); }
+    } catch { if (miSeq === _previewSeq) setAutoPreview("err"); }
+    finally { if (miSeq === _previewSeq) setBtnGenDisabled(false); }
   }, 500);
 }
 
-function setBtnGenDisabled(on) {
+// Dos razones independientes pueden exigir bloquear "Generar": que haya un
+// job corriendo (lo decide loadJobs()/updateGenButtons cada pocos segundos) o
+// que el preview de conteo todavía esté consultando (lo decide
+// fetchAutoPreview(), que puede tardar varios segundos contra SQL Server
+// real). Antes cada una escribía `btn.disabled` directo, sin saber de la
+// otra — si loadJobs() hacía su poll de rutina mientras el preview seguía
+// cargando, lo reactivaba sin querer en plena consulta. Ahora ambas razones
+// se guardan por separado y una sola función decide el estado final.
+let _jobsActivos = false;
+let _previewCargando = false;
+
+function _syncBtnGen() {
   const btn = $("btn-gen");
   if (!btn || btn.dataset.submitting === "1") return;
+  const on = _jobsActivos || _previewCargando;
   btn.disabled = on;
   btn.classList.toggle("opacity-50", on);
   btn.classList.toggle("cursor-not-allowed", on);
+}
+
+function setBtnGenDisabled(on) {
+  _previewCargando = on;
+  _syncBtnGen();
 }
 
 function setAutoPreview(data) {
@@ -3502,10 +3536,6 @@ function toggleForm() {
 // Bloquear/desbloquear los botones de Generar mientras haya extracciones activas
 function updateGenButtons(busy) {
   const btnToggle = $("btn-toggle");
-  const btnGen    = $("btn-gen");
-  const btnVacGen = $("vac-btn-gen");
-  const dzInput   = $("vac-file-input");
-  const dzBox     = $("vac-dropzone");
   const lbl       = $("lbl-btn");
   if (btnToggle) {
     btnToggle.disabled = busy;
@@ -3516,21 +3546,8 @@ function updateGenButtons(busy) {
       lbl.textContent = busy ? "Extraccion en curso..." : "Nueva extraccion";
     }
   }
-  if (btnGen) {
-    btnGen.disabled = busy || btnGen.dataset.submitting === "1";
-    btnGen.classList.toggle("opacity-50", btnGen.disabled);
-  }
-  // Vacunación: bloquear botón Generar carnés + dropzone (no más uploads ni jobs nuevos)
-  if (btnVacGen) {
-    btnVacGen.disabled = busy || btnVacGen.dataset.submitting === "1";
-    btnVacGen.classList.toggle("opacity-50", btnVacGen.disabled);
-    btnVacGen.title = busy ? "Hay una extracción en curso. Espera a que termine." : "";
-  }
-  if (dzInput) dzInput.disabled = busy;
-  if (dzBox) {
-    dzBox.classList.toggle("opacity-50", busy);
-    dzBox.classList.toggle("pointer-events-none", busy);
-  }
+  _jobsActivos = busy;
+  _syncBtnGen();
   // Si el form está abierto y empieza una extracción, cerrar form para evitar otro submit
   if (busy && formOpen) toggleForm();
 }
@@ -3610,209 +3627,6 @@ function onFacturaFormInput() {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════
-// VACUNACIÓN — upload + crear extracción
-// ═══════════════════════════════════════════════════════════════════
-let vacUpload = null;  // {upload_id, filename, total_filas, por_regimen, afiliados_por_regimen}
-
-function vacResetUpload() {
-  vacUpload = null;
-  const inp = $("vac-file-input"); if (inp) inp.value = "";
-  $("vac-dz-idle")?.classList.remove("hidden");
-  $("vac-dz-uploading")?.classList.add("hidden");
-  $("vac-dz-ready")?.classList.add("hidden");
-  $("vac-regimen-section")?.classList.add("hidden");
-  const err = $("vac-ferr");
-  if (err) { err.textContent = ""; err.classList.add("hidden"); }
-}
-
-async function vacSubirArchivo(file) {
-  if (!file) return;
-  if (!file.name.toLowerCase().endsWith(".xlsx")) {
-    toast("Formato inválido", "Solo se acepta .xlsx (Excel moderno).", "error");
-    return;
-  }
-  $("vac-dz-idle")?.classList.add("hidden");
-  $("vac-dz-uploading")?.classList.remove("hidden");
-  $("vac-dz-ready")?.classList.add("hidden");
-  $("vac-regimen-section")?.classList.add("hidden");
-
-  try {
-    const fd = new FormData();
-    fd.append("file", file);
-    const r = await fetch("/vacunacion/uploads", {method: "POST", body: fd});
-    const body = await r.json().catch(() => ({}));
-    if (!r.ok) {
-      throw new Error(body.detail || `HTTP ${r.status}`);
-    }
-    vacUpload = body;
-    $("vac-dz-uploading")?.classList.add("hidden");
-    $("vac-dz-ready")?.classList.remove("hidden");
-    $("vac-file-name").textContent = body.filename;
-    $("vac-stat-filas").textContent = body.total_filas.toLocaleString();
-    $("vac-stat-sub").textContent   = (body.por_regimen.SUBSIDIADO || 0).toLocaleString();
-    $("vac-stat-cont").textContent  = (body.por_regimen.CONTRIBUTIVO || 0).toLocaleString();
-
-    // Mostrar sección de régimen + contadores en los checkboxes
-    $("vac-regimen-section")?.classList.remove("hidden");
-    const afi = body.afiliados_por_regimen || {};
-    $("vac-cb-sub-cnt").textContent  = afi.SUBSIDIADO   ? `≈ ${afi.SUBSIDIADO.toLocaleString()} PDFs`   : "0";
-    $("vac-cb-cont-cnt").textContent = afi.CONTRIBUTIVO ? `≈ ${afi.CONTRIBUTIVO.toLocaleString()} PDFs` : "0";
-    // Si solo un régimen tiene datos, marcarlo automáticamente y deshabilitar el otro
-    $("vac-cb-sub").checked  = (body.por_regimen.SUBSIDIADO   || 0) > 0;
-    $("vac-cb-cont").checked = (body.por_regimen.CONTRIBUTIVO || 0) > 0;
-    $("vac-cb-sub").disabled  = (body.por_regimen.SUBSIDIADO   || 0) === 0;
-    $("vac-cb-cont").disabled = (body.por_regimen.CONTRIBUTIVO || 0) === 0;
-    toast("Excel cargado", `${body.total_filas.toLocaleString()} filas listas`, "success");
-  } catch (e) {
-    vacResetUpload();
-    toast("Error al subir", e.message || "No se pudo procesar el archivo", "error");
-  }
-}
-
-function setVacGenLoading(on) {
-  const btn = $("vac-btn-gen");
-  if (!btn) return;
-  btn.disabled = on;
-  const lbl = btn.querySelector(".vac-blbl");
-  const ico = btn.querySelector(".vac-bico");
-  if (lbl) lbl.textContent = on ? "Procesando..." : "Generar carnés";
-  if (ico) ico.innerHTML = on
-    ? `<svg class="h-3.5 w-3.5 spin" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
-         <path stroke-linecap="round" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
-       </svg>`
-    : `<svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-         <path stroke-linecap="round" stroke-linejoin="round"
-               d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
-       </svg>`;
-}
-
-async function vacGenerar() {
-  const err = $("vac-ferr");
-  err.classList.add("hidden");
-  err.textContent = "";
-
-  if (!vacUpload) {
-    err.textContent = "Primero subí un archivo .xlsx.";
-    err.classList.remove("hidden"); return;
-  }
-  if (hasActiveJobs()) {
-    err.textContent = "Hay una extracción en curso. Esperá a que termine.";
-    err.classList.remove("hidden"); return;
-  }
-  const regimenes = [];
-  if ($("vac-cb-sub").checked)  regimenes.push("SUBSIDIADO");
-  if ($("vac-cb-cont").checked) regimenes.push("CONTRIBUTIVO");
-  if (regimenes.length === 0) {
-    err.textContent = "Marcá al menos un régimen.";
-    err.classList.remove("hidden"); return;
-  }
-
-  const btn = $("vac-btn-gen");
-  btn.dataset.submitting = "1";
-  setVacGenLoading(true);
-  try {
-    const r = await fetch("/vacunacion/extractions", {
-      method: "POST",
-      headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({upload_id: vacUpload.upload_id, regimenes}),
-    });
-    const body = await r.json().catch(() => ({}));
-    if (!r.ok) {
-      throw new Error(body.detail || `HTTP ${r.status}`);
-    }
-    const jobs = Array.isArray(body) ? body : [body];
-    toast(
-      jobs.length === 1 ? "Extracción iniciada" : `${jobs.length} extracciones iniciadas`,
-      jobs.map(j => `${j.regimen}: ${j.limite.toLocaleString()} registros`).join(" · "),
-      "success",
-    );
-    // Seleccionar el primer job creado
-    if (jobs[0]?.id) {
-      selId = jobs[0].id;
-      _selApiBase = "/vacunacion/extractions";
-    }
-    loadJobs();
-  } catch (e) {
-    err.textContent = e.message || "No se pudo crear la extracción.";
-    err.classList.remove("hidden");
-  } finally {
-    delete btn.dataset.submitting;
-    setVacGenLoading(false);
-  }
-}
-
-// Wire del dropzone — click en el div, drag/drop, change del input
-(function wireVacunacionDropzone() {
-  const dz  = $("vac-dropzone");
-  const inp = $("vac-file-input");
-  if (!dz || !inp) return;
-  inp.addEventListener("change", e => {
-    const f = e.target.files?.[0];
-    if (f) vacSubirArchivo(f);
-  });
-  ["dragenter", "dragover"].forEach(ev => dz.addEventListener(ev, e => {
-    e.preventDefault();
-    dz.classList.add("border-cyan-500", "bg-cyan-50");
-  }));
-  ["dragleave", "drop"].forEach(ev => dz.addEventListener(ev, e => {
-    e.preventDefault();
-    dz.classList.remove("border-cyan-500", "bg-cyan-50");
-  }));
-  dz.addEventListener("drop", e => {
-    const f = e.dataTransfer?.files?.[0];
-    if (f) vacSubirArchivo(f);
-  });
-})();
-
-// ── Soporte Unificado: upload OPCIONAL del Excel de vacunación ──
-let suUpload = null;  // {upload_id, filename, total_filas}
-async function suSubirArchivo(file) {
-  if (!file || !file.name.toLowerCase().endsWith(".xlsx")) {
-    toast("Archivo inválido", "Solo se acepta .xlsx", "error"); return;
-  }
-  $("su-dz-idle")?.classList.add("hidden");
-  $("su-dz-ready")?.classList.add("hidden");
-  $("su-dz-uploading")?.classList.remove("hidden");
-  try {
-    const fd = new FormData(); fd.append("file", file);
-    const r = await fetch("/soporte-unificado/uploads", {method: "POST", body: fd, credentials: "same-origin"});
-    if (!r.ok) { const e = await r.json().catch(() => ({detail: "Error"})); throw new Error(e.detail || "Error al subir"); }
-    const d = await r.json();
-    suUpload = {upload_id: d.upload_id, filename: d.filename, total_filas: d.total_filas};
-    $("su-file-name").textContent = d.filename;
-    $("su-stat-filas").textContent = `${(d.total_filas || 0).toLocaleString()} filas`;
-    $("su-dz-uploading")?.classList.add("hidden");
-    $("su-dz-ready")?.classList.remove("hidden");
-    fetchAutoPreview();
-  } catch (e) {
-    suUpload = null;
-    $("su-dz-uploading")?.classList.add("hidden");
-    $("su-dz-idle")?.classList.remove("hidden");
-    toast("No se pudo subir el Excel", e.message, "error");
-  }
-}
-function suResetUpload() {
-  suUpload = null;
-  const fi = $("su-file-input"); if (fi) fi.value = "";
-  $("su-dz-ready")?.classList.add("hidden");
-  $("su-dz-uploading")?.classList.add("hidden");
-  $("su-dz-idle")?.classList.remove("hidden");
-  if (typeof fetchAutoPreview === "function") fetchAutoPreview();
-}
-(function initSuDropzone() {
-  const dz = $("su-dropzone"); if (!dz) return;
-  const fi = $("su-file-input");
-  if (fi) fi.addEventListener("change", e => { const f = e.target.files?.[0]; if (f) suSubirArchivo(f); });
-  ["dragover", "dragenter"].forEach(ev => dz.addEventListener(ev, e => {
-    e.preventDefault(); dz.classList.add("border-brand-500", "bg-brand-50");
-  }));
-  ["dragleave", "drop"].forEach(ev => dz.addEventListener(ev, e => {
-    e.preventDefault(); dz.classList.remove("border-brand-500", "bg-brand-50");
-  }));
-  dz.addEventListener("drop", e => { const f = e.dataTransfer?.files?.[0]; if (f) suSubirArchivo(f); });
-})();
-
 $("fext").addEventListener("submit", async ev => {
   ev.preventDefault();
   $("ferr").classList.add("hidden");
@@ -3847,7 +3661,7 @@ $("fext").addEventListener("submit", async ev => {
       $("ferr").textContent = "Selecciona un régimen (Subsidiado o Contributivo) antes de generar.";
       $("ferr").classList.remove("hidden"); return;
     }
-    const suFac = _facturaFormSufijo($("su-numero-factura")?.value || "");
+    const suFac = _suFacturaActual();
     lanzamientos.push({regimen: suReg, numero: suFac || null});
   } else if (moduloRequiereFactura) {
     // Variante A: cruce contra AVS_REGISTROS_AP — número CAB/FAB requerido.
@@ -3890,7 +3704,6 @@ $("fext").addEventListener("submit", async ev => {
         if (fac.numero) body.numero_factura = fac.numero;
         body.regimen = fac.regimen;
       }
-      if (activeTab === "soporte-unificado" && suUpload) body.upload_id = suUpload.upload_id;
       try {
         const r = await apiPost(getModuleApi(), body);
         if (!primerId) primerId = r.id;

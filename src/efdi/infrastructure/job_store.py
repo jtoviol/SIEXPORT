@@ -45,6 +45,8 @@ def _row_to_extraccion(row) -> Extraccion:
         zip_path=row["zip_path"],
         mensaje_error=row["mensaje_error"],
         created_by_username=row["created_by_username"] if "created_by_username" in cols else None,
+        origen_job_id=UUID(row["origen_job_id"]) if ("origen_job_id" in cols and row["origen_job_id"]) else None,
+        resumen_json=row["resumen_json"] if "resumen_json" in cols else None,
     )
 
 
@@ -96,8 +98,8 @@ class JobStore:
                     tipo, modo_pdf, nombre, regimen, facturas, estado,
                     total_atenciones, total_afiliados, total_pdfs,
                     creado_en, completado_en, mensaje_error, zip_path,
-                    created_by_username
-                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                    created_by_username, origen_job_id, resumen_json
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 ON CONFLICT(id) DO UPDATE SET
                     total_lotes=excluded.total_lotes,
                     tipo=excluded.tipo,
@@ -107,7 +109,8 @@ class JobStore:
                     total_pdfs=excluded.total_pdfs,
                     completado_en=excluded.completado_en,
                     mensaje_error=excluded.mensaje_error,
-                    zip_path=excluded.zip_path
+                    zip_path=excluded.zip_path,
+                    resumen_json=excluded.resumen_json
                 """,
                 (
                     str(job.id), job.desde.isoformat(), job.hasta.isoformat(),
@@ -123,6 +126,8 @@ class JobStore:
                     job.completado_en.isoformat() if job.completado_en else None,
                     job.mensaje_error, job.zip_path,
                     job.created_by_username,
+                    str(job.origen_job_id) if job.origen_job_id else None,
+                    job.resumen_json,
                 ),
             )
 
@@ -145,6 +150,20 @@ class JobStore:
             rows = conn.execute(
                 "SELECT * FROM extracciones WHERE tipo = ? ORDER BY creado_en DESC",
                 (tipo.value,),
+            ).fetchall()
+            return [_row_to_extraccion(r) for r in rows]
+
+    def list_by_tipos(self, tipos: list[ExtraccionTipo]) -> list[Extraccion]:
+        """Como `list_by_tipo` pero aceptando varios tipos relacionados — usado
+        por Soporte Unificado para listar, en la misma consulta, también los
+        jobs de Ajuste de Soportes que se originan de él."""
+        if not tipos:
+            return []
+        placeholders = ",".join("?" * len(tipos))
+        with db.connect() as conn:
+            rows = conn.execute(
+                f"SELECT * FROM extracciones WHERE tipo IN ({placeholders}) ORDER BY creado_en DESC",
+                tuple(t.value for t in tipos),
             ).fetchall()
             return [_row_to_extraccion(r) for r in rows]
 

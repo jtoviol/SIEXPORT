@@ -5,7 +5,7 @@ módulos y reorganiza la salida por afiliado (una carpeta por documento, con un
 PDF por módulo donde la persona tenga soportes).
 
 Universo = factura ∪ raros (una persona sale si aparece en CUALQUIER módulo).
-Régimen en corridas separadas. Vacunación entra solo si se sube su Excel.
+Régimen en corridas separadas. Vacunación entra por consulta SQL (régimen + fecha).
 """
 from __future__ import annotations
 
@@ -20,10 +20,8 @@ from fastapi import (
     APIRouter,
     BackgroundTasks,
     Depends,
-    File,
     HTTPException,
     Query,
-    UploadFile,
     status,
 )
 from fastapi.concurrency import run_in_threadpool
@@ -31,10 +29,10 @@ from fastapi.responses import FileResponse
 
 from efdi.api.dependencies import current_user, require_modulo, require_no_viewer
 from efdi.api.schemas import (
+    CrearAjusteSoportesReq,
     CrearSoporteUnificadoReq,
     ExtraccionResp,
     RenombrarJobReq,
-    VacunacionUploadResp,
 )
 from efdi.config import settings
 from efdi.domain.models import (
@@ -48,12 +46,16 @@ from efdi.domain.models import (
     safe_filename,
 )
 from efdi.infrastructure.job_store import store
-from efdi.infrastructure.repository_vacunacion import get_vacunacion_repository
+from efdi.services.extraction_ajuste_soportes import ejecutar_ajuste_soportes
 from efdi.services.extraction_soporte_unificado import (
     MODULO_LABEL,
     conteo_por_modulo,
     ejecutar_extraccion_soporte_unificado,
 )
+
+# Tipos que comparten almacenamiento/descarga (Ajuste de Soportes opera sobre
+# los archivos que ya dejó un Soporte Unificado, en la misma carpeta de datos).
+_TIPOS_MODULO = (ExtraccionTipo.SOPORTE_UNIFICADO, ExtraccionTipo.AJUSTE_SOPORTES)
 
 router = APIRouter(
     prefix="/soporte-unificado",
@@ -71,60 +73,19 @@ def _facturas_de(numero: str) -> list[str]:
     return [f"CAB{numero}", f"FAB{numero}"]
 
 
-def _uploads_dir() -> Path:
-    d = settings.data_dir / "uploads" / "soporte_unificado"
-    d.mkdir(parents=True, exist_ok=True)
-    return d
-
-
-def _excel_path_for(upload_id: UUID) -> Path:
-    return _uploads_dir() / f"{upload_id}.xlsx"
-
-
 def _default_tamano_lote() -> int:
     """Lote en unidad de AFILIADOS (no registros). 1000 personas por lote."""
     return 1000
 
 
-# ─── Upload opcional del Excel de vacunación ─────────────────────────────────
-
-@router.post(
-    "/uploads",
-    response_model=VacunacionUploadResp,
-    status_code=status.HTTP_201_CREATED,
-    summary="Subir el .xlsx de vacunación para incluirlo en el soporte unificado",
-    dependencies=[Depends(require_no_viewer)],
-)
-async def subir_excel_soporte_unificado(
-    file: UploadFile = File(..., description="Archivo .xlsx de vacunación"),
-) -> VacunacionUploadResp:
-    if not file.filename or not file.filename.lower().endswith(".xlsx"):
-        raise HTTPException(status_code=400, detail="Solo se acepta .xlsx (Excel moderno).")
-    upload_id = uuid4()
-    dest = _excel_path_for(upload_id)
-    try:
-        with dest.open("wb") as out:
-            shutil.copyfileobj(file.file, out)
-        repo = get_vacunacion_repository()
-        resumen = await run_in_threadpool(repo.resumen, dest)
-        return VacunacionUploadResp(
-            upload_id=upload_id,
-            filename=file.filename,
-            size_bytes=dest.stat().st_size,
-            total_filas=resumen["total_filas"],
-            por_regimen=resumen["por_regimen"],
-            afiliados_por_regimen=resumen["afiliados_por_regimen"],
-        )
-    except ValueError as e:
-        dest.unlink(missing_ok=True)
-        raise HTTPException(status_code=422, detail=str(e)) from e
-    except Exception as e:  # noqa: BLE001
-        dest.unlink(missing_ok=True)
-        log.exception("soporte_unif.upload_falló", extra={"filename": file.filename})
-        raise HTTPException(
-            status_code=500,
-            detail="No se pudo procesar el Excel. Verifica que el archivo no esté dañado o abierto en otro programa.",
-        ) from e
+def _get_job_del_modulo(job_id: UUID) -> Extraccion:
+    """Busca un job de Soporte Unificado o de Ajuste de Soportes (comparten
+    almacenamiento/descarga — ver `_TIPOS_MODULO`). 404 si no existe o es de
+    otro módulo."""
+    job = store.get(job_id)
+    if job is None or job.tipo not in _TIPOS_MODULO:
+        raise HTTPException(status_code=404, detail="Extracción Soporte Unificado no encontrada")
+    return job
 
 
 # ─── Conteo previo (rápido, por módulo) ──────────────────────────────────────
@@ -138,7 +99,6 @@ async def contar_soporte_unificado(
     hasta: date = Query(...),
     numero_factura: str | None = Query(None, description="Sufijo numérico (ej '11502'). Backend arma CABn+FABn."),
     regimen: str | None = Query(None, description="SUBSIDIADO o CONTRIBUTIVO"),
-    upload_id: UUID | None = Query(None, description="UUID del .xlsx de vacunación (opcional)"),
 ) -> dict:
     if hasta < desde:
         raise HTTPException(status_code=400, detail="hasta debe ser >= desde")
@@ -155,13 +115,7 @@ async def contar_soporte_unificado(
         if n:
             facturas = _facturas_de(n)
 
-    excel_path: Path | None = None
-    if upload_id is not None:
-        excel_path = _excel_path_for(upload_id)
-        if not excel_path.exists():
-            raise HTTPException(status_code=404, detail=f"Upload {upload_id} no existe")
-
-    conteo = await run_in_threadpool(conteo_por_modulo, desde, hasta, facturas=facturas, regimen=r, excel_path=excel_path)
+    conteo = await run_in_threadpool(conteo_por_modulo, desde, hasta, facturas=facturas, regimen=r)
     por_modulo = [
         {"modulo": mod_id, "label": MODULO_LABEL.get(mod_id, mod_id), "soportes": total}
         for mod_id, total in conteo.items()
@@ -198,16 +152,10 @@ async def crear_extraccion_soporte_unificado(
     background: BackgroundTasks,
     current: User = Depends(current_user),
 ) -> ExtraccionResp:
-    excel_path: Path | None = None
-    if req.upload_id is not None:
-        excel_path = _excel_path_for(req.upload_id)
-        if not excel_path.exists():
-            raise HTTPException(status_code=404, detail=f"Upload {req.upload_id} no existe. Subí primero el .xlsx.")
-
     facturas = _facturas_de(req.numero_factura) if req.numero_factura else None
     # `limite` = estimación de soportes (el orquestador no lo usa para cortar; procesa
     # todo el universo). Sirve para mostrarlo en la UI.
-    conteo = await run_in_threadpool(conteo_por_modulo, req.desde, req.hasta, facturas=facturas, regimen=req.regimen, excel_path=excel_path)
+    conteo = await run_in_threadpool(conteo_por_modulo, req.desde, req.hasta, facturas=facturas, regimen=req.regimen)
     limite = max(1, sum(conteo.values()))
 
     sufijo_factura = f" · F{req.numero_factura}" if req.numero_factura else ""
@@ -224,7 +172,6 @@ async def crear_extraccion_soporte_unificado(
         nombre=nombre,
         regimen=req.regimen,
         facturas=facturas,
-        excel_path=str(excel_path) if excel_path else None,
         creado_en=datetime.now(),
         created_by_username=current.username,
     )
@@ -233,34 +180,75 @@ async def crear_extraccion_soporte_unificado(
     return ExtraccionResp(**job.model_dump())
 
 
+# ─── Ajuste de Soportes (fusión + renombrado HEV_<nit>_<factura>_<tipo><num>) ─
+
+@router.post(
+    "/extractions/{job_id}/ajuste-soportes",
+    response_model=ExtraccionResp,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Fusionar y renombrar los PDFs de un Soporte Unificado ya completado",
+    dependencies=[Depends(require_no_viewer)],
+)
+async def crear_ajuste_soportes(
+    job_id: UUID,
+    req: CrearAjusteSoportesReq,
+    background: BackgroundTasks,
+    current: User = Depends(current_user),
+) -> ExtraccionResp:
+    origen = store.get(job_id)
+    if origen is None or origen.tipo != ExtraccionTipo.SOPORTE_UNIFICADO:
+        raise HTTPException(status_code=404, detail="Extracción Soporte Unificado no encontrada")
+    if origen.estado != EstadoExtraccion.COMPLETED:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"La extracción de origen está en estado '{estado_label(origen.estado)}' — "
+                "debe estar completada antes de ajustar sus soportes"
+            ),
+        )
+
+    job = Extraccion(
+        id=uuid4(),
+        desde=origen.desde,
+        hasta=origen.hasta,
+        limite=max(1, origen.total_afiliados),
+        tamano_lote=origen.tamano_lote,
+        tipo=ExtraccionTipo.AJUSTE_SOPORTES,
+        modo_pdf=ModoPdf.UNO_POR_ATENCION,
+        nombre=f"Ajuste de Soportes · {origen.regimen} · F{req.numero_factura}",
+        regimen=origen.regimen,
+        facturas=_facturas_de(req.numero_factura),
+        origen_job_id=origen.id,
+        creado_en=datetime.now(),
+        created_by_username=current.username,
+    )
+    store.save(job)
+    background.add_task(ejecutar_ajuste_soportes, job)
+    return ExtraccionResp(**job.model_dump())
+
+
 # ─── Listar / estado / lotes ─────────────────────────────────────────────────
 
 @router.get("/extractions", response_model=list[ExtraccionResp], summary="Listar extracciones")
 async def listar_extracciones_soporte_unificado() -> list[ExtraccionResp]:
-    return [ExtraccionResp(**j.model_dump()) for j in store.list_by_tipo(ExtraccionTipo.SOPORTE_UNIFICADO)]
+    return [ExtraccionResp(**j.model_dump()) for j in store.list_by_tipos(list(_TIPOS_MODULO))]
 
 
 @router.get("/extractions/{job_id}", response_model=ExtraccionResp, summary="Estado de una extracción")
 async def obtener_extraccion_soporte_unificado(job_id: UUID) -> ExtraccionResp:
-    job = store.get(job_id)
-    if job is None or job.tipo != ExtraccionTipo.SOPORTE_UNIFICADO:
-        raise HTTPException(status_code=404, detail="Extracción Soporte Unificado no encontrada")
+    job = _get_job_del_modulo(job_id)
     return ExtraccionResp(**job.model_dump())
 
 
 @router.get("/extractions/{job_id}/lotes", response_model=list[Lote], summary="Listar lotes")
 async def listar_lotes_soporte_unificado(job_id: UUID) -> list[Lote]:
-    job = store.get(job_id)
-    if job is None or job.tipo != ExtraccionTipo.SOPORTE_UNIFICADO:
-        raise HTTPException(status_code=404, detail="Extracción Soporte Unificado no encontrada")
+    _get_job_del_modulo(job_id)
     return store.list_lotes(job_id)
 
 
 @router.get("/extractions/{job_id}/lotes/{numero}", response_model=Lote, summary="Estado de un lote")
 async def obtener_lote_soporte_unificado(job_id: UUID, numero: int) -> Lote:
-    job = store.get(job_id)
-    if job is None or job.tipo != ExtraccionTipo.SOPORTE_UNIFICADO:
-        raise HTTPException(status_code=404, detail="Extracción Soporte Unificado no encontrada")
+    _get_job_del_modulo(job_id)
     lote = store.get_lote(job_id, numero)
     if lote is None:
         raise HTTPException(status_code=404, detail=f"Lote {numero} no existe")
@@ -296,9 +284,7 @@ async def descargar_lote_soporte_unificado(job_id: UUID, numero: int) -> FileRes
     dependencies=[Depends(require_no_viewer)],
 )
 async def renombrar_extraccion_soporte_unificado(job_id: UUID, req: RenombrarJobReq) -> ExtraccionResp:
-    job = store.get(job_id)
-    if job is None or job.tipo != ExtraccionTipo.SOPORTE_UNIFICADO:
-        raise HTTPException(status_code=404, detail="Extracción Soporte Unificado no encontrada")
+    _get_job_del_modulo(job_id)
     store.rename(job_id, req.nombre or None)
     job = store.get(job_id)
     return ExtraccionResp(**job.model_dump())
@@ -310,9 +296,7 @@ async def renombrar_extraccion_soporte_unificado(job_id: UUID, req: RenombrarJob
     dependencies=[Depends(require_no_viewer)],
 )
 async def cancelar_extraccion_soporte_unificado(job_id: UUID) -> dict:
-    job = store.get(job_id)
-    if job is None or job.tipo != ExtraccionTipo.SOPORTE_UNIFICADO:
-        raise HTTPException(status_code=404, detail="Extracción Soporte Unificado no encontrada")
+    job = _get_job_del_modulo(job_id)
     if job.estado not in (EstadoExtraccion.PENDING, EstadoExtraccion.RUNNING):
         raise HTTPException(
             status_code=409,
@@ -330,9 +314,7 @@ async def cancelar_extraccion_soporte_unificado(job_id: UUID) -> dict:
     dependencies=[Depends(require_no_viewer)],
 )
 async def eliminar_extraccion_soporte_unificado(job_id: UUID) -> dict:
-    job = store.get(job_id)
-    if job is None or job.tipo != ExtraccionTipo.SOPORTE_UNIFICADO:
-        raise HTTPException(status_code=404, detail="Extracción Soporte Unificado no encontrada")
+    _get_job_del_modulo(job_id)
     job_dir = settings.data_dir / f"job_{job_id}"
     carpetas = 0
     if job_dir.exists():
@@ -350,9 +332,7 @@ async def eliminar_extraccion_soporte_unificado(job_id: UUID) -> dict:
     response_class=FileResponse,
 )
 async def descargar_extraccion_soporte_unificado(job_id: UUID) -> FileResponse:
-    job = store.get(job_id)
-    if job is None or job.tipo != ExtraccionTipo.SOPORTE_UNIFICADO:
-        raise HTTPException(status_code=404, detail="Extracción Soporte Unificado no encontrada")
+    job = _get_job_del_modulo(job_id)
     if job.estado != EstadoExtraccion.COMPLETED:
         raise HTTPException(status_code=409, detail=f"Extracción en estado '{estado_label(job.estado)}'")
 
@@ -380,9 +360,7 @@ async def descargar_extraccion_soporte_unificado(job_id: UUID) -> FileResponse:
 
 @router.get("/extractions/{job_id}/files", summary="Árbol de archivos (carpeta por afiliado)")
 async def listar_archivos_soporte_unificado(job_id: UUID) -> dict:
-    job = store.get(job_id)
-    if job is None or job.tipo != ExtraccionTipo.SOPORTE_UNIFICADO:
-        raise HTTPException(status_code=404, detail="Extracción Soporte Unificado no encontrada")
+    job = _get_job_del_modulo(job_id)
     if job.estado != EstadoExtraccion.COMPLETED:
         raise HTTPException(status_code=409, detail=f"Extracción en estado '{estado_label(job.estado)}'")
 
@@ -410,9 +388,7 @@ async def listar_archivos_soporte_unificado(job_id: UUID) -> dict:
     response_class=FileResponse,
 )
 async def descargar_pdf_soporte_unificado(job_id: UUID, afiliado: str, filename: str) -> FileResponse:
-    job = store.get(job_id)
-    if job is None or job.tipo != ExtraccionTipo.SOPORTE_UNIFICADO:
-        raise HTTPException(status_code=404, detail="Extracción Soporte Unificado no encontrada")
+    _get_job_del_modulo(job_id)
 
     job_dir = settings.data_dir.resolve() / f"job_{job_id}"
     if not job_dir.exists():
