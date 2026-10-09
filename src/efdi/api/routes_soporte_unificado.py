@@ -27,6 +27,7 @@ from fastapi import (
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
 
+from efdi.api._files_util import listar_arbol_anidado
 from efdi.api.dependencies import current_user, require_modulo, require_no_viewer
 from efdi.api.schemas import (
     CrearAjusteSoportesReq,
@@ -347,7 +348,7 @@ async def descargar_extraccion_soporte_unificado(job_id: UUID) -> FileResponse:
             for lz in zips_lotes:
                 with _zf.ZipFile(lz) as inp:
                     for name in inp.namelist():
-                        out.writestr(f"{lz.stem}/{name}", inp.read(name))
+                        out.writestr(name, inp.read(name))  # aplanado: sin carpeta lote_NNN, los doc_key no se repiten entre lotes
         job.zip_path = str(mega_zip)
         store.save(job)
 
@@ -359,7 +360,11 @@ async def descargar_extraccion_soporte_unificado(job_id: UUID) -> FileResponse:
 
 
 @router.get("/extractions/{job_id}/files", summary="Árbol de archivos (carpeta por afiliado)")
-async def listar_archivos_soporte_unificado(job_id: UUID) -> dict:
+async def listar_archivos_soporte_unificado(
+    job_id: UUID,
+    limit: int = Query(500, ge=1, le=5000, description="Máximo de carpetas (afiliados) a devolver"),
+    offset: int = Query(0, ge=0),
+) -> dict:
     job = _get_job_del_modulo(job_id)
     if job.estado != EstadoExtraccion.COMPLETED:
         raise HTTPException(status_code=409, detail=f"Extracción en estado '{estado_label(job.estado)}'")
@@ -368,18 +373,10 @@ async def listar_archivos_soporte_unificado(job_id: UUID) -> dict:
     if not job_dir.exists():
         raise HTTPException(status_code=410, detail="Directorio no disponible")
 
-    from collections import defaultdict
-    # Agrupamos por carpeta de afiliado (doc_key); cada PDF es un módulo.
-    por_afiliado: dict[str, list[dict]] = defaultdict(list)
-    for pdf in job_dir.rglob("*.pdf"):
-        doc_key = pdf.parent.name  # carpeta = <doc_key>
-        por_afiliado[doc_key].append({"name": pdf.name, "size": pdf.stat().st_size})
+    def _build() -> dict:
+        return listar_arbol_anidado(job_dir, job_id=str(job_id), limit=limit, offset=offset)
 
-    folders = [
-        {"name": doc_key, "doc_key": doc_key, "files": sorted(items, key=lambda x: x["name"])}
-        for doc_key, items in sorted(por_afiliado.items())
-    ]
-    return {"job_id": str(job_id), "folders": folders, "total": sum(len(f["files"]) for f in folders)}
+    return await run_in_threadpool(_build)
 
 
 @router.get(

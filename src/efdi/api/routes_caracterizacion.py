@@ -9,6 +9,7 @@ from pathlib import Path
 from uuid import UUID, uuid4
 
 from fastapi import Depends, APIRouter, BackgroundTasks, HTTPException, Query, status
+from efdi.api._files_util import LIMITE_ARCHIVOS_DEFAULT
 from efdi.api.dependencies import current_user, require_modulo, require_no_viewer
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
@@ -296,7 +297,7 @@ async def descargar_extraccion_caracterizacion(job_id: UUID) -> FileResponse:
             for lz in zips_lotes:
                 with _zf.ZipFile(lz) as inp:
                     for name in inp.namelist():
-                        out.writestr(f"{lz.stem}/{name}", inp.read(name))
+                        out.writestr(name, inp.read(name))  # aplanado: sin carpeta lote_NNN, los doc_key no se repiten entre lotes
         job.zip_path = str(mega_zip)
         store.save(job)
 
@@ -322,24 +323,59 @@ async def listar_archivos_caracterizacion(job_id: UUID) -> dict:
     if not job_dir.exists():
         raise HTTPException(status_code=410, detail="Directorio no disponible")
 
-    from collections import defaultdict
-    # Carpetas FAM_<clave> — se agrupan por lote para que el árbol sea navegable.
-    agrupado: dict[str, list[dict]] = defaultdict(list)
-    for pdf in job_dir.rglob("*.pdf"):
-        lote_dir = pdf.parent.parent
-        lote_name = lote_dir.name if lote_dir.name.startswith("lote_") else "lote_001"
-        agrupado[lote_name].append({
-            "name": pdf.name,
-            "doc_key": pdf.stem,
-            "size": pdf.stat().st_size,
-            "lote": lote_name,
-        })
+    def _build() -> dict:
+        # Carpetas FAM_<clave> — se agrupan por lote para que el árbol sea
+        # navegable. Igual que en Soporte Unificado/Pruebas Rápidas: con miles
+        # de familias, abrir CADA carpeta para listar su PDF es lento en
+        # Docker Desktop (bind mount). Acá se listan los NOMBRES de carpeta de
+        # familia por lote primero (barato: un solo scandir por lote) y solo
+        # se abren las carpetas necesarias para completar el límite de
+        # archivos, lote por lote en orden — sin tocar las que sobran.
+        import os
 
-    folders = [
-        {"name": lote, "files": sorted(items, key=lambda x: x["doc_key"])}
-        for lote, items in sorted(agrupado.items())
-    ]
-    return {"job_id": str(job_id), "folders": folders, "total": sum(len(f["files"]) for f in folders)}
+        lote_dirs = sorted(
+            e.path for e in os.scandir(job_dir) if e.is_dir() and e.name.startswith("lote_")
+        )
+
+        familias_por_lote: dict[str, list[str]] = {}
+        for lote_path in lote_dirs:
+            lote_name = os.path.basename(lote_path)
+            with os.scandir(lote_path) as it:
+                familias_por_lote[lote_name] = sorted(e.name for e in it if e.is_dir())
+
+        total_real = sum(len(v) for v in familias_por_lote.values())
+
+        restante = LIMITE_ARCHIVOS_DEFAULT
+        folders = []
+        for lote_path in lote_dirs:
+            if restante <= 0:
+                break
+            lote_name = os.path.basename(lote_path)
+            archivos_lote = []
+            for fam_nombre in familias_por_lote[lote_name]:
+                if restante <= 0:
+                    break
+                carpeta = os.path.join(lote_path, fam_nombre)
+                with os.scandir(carpeta) as it:
+                    for e in it:
+                        if restante <= 0:
+                            break
+                        if e.name.endswith(".pdf"):
+                            archivos_lote.append({
+                                "name": e.name, "doc_key": os.path.splitext(e.name)[0],
+                                "size": e.stat().st_size, "lote": lote_name,
+                            })
+                            restante -= 1
+            if archivos_lote:
+                folders.append({"name": lote_name, "files": sorted(archivos_lote, key=lambda x: x["doc_key"])})
+
+        total_devuelto = sum(len(f["files"]) for f in folders)
+        return {
+            "job_id": str(job_id), "folders": folders, "total": total_devuelto,
+            "total_real": total_real, "truncado": total_devuelto < total_real,
+        }
+
+    return await run_in_threadpool(_build)
 
 
 @router.get(

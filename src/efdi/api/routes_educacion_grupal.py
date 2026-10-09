@@ -6,6 +6,7 @@ from pathlib import Path
 from uuid import UUID, uuid4
 
 from fastapi import Depends, APIRouter, BackgroundTasks, HTTPException, Query, status
+from efdi.api._files_util import listar_arbol_plano
 from efdi.api.dependencies import current_user, require_modulo, require_no_viewer
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
@@ -293,7 +294,7 @@ async def descargar_extraccion_educacion_grupal(job_id: UUID) -> FileResponse:
             for lz in zips_lotes:
                 with _zf.ZipFile(lz) as inp:
                     for name in inp.namelist():
-                        out.writestr(f"{lz.stem}/{name}", inp.read(name))
+                        out.writestr(name, inp.read(name))  # aplanado: sin carpeta lote_NNN, los doc_key no se repiten entre lotes
         job.zip_path = str(mega_zip)
         store.save(job)
 
@@ -322,25 +323,10 @@ async def listar_archivos_educacion_grupal(job_id: UUID) -> dict:
     if not job_dir.exists():
         raise HTTPException(status_code=410, detail="Directorio no disponible")
 
-    import re
-    from collections import defaultdict
-    agrupado: dict[str, list[dict]] = defaultdict(list)
-    for pdf in job_dir.rglob("*.pdf"):
-        nombre = pdf.stem
-        lote_dir = pdf.parent
-        lote_name = lote_dir.name if lote_dir.name.startswith("lote_") else ""
-        agrupado["documentos"].append({
-            "name": pdf.name,
-            "doc_key": nombre,
-            "size": pdf.stat().st_size,
-            "lote": lote_name,
-        })
+    def _build() -> dict:
+        return listar_arbol_plano(job_dir, job_id=str(job_id), agrupar=lambda _nombre: "documentos")
 
-    folders = [
-        {"name": tipo, "files": sorted(items, key=lambda x: x["doc_key"])}
-        for tipo, items in sorted(agrupado.items())
-    ]
-    return {"job_id": str(job_id), "folders": folders, "total": sum(len(f["files"]) for f in folders)}
+    return await run_in_threadpool(_build)
 
 
 @router.get(

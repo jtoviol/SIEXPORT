@@ -1,5 +1,6 @@
 """Endpoints REST."""
 import math
+import re
 import shutil
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -10,6 +11,7 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
 
 from efdi import __version__
+from efdi.api._files_util import listar_arbol_plano
 from efdi.api.dependencies import current_user, require_modulo, require_no_viewer
 from efdi.api.schemas import (
     ConteoFacturasResp,
@@ -617,7 +619,7 @@ async def descargar_extraccion(job_id: UUID) -> FileResponse:
             for lz in zips_lotes:
                 with _zf.ZipFile(lz) as inp:
                     for name in inp.namelist():
-                        out.writestr(f"{lz.stem}/{name}", inp.read(name))
+                        out.writestr(name, inp.read(name))  # aplanado: sin carpeta lote_NNN, los doc_key no se repiten entre lotes
         job.zip_path = str(mega_zip)
         store.save(job)
     return FileResponse(
@@ -643,37 +645,14 @@ async def listar_archivos(job_id: UUID) -> dict:
     if not job_dir.exists():
         raise HTTPException(status_code=410, detail="Directorio no disponible")
 
-    # Estructura nueva (1 PDF por afiliado): job_xxx/lote_NNN/CC_xxx.pdf
-    # Cada archivo es directamente el PDF multipágina del afiliado.
-    # Lo agrupamos por "tipo de documento" para mantener el árbol con secciones.
-    from collections import defaultdict
-    import re
-    agrupado: dict[str, list[dict]] = defaultdict(list)
+    def _agrupar(nombre_archivo: str) -> str | None:
+        match = re.match(r"^([A-Z]{2})_(.+)\.pdf$", nombre_archivo)
+        return match.group(1) if match else None
 
-    for pdf in job_dir.rglob("*.pdf"):
-        nombre = pdf.stem  # ej: "CC_11434102145"
-        match = re.match(r"^([A-Z]{2})_(.+)$", nombre)
-        if not match:
-            continue
-        tipo_doc = match.group(1)
-        # El "lote" del que vino (carpeta padre)
-        lote_dir = pdf.parent
-        lote_name = lote_dir.name if lote_dir.name.startswith("lote_") else ""
-        agrupado[tipo_doc].append({
-            "name": pdf.name,
-            "doc_key": nombre,
-            "size": pdf.stat().st_size,
-            "lote": lote_name,
-        })
+    def _build() -> dict:
+        return listar_arbol_plano(job_dir, job_id=str(job_id), agrupar=_agrupar)
 
-    folders = []
-    for tipo, items in sorted(agrupado.items()):
-        files = sorted(items, key=lambda x: x["doc_key"])
-        # Estructura compatible con frontend: "name" del folder = tipo doc
-        # cada "file" tiene name (filename) y doc_key (sin extensión)
-        folders.append({"name": tipo, "files": files})
-
-    return {"job_id": str(job_id), "folders": folders, "total": sum(len(f["files"]) for f in folders)}
+    return await run_in_threadpool(_build)
 
 
 @router_di.get(

@@ -1045,6 +1045,24 @@
       </button>
     </div>
 
+    <!-- Buscar/filtrar en la lista (client-side: loadJobs() ya trae todo el array) -->
+    <div class="px-3 py-2 border-b border-slate-100 flex gap-1.5 shrink-0">
+      <input id="jfilter-texto" type="text" placeholder="Buscar por nombre…" autocomplete="off"
+             oninput="aplicarFiltroJobs()"
+             class="flex-1 min-w-0 h-7 px-2 rounded-md border border-slate-200 text-xs bg-white
+                    outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500"/>
+      <select id="jfilter-estado" onchange="aplicarFiltroJobs()"
+              class="h-7 px-1 rounded-md border border-slate-200 text-xs bg-white shrink-0
+                     outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
+        <option value="">Todos</option>
+        <option value="pending">Pendiente</option>
+        <option value="running">Generando</option>
+        <option value="completed">Completado</option>
+        <option value="failed">Fallido</option>
+        <option value="cancelled">Cancelado</option>
+      </select>
+    </div>
+
     <div class="flex-1 overflow-y-auto min-h-0">
       <div id="jempty" class="hidden px-4 py-10 text-center">
         <svg class="h-8 w-8 text-slate-200 mx-auto mb-2" fill="none" viewBox="0 0 24 24"
@@ -1217,6 +1235,48 @@
                   d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7"/>
           </svg>
           Si, eliminar
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ MODAL: CONFIRMAR EXTRACCIÓN GRANDE ═══ -->
+<div id="big-overlay"
+     class="hidden fixed inset-0 bg-black/40 backdrop-blur-sm z-[60] flex items-center justify-center p-4"
+     onclick="_closeBigModal(false)">
+  <div id="big-modal"
+       class="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden"
+       style="transform:scale(.94) translateY(8px);opacity:0;transition:transform .22s cubic-bezier(.34,1.56,.64,1),opacity .18s ease"
+       onclick="event.stopPropagation()">
+    <div class="h-1 w-full bg-gradient-to-r from-amber-400 to-amber-600"></div>
+    <div class="p-6">
+      <div class="flex items-start gap-4 mb-4">
+        <div class="h-10 w-10 rounded-xl bg-amber-50 flex items-center justify-center shrink-0">
+          <svg class="h-5 w-5 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"/>
+          </svg>
+        </div>
+        <div>
+          <h3 class="font-semibold text-slate-900 text-base leading-tight">Extracción grande</h3>
+          <p class="text-xs text-slate-500 mt-0.5">Puede tardar varios minutos u horas</p>
+        </div>
+      </div>
+      <p class="text-sm text-slate-600 leading-relaxed">
+        Esta extracción va a procesar
+        <strong class="text-slate-800" id="big-total">0</strong> registros.
+        ¿Confirmás que querés generarla?
+      </p>
+      <div class="flex gap-3 mt-6">
+        <button onclick="_closeBigModal(false)"
+                class="flex-1 h-10 rounded-xl border border-slate-200 text-sm font-medium
+                       text-slate-600 hover:bg-slate-50 active:bg-slate-100 transition-colors">
+          Cancelar
+        </button>
+        <button id="big-confirm-btn" onclick="_closeBigModal(true)"
+                class="flex-1 h-10 rounded-xl bg-amber-500 hover:bg-amber-600 active:bg-amber-700
+                       text-white text-sm font-semibold transition-colors">
+          Sí, generar
         </button>
       </div>
     </div>
@@ -2153,6 +2213,11 @@ function switchTab(tabId) {
   const jempty = $("jempty");
   if (jlist) jlist.innerHTML = "";
   if (jempty) jempty.classList.add("hidden");
+  // El filtro de búsqueda es por módulo — no tiene sentido que un texto
+  // tipeado en Demanda Inducida siga filtrando la lista de Vacunación.
+  if ($("jfilter-texto"))  $("jfilter-texto").value = "";
+  if ($("jfilter-estado")) $("jfilter-estado").value = "";
+  _todosLosJobsCache = [];
   prevSt = {};
   // Cerrar el panel de detalle del job si estaba abierto (apuntaba a otro módulo)
   selId = null;
@@ -2415,19 +2480,55 @@ async function confirmDelete() {
   }
 }
 
+// Búsqueda/filtro de la lista — 100% client-side: loadJobs() ya trae el
+// array completo del módulo activo a memoria, así que filtrar no pide nada
+// nuevo al backend. _todosLosJobsCache guarda el último fetch para que
+// aplicarFiltroJobs() pueda re-renderizar sin re-consultar.
+let _todosLosJobsCache = [];
+
+function _filtrarJobs(data) {
+  const texto = ($("jfilter-texto")?.value || "").trim().toLowerCase();
+  const estado = $("jfilter-estado")?.value || "";
+  return data.filter(e => {
+    if (estado && e.estado !== estado) return false;
+    if (texto) {
+      const nombre = (e.nombre || "").toLowerCase();
+      const idCorto = (e.id || "").slice(0, 8).toLowerCase();
+      if (!nombre.includes(texto) && !idCorto.includes(texto)) return false;
+    }
+    return true;
+  });
+}
+
+function _renderJobsList(data) {
+  const empty = $("jempty"), list = $("jlist");
+  const filtrados = _filtrarJobs(data);
+  if (!data.length) {
+    list.innerHTML = ""; empty.classList.remove("hidden");
+    const p = empty.querySelector("p");
+    if (p) p.textContent = "Sin extracciones aun";
+  } else if (!filtrados.length) {
+    list.innerHTML = ""; empty.classList.remove("hidden");
+    const p = empty.querySelector("p");
+    if (p) p.textContent = "Sin resultados para el filtro aplicado";
+  } else {
+    empty.classList.add("hidden");
+    list.innerHTML = filtrados.map(jobHtml).join("");
+    markSel(selId);
+  }
+}
+
+// Re-renderiza con el filtro actual sin volver a pedirle nada al backend —
+// se llama al escribir en el input o cambiar el select de estado.
+function aplicarFiltroJobs() {
+  _renderJobsList(_todosLosJobsCache);
+}
+
 async function loadJobs() {
   try {
     const data = await apiGet(getModuleApi());
-    const empty = $("jempty"), list = $("jlist");
-    if (!data.length) {
-      list.innerHTML = ""; empty.classList.remove("hidden");
-      const p = empty.querySelector("p");
-      if (p) p.textContent = "Sin extracciones aun";
-    } else {
-      empty.classList.add("hidden");
-      list.innerHTML = data.map(jobHtml).join("");
-      markSel(selId);
-    }
+    _todosLosJobsCache = data;
+    _renderJobsList(data);
     // Detectar cambios de estado
     data.forEach(e => {
       const was = prevSt[e.id];
@@ -3186,6 +3287,23 @@ function renderJobSummary(job) {
     </div>`;
 }
 
+// El backend capea cuántos archivos/carpetas devuelve `/files` (ver
+// `capear_folders` en el backend) para no congelar el navegador con árboles
+// de cientos de miles de PDFs. Cuando viene recortado, avisamos — el .zip
+// completo siempre tiene todo, se descarga aparte sin este límite.
+function _bannerTruncado(data) {
+  if (!data?.truncado) return "";
+  const totalReal = data.total_real ?? data.total_folders ?? null;
+  const detalle = totalReal != null
+    ? `Mostrando ${data.total.toLocaleString()} de ${totalReal.toLocaleString()}.`
+    : "La lista se recortó.";
+  return `
+    <div class="mx-5 mt-3 px-3 py-2 rounded-md bg-amber-50 border border-amber-200 text-xs text-amber-700">
+      ⚠ Vista de archivos incompleta por tamaño. ${detalle}
+      Descargá el <strong>.zip</strong> para tener todo.
+    </div>`;
+}
+
 async function loadTreeWithSummary(id, job) {
   $("filter-bar").classList.add("hidden");
   $("exp-tree").innerHTML = renderJobSummary(job) + `
@@ -3203,7 +3321,7 @@ async function loadTreeWithSummary(id, job) {
     const summary = renderJobSummary(job);
     applyFilters();
     const treeContent = $("exp-tree").innerHTML;
-    $("exp-tree").innerHTML = summary + `<div>${treeContent}</div>`;
+    $("exp-tree").innerHTML = summary + _bannerTruncado(treeData) + `<div>${treeContent}</div>`;
     $("filter-bar").classList.remove("hidden");
   } catch (e) {
     $("exp-tree").innerHTML = renderJobSummary(job) +
@@ -3226,6 +3344,7 @@ async function loadTree(id) {
     $("filter-text").value = "";
     buildChips(treeData);
     applyFilters();
+    $("exp-tree").innerHTML = _bannerTruncado(treeData) + $("exp-tree").innerHTML;
     $("filter-bar").classList.remove("hidden");
   } catch (e) {
     $("exp-tree").innerHTML = `<div class="p-8 text-center text-sm text-red-400">${e.message}</div>`;
@@ -3471,6 +3590,11 @@ function setBtnGenDisabled(on) {
   _syncBtnGen();
 }
 
+// Último total mostrado en el preview — lo lee la confirmación antes de
+// generar extracciones grandes (ver UMBRAL_CONFIRMACION más abajo). null
+// mientras esté cargando/haya error, para no confirmar contra un dato viejo.
+let _ultimoPreviewTotal = null;
+
 function setAutoPreview(data) {
   const box = $("auto-preview");
   const txt = $("auto-preview-txt");
@@ -3478,15 +3602,18 @@ function setAutoPreview(data) {
   if (!data) { box.classList.add("hidden"); return; }
   box.classList.remove("hidden");
   if (data === "loading") {
+    _ultimoPreviewTotal = null;
     box.className = "rounded-md px-2 py-1.5 text-[10px] leading-snug border bg-slate-50 border-slate-200 text-slate-500";
     txt.textContent = "Consultando base de datos…";
     return;
   }
   if (data === "err") {
+    _ultimoPreviewTotal = null;
     box.className = "rounded-md px-2 py-1.5 text-[10px] leading-snug border bg-red-50 border-red-200 text-red-600";
     txt.textContent = "No se pudo obtener el conteo. Verificá la conexión a la DB.";
     return;
   }
+  _ultimoPreviewTotal = data.total_soportes ?? data.limite_efectivo ?? data.total_en_db ?? null;
   if (data.total_en_db === 0) {
     box.className = "rounded-md px-2 py-1.5 text-[10px] leading-snug border bg-amber-50 border-amber-200 text-amber-700";
     txt.textContent = "No hay registros para este rango de fechas.";
@@ -3627,6 +3754,34 @@ function onFacturaFormInput() {
   }
 }
 
+// ── Confirmación extra antes de generar extracciones muy grandes ──
+const UMBRAL_CONFIRMACION_GRANDE = 100000;
+let _bigResolve = null;
+
+function confirmarSiEsGrande(total) {
+  if (!Number.isFinite(total) || total < UMBRAL_CONFIRMACION_GRANDE) return Promise.resolve(true);
+  return new Promise(resolve => {
+    _bigResolve = resolve;
+    $("big-total").textContent = total.toLocaleString("es-CO");
+    const overlay = $("big-overlay");
+    const modal   = $("big-modal");
+    overlay.classList.remove("hidden");
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      modal.style.transform = "scale(1) translateY(0)";
+      modal.style.opacity   = "1";
+    }));
+    setTimeout(() => $("big-confirm-btn")?.focus(), 220);
+  });
+}
+
+function _closeBigModal(confirmado) {
+  const modal = $("big-modal");
+  modal.style.transform = "scale(.94) translateY(8px)";
+  modal.style.opacity   = "0";
+  setTimeout(() => $("big-overlay").classList.add("hidden"), 220);
+  if (_bigResolve) { _bigResolve(confirmado); _bigResolve = null; }
+}
+
 $("fext").addEventListener("submit", async ev => {
   ev.preventDefault();
   $("ferr").classList.add("hidden");
@@ -3694,6 +3849,10 @@ $("fext").addEventListener("submit", async ev => {
     bodyBase.tamano_lote = calcularTamanoLote(limite);
   }
 
+  // Extracciones grandes pueden tardar minutos/horas — confirmar antes de lanzar.
+  const totalEstimado = esAuto ? _ultimoPreviewTotal : limite;
+  if (!(await confirmarSiEsGrande(totalEstimado))) return;
+
   setGenLoading(true);
   let primerId = null;
   let errores = [];
@@ -3753,6 +3912,7 @@ document.addEventListener("keydown", e => {
   if (e.key !== "Escape") return;
   if (!$("del-overlay").classList.contains("hidden"))    cancelDelete();
   if (!$("cancel-overlay").classList.contains("hidden")) cancelarModal();
+  if (!$("big-overlay").classList.contains("hidden"))    _closeBigModal(false);
 });
 
 // ═══════════════════════════════════════════════════════════════════
