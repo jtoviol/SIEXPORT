@@ -229,6 +229,8 @@ lote_001.zip
 └── …
 ```
 
+> El ZIP combinado (`GET .../download`, cuando el job tiene varios lotes) **no** envuelve cada lote en su propia carpeta `lote_NNN/` — las carpetas de afiliado de todos los lotes quedan juntas en la raíz del ZIP, porque un mismo afiliado nunca se repite en dos lotes.
+
 **Universo** = unión de los 8 módulos: una persona entra al índice si aparece en **cualquiera** de ellos. El total de personas **nunca es la suma** de los conteos individuales — si alguien tiene soporte en 2 módulos, ahí cuenta 1 vez (deduplicado), mientras que cada módulo por separado la cuenta 1 vez cada uno. El endpoint de conteo previo lo advierte explícitamente (`"nota"` en la respuesta).
 
 **Filtro según el grupo de módulo** (fecha siempre obligatoria; régimen siempre obligatorio — corrida separada por régimen, igual que los demás módulos):
@@ -256,7 +258,7 @@ Reemplaza el uso manual de un script externo (`unificar_soportes.py`) que corrí
 - **Identificador de afiliado**: se valida con el mismo criterio `^[A-Za-z]+_\d+$` sobre el `doc_key` que ya arma el sistema — excluye automáticamente carpetas `FAM_<clave>` (familias de Caracterización sin ningún integrante con documento) y documentos con número no puramente numérico (ej. menores sin documento propio, tipo `MS`). Nunca se pierde un afiliado en silencio: todo excluido queda en el resumen.
 - **PDF fuente corrupto/ilegible**: se salta ese archivo puntual y sigue con los demás del mismo afiliado; si *todos* los PDF de un afiliado fallan, no se genera nada para él (también reportado).
 - **Orden de fusión**: alfabético por nombre de archivo dentro de la carpeta del afiliado — como cada PDF ya se llama `<modulo>_<fecha_iso>.pdf` o `<modulo>.pdf`, esto agrupa por módulo y, dentro del mismo módulo, cronológicamente.
-- **Salida**: `job_<id>/lote_NNN/<REGIMEN>/HEV_900422757_<factura>_<tipo><numero>.pdf`, empaquetada en ZIP por lote igual que cualquier otro job — mismos endpoints de descarga (`/download`, `/files`, etc.) que Soporte Unificado, porque comparten tipo de almacenamiento.
+- **Salida en disco**: `job_<id>/lote_NNN/<REGIMEN>/HEV_900422757_<factura>_<tipo><numero>.pdf`, empaquetada en ZIP por lote igual que cualquier otro job — mismos endpoints de descarga (`/download`, `/files`, etc.) que Soporte Unificado, porque comparten tipo de almacenamiento. Al descargar el ZIP combinado, queda una sola carpeta `<REGIMEN>/` con todos los PDF HEV adentro (sin carpetas de lote).
 - **Resumen**: al completarse, el panel de detalle muestra PDF generados, páginas totales, excluidos por identificador (con ejemplos) y PDFs fuente con error de lectura — guardado en el campo `resumen_json` del job.
 
 **API:** `POST /soporte-unificado/extractions/{job_id}/ajuste-soportes` con `{"numero_factura": "..."}` — crea un job `tipo=ajuste_soportes` enlazado al `origen_job_id`. El resto de endpoints (`/{id}`, `/lotes`, `/download`, `/files`, etc.) son los mismos de Soporte Unificado — aceptan ambos tipos indistintamente.
@@ -495,11 +497,32 @@ O con uvicorn directo:
 uvicorn efdi.main:app --reload --host 127.0.0.1 --port 8765
 ```
 
-### Producción
+### Producción (sin Docker)
 
 ```bash
 uvicorn efdi.main:app --host 0.0.0.0 --port 8765 --workers 4
 ```
+
+### Producción con Docker (como corre hoy)
+
+El despliegue real usa `docker-compose.yml` (imagen `siedfaser`, con ODBC Driver 17 preinstalado). Para aplicar cualquier cambio de código al contenedor que ya está corriendo:
+
+```bash
+docker compose up --build -d
+```
+
+Esto reconstruye la imagen con el código actual y reinicia el contenedor sin perder datos — `./data` queda montado como volumen (`data/efdi.db` con usuarios/extracciones, y los PDFs/ZIPs generados), así que sobrevive a cada rebuild.
+
+Verificar que quedó sano después de desplegar:
+
+```bash
+curl http://127.0.0.1:8765/health
+docker logs siexport-siedfaser-1 --tail 20
+```
+
+`docker compose down` detiene el contenedor sin borrar el volumen de datos. Para ver qué contenedor/imagen está corriendo: `docker ps --filter name=siexport`.
+
+> Importante: `DATA_DIR` en `.env` debe ser una ruta **relativa** (`./data`), no una ruta absoluta de Windows — una ruta absoluta de Windows no tiene sentido dentro del contenedor Linux y los datos quedarían en un lugar que no sobrevive al rebuild.
 
 ### URLs
 
@@ -569,6 +592,8 @@ GET    /extractions/{id}/files/{doc}/{file}    PDF individual
 POST   /extractions/{id}/cancel                Cancelar
 DELETE /extractions/{id}                       Eliminar + borrar disco
 ```
+
+> **`/files` está capeado** (2.000 archivos por defecto en los módulos que agrupan por tipo de documento; 500 carpetas con `?limit=&offset=` en los que agrupan por afiliado — Soporte Unificado, Pruebas Rápidas, Caracterización Familiar) para no intentar pintar un árbol gigante en el navegador. La respuesta trae `total`/`total_real` (o `total_folders`) y `truncado: true` cuando hay más de lo que se devolvió. El `.zip` de `/download` **siempre** trae todo, sin este límite — el límite es solo para la vista previa del navegador.
 
 ### Módulo FINDRISC
 
@@ -813,6 +838,8 @@ D:\proyecto\
     ├── config.py                       # Settings desde .env (incluye DB_*_SIBACOM para Caracterización)
     ├── api/
     │   ├── dependencies.py             # Auth/RBAC: current_user, require_admin, require_modulo, …
+    │   ├── _files_util.py              # Helpers compartidos del árbol de archivos (/files):
+    │   │                               # listado paginado/capeado sin congelar el navegador
     │   ├── routes.py                   # Endpoints Demanda Inducida (/extractions/...)
     │   ├── routes_findrisc.py          # Endpoints FINDRISC
     │   ├── routes_captacion.py         # Endpoints Captación
@@ -968,7 +995,11 @@ Cobertura actual buena en: DI, FINDRISC, PlanFami, Caracterización, auth/RBAC. 
 ```
 tests/
 ├── test_captacion.py           # pendiente (smoke como findrisc/planfami)
-└── test_educacion_grupal.py    # pendiente (smoke + filtro régimen)
+├── test_educacion_grupal.py    # pendiente (smoke + filtro régimen)
+└── test_files_util.py          # pendiente — listar_arbol_plano/listar_arbol_anidado
+                                 # (src/efdi/api/_files_util.py) solo se verificaron
+                                 # manualmente contra estructuras de carpetas armadas
+                                 # a mano, no quedó un test de pytest permanente.
 ```
 
 `tests/test_soporte_unificado.py` cubre el bug de datos corregido (familias sin
@@ -1026,6 +1057,11 @@ Comportamiento esperado: `cancel` solo aplica a jobs en `Pendiente` o `En curso`
 - Verificar que la extracción tenga `nombre` no vacío vía `GET /{modulo}/extractions/{id}`.
 - Asignarlo con `PATCH /{modulo}/extractions/{id}/nombre` con `{"nombre": "..."}`.
 - El nombre se sanitiza: chars inválidos para filesystem se reemplazan por `_`.
+
+**`/files` (árbol de archivos) tarda mucho o parece colgado:**
+- Medido en este proyecto: en Docker Desktop (Windows), cada syscall de filesystem contra un bind mount (`./data:/app/data`) tiene latencia alta (~10ms). Con una extracción de miles de afiliados, recorrer carpeta por carpeta puede tardar minutos si el código las abre todas de una.
+- Ya está resuelto para los 9 módulos (ver `_files_util.py`): se listan los nombres de carpeta/archivo primero, barato, y solo se abren/leen los que realmente entran en el límite de la respuesta. Si vuelve a aparecer esta lentitud en un endpoint nuevo, aplicar el mismo patrón ahí.
+- El síntoma se siente como "la página no responde" porque mientras esa request está en curso, otras acciones en la misma pestaña (como "Ajustar soportes") pueden parecer bloqueadas aunque no lo estén — el navegador espera esa respuesta antes de pintar el resto.
 
 ---
 
