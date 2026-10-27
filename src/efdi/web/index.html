@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>SIEDFASER — Sistema Inteligente de Exportación de Datos para Facturación de Seragil</title>
+  <title>SIEDFASER — Sistema Inteligente de Exportación de Datos para Facturación</title>
   <link rel="icon" type="image/png" href="/static/siedfaser_logo.png" />
   <script src="https://unpkg.com/@lottiefiles/dotlottie-wc@0.9.14/dist/dotlottie-wc.js" type="module"></script>
   <!-- CSS de Tailwind compilado localmente (ver src/efdi/web/tailwind-input.css
@@ -307,6 +307,9 @@
       background: #fff; border: 0; cursor: pointer;
     }
     #user-menu button:hover, #user-menu a:hover { background: #f1f5f9; }
+    /* `#user-menu button` pesa más que la utilidad `.hidden`: sin esto los
+       botones solo-admin (Gestionar usuarios, Audit log) se ven para todos. */
+    #user-menu button.hidden, #user-menu a.hidden { display: none; }
     #user-menu .um-logout { color: #dc2626; }
     #user-menu .um-logout:hover { background: #fef2f2; }
     .um-divider { height: 1px; background: #e2e8f0; }
@@ -472,6 +475,45 @@
     }
     .estado-dot.activo    { background: #22c55e; }
     .estado-dot.inactivo  { background: #cbd5e1; }
+
+    /* ═══ Novedad + recorrido guiado de Soporte Unificado ═══════════════════ */
+    #guia-bloqueo { position: fixed; inset: 0; z-index: 90; }
+    #guia-foco {
+      position: fixed; z-index: 91; pointer-events: none; border-radius: 10px;
+      box-shadow: 0 0 0 3px #3b6ea8, 0 0 0 9999px rgba(15,23,42,.55);
+      transition: top .2s ease, left .2s ease, width .2s ease, height .2s ease;
+    }
+    #guia-foco.sin-objetivo { box-shadow: 0 0 0 9999px rgba(15,23,42,.55); }
+    #guia-tarjeta, #novedad-tarjeta {
+      position: fixed; z-index: 92; width: min(360px, calc(100vw - 32px));
+      background: #fff; border-radius: 14px; overflow: hidden;
+      box-shadow: 0 20px 48px rgba(15,23,42,.28);
+      font-size: 13px; color: #1e293b; line-height: 1.5;
+    }
+    #novedad-tarjeta { width: min(440px, calc(100vw - 32px)); top: 50%; left: 50%; transform: translate(-50%, -50%); }
+    .guia-franja { height: 4px; background: linear-gradient(90deg, #3b6ea8, #234674); }
+    .guia-cuerpo { padding: 16px 18px 6px; }
+    .guia-paso { font-size: 11px; font-weight: 600; color: #3b6ea8; text-transform: uppercase; letter-spacing: .04em; }
+    .guia-titulo { font-size: 15px; font-weight: 700; color: #0f172a; margin: 2px 0 6px; }
+    .guia-texto p + p { margin-top: 6px; }
+    .guia-texto code { font-size: 11px; background: #f1f5f9; padding: 1px 4px; border-radius: 4px; }
+    .guia-acciones { display: flex; align-items: center; gap: 8px; padding: 12px 18px 16px; }
+    .guia-acciones .guia-espacio { flex: 1; }
+    .guia-btn {
+      min-height: 36px; padding: 0 14px; border-radius: 8px; font-size: 13px; font-weight: 600;
+      border: 1px solid #cbd5e1; background: #fff; color: #334155; cursor: pointer;
+    }
+    .guia-btn:hover { background: #f8fafc; }
+    .guia-btn.primario { background: #234674; border-color: #234674; color: #fff; }
+    .guia-btn.primario:hover { background: #1a3960; }
+    .guia-btn:focus-visible { outline: 2px solid #3b6ea8; outline-offset: 2px; }
+    .guia-saltar { background: none; border: 0; color: #64748b; font-size: 12px; cursor: pointer; padding: 8px 4px; }
+    .guia-saltar:hover { color: #0f172a; text-decoration: underline; }
+    @media (max-width: 639px) {
+      /* En móvil la tarjeta va abajo, de ancho completo, y no tapa el foco */
+      #guia-tarjeta { left: 16px !important; right: 16px; bottom: 16px; top: auto !important; width: auto; }
+    }
+    @media (prefers-reduced-motion: reduce) { #guia-foco { transition: none; } }
   </style>
 </head>
 
@@ -534,8 +576,6 @@
       <span style="color:#22a84a" class="font-semibold">datos</span><br/>
       para
       <span style="color:#1a2f6e" class="font-semibold">facturación</span>
-      de
-      <span style="color:#22a84a" class="font-semibold">Seragil</span>
     </span>
   </div>
   <!-- Trigger Cmd+K (desktop, en el header) -->
@@ -867,6 +907,17 @@
                 d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
         </svg>
         <span class="s-label">Conteo por facturas</span>
+      </button>
+      <!-- Solo visible en pestaña Soporte Unificado: reabre el recorrido guiado -->
+      <button id="btn-guia-su" type="button" onclick="iniciarGuiaSU()"
+              class="hidden w-full items-center justify-center gap-1.5 h-8 rounded-lg
+                     bg-white border border-slate-300 hover:bg-slate-50 text-slate-700
+                     text-xs font-medium transition-colors">
+        <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round"
+                d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+        </svg>
+        <span class="s-label">¿Cómo se usa?</span>
       </button>
     </div>
 
@@ -2285,6 +2336,11 @@ function switchTab(tabId) {
   // Soporte Unificado: régimen obligatorio + factura opcional
   const esSU = tabId === "soporte-unificado";
   $("su-regimen-section")?.classList.toggle("hidden", !esSU);
+  const btnGuia = $("btn-guia-su");
+  if (btnGuia) {
+    btnGuia.classList.toggle("hidden", !esSU);
+    btnGuia.classList.toggle("flex",   esSU);
+  }
   if (!esSU) {
     const rSubSU = $("su-regimen-sub"), rContSU = $("su-regimen-cont");
     const facSub = $("su-numero-factura-sub"), facCont = $("su-numero-factura-cont");
@@ -4538,6 +4594,282 @@ async function submitResetPwd() {
   } finally { btn.disabled = false; }
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// NOVEDAD + RECORRIDO GUIADO: Soporte Unificado
+// ═══════════════════════════════════════════════════════════════════
+// El aviso sale una sola vez por navegador (localStorage). El recorrido
+// resalta los controles reales de la pantalla; si uno no está visible en ese
+// momento (ej. Descargar sin extracción seleccionada, o el menú lateral en
+// móvil), el paso se muestra centrado con una explicación alternativa.
+// Nunca toca valores del formulario: elegir régimen dispara el conteo, que
+// es una consulta pesada.
+const NOVEDAD_SU_KEY = "siexport_novedad_soporte_unificado_v1";
+let _novedadVistaEnSesion = false;   // respaldo si localStorage no está disponible
+
+function _novedadSUVista() {
+  try { return localStorage.getItem(NOVEDAD_SU_KEY) === "1"; }
+  catch { return _novedadVistaEnSesion; }
+}
+function _marcarNovedadSUVista() {
+  _novedadVistaEnSesion = true;
+  try { localStorage.setItem(NOVEDAD_SU_KEY, "1"); } catch { /* sin storage: queda solo en sesión */ }
+}
+
+function mostrarNovedadSU() {
+  if (!currentUser || !tieneAccesoModulo("soporte-unificado") || _novedadSUVista()) return;
+  if ($("novedad-tarjeta")) return;
+  const bloqueo = document.createElement("div");
+  bloqueo.id = "guia-bloqueo";
+  bloqueo.style.background = "rgba(15,23,42,.55)";
+  const t = document.createElement("div");
+  t.id = "novedad-tarjeta";
+  t.setAttribute("role", "dialog");
+  t.setAttribute("aria-modal", "true");
+  t.setAttribute("aria-labelledby", "novedad-titulo");
+  t.innerHTML = `
+    <div class="guia-franja"></div>
+    <div class="guia-cuerpo">
+      <div class="guia-paso">Novedad</div>
+      <div class="guia-titulo" id="novedad-titulo">Ya está disponible Soporte Unificado</div>
+      <div class="guia-texto">
+        <p>Genere en una sola extracción los soportes de <strong>Demanda Inducida, FINDRISC,
+        Planificación Familiar, Pruebas Rápidas, Captación, Educación Grupal, Vacunación y
+        Caracterización Familiar</strong>.</p>
+        <p>Después puede <strong>ajustarlos</strong> (un PDF por afiliado, con el nombre que pide
+        facturación) y <strong>descargarlos</strong> en un .zip.</p>
+      </div>
+    </div>
+    <div class="guia-acciones">
+      <span class="guia-espacio"></span>
+      <button type="button" class="guia-btn" data-accion="cerrar">Ahora no</button>
+      <button type="button" class="guia-btn primario" data-accion="guia">Ver recorrido</button>
+    </div>`;
+  const cerrar = (abrirGuia) => {
+    _marcarNovedadSUVista();
+    document.removeEventListener("keydown", onTecla, true);
+    bloqueo.remove(); t.remove();
+    if (abrirGuia) iniciarGuiaSU();
+  };
+  const onTecla = (e) => { if (e.key === "Escape") { e.stopPropagation(); cerrar(false); } };
+  t.querySelector('[data-accion="cerrar"]').onclick = () => cerrar(false);
+  t.querySelector('[data-accion="guia"]').onclick  = () => cerrar(true);
+  document.addEventListener("keydown", onTecla, true);
+  document.body.append(bloqueo, t);
+  t.querySelector('[data-accion="guia"]').focus();
+}
+
+const _PASOS_GUIA_SU = [
+  {
+    titulo: "El módulo",
+    el: () => document.querySelector('#app-sidebar-nav .sidebar-item[data-tab="soporte-unificado"]'),
+    texto: `<p>Soporte Unificado está en el menú lateral, categoría <strong>Transversal</strong>.</p>`,
+    alt: `<p>Abra el menú (botón ☰ arriba a la izquierda) y busque <strong>Soporte Unificado</strong>,
+          en la categoría Transversal.</p>`,
+  },
+  {
+    titulo: "Nueva extracción",
+    el: () => $("btn-toggle"),
+    texto: `<p><strong>Nueva extracción</strong> abre el formulario. Para este recorrido ya se lo dejamos abierto.</p>`,
+    alt: `<p>El botón <strong>Nueva extracción</strong> abre el formulario. Mientras haya una extracción
+          en curso queda bloqueado hasta que termine.</p>`,
+  },
+  {
+    titulo: "Régimen (obligatorio)",
+    el: () => $("su-regimen-section"),
+    texto: `<p>Elija <strong>Subsidiado</strong> o <strong>Contributivo</strong>. Cada régimen es una
+            corrida aparte: si necesita los dos, genere dos extracciones.</p>`,
+    alt: `<p>En el formulario elija <strong>Subsidiado</strong> o <strong>Contributivo</strong>. Cada régimen
+          es una corrida aparte.</p>`,
+  },
+  {
+    titulo: "Número de factura (opcional)",
+    el: () => $("su-regimen-section"),
+    texto: `<p>Al elegir el régimen aparece su campo de factura. Escriba <strong>solo el número</strong>,
+            sin CAB ni FAB (ej. <code>11502</code>). Cada régimen recuerda su propio número.</p>
+            <p>La factura solo filtra Demanda Inducida, FINDRISC, Planificación Familiar y Pruebas Rápidas;
+            los demás módulos se filtran por régimen y fechas.</p>`,
+    alt: `<p>Al elegir el régimen aparece el campo de factura: escriba solo el número, sin CAB ni FAB.
+          Solo filtra los módulos facturables.</p>`,
+  },
+  {
+    titulo: "Rango de fechas",
+    el: () => $("desde")?.closest(".grid"),
+    texto: `<p>Elija <strong>Desde</strong> y <strong>Hasta</strong>: el periodo de las atenciones que quiere soportar.</p>`,
+    alt: `<p>Elija las fechas <strong>Desde</strong> y <strong>Hasta</strong> del periodo a soportar.</p>`,
+  },
+  {
+    titulo: "Conteo previo",
+    el: () => $("btn-modo-auto")?.parentElement?.parentElement,
+    texto: `<p>Deje el límite en <strong>Auto</strong> para traer todo. Debajo aparece cuántos registros hay
+            por módulo antes de generar; con factura puede tardar un poco más.</p>
+            <p>Use <strong>Manual</strong> solo para pruebas pequeñas.</p>`,
+    alt: `<p>Con el límite en <strong>Auto</strong> verá el conteo por módulo antes de generar.</p>`,
+  },
+  {
+    titulo: "Generar",
+    el: () => $("btn-gen"),
+    texto: `<p><strong>Generar</strong> crea la extracción y la procesa por lotes. Mientras corre, los otros
+            módulos quedan bloqueados hasta que termine.</p>`,
+    alt: `<p>Con todo listo, presione <strong>Generar</strong>. Se procesa por lotes.</p>`,
+  },
+  {
+    titulo: "Sus extracciones",
+    el: () => $("jlist")?.parentElement,
+    texto: `<p>Aquí aparecen sus extracciones con su estado (Pendiente, Generando, Completado…).
+            Haga clic en una para ver el avance o sus archivos.</p>`,
+    alt: `<p>La lista de extracciones muestra el estado de cada una. Haga clic en una para ver su avance o sus archivos.</p>`,
+  },
+  {
+    titulo: "Descargar",
+    el: () => $("exp-dl"),
+    texto: `<p><strong>Descargar .zip</strong> baja todos los soportes de la extracción seleccionada.</p>`,
+    alt: `<p>Al seleccionar una extracción <strong>completada</strong>, arriba a la derecha aparece
+          <strong>Descargar .zip</strong>, que baja todos sus soportes.</p>`,
+  },
+  {
+    titulo: "Ajustar soportes",
+    el: () => $("btn-ajustar-soportes"),
+    texto: `<p><strong>Ajustar soportes</strong> une todos los PDF de cada afiliado en uno solo y lo renombra
+            para facturación: <code>HEV_900422757_&lt;factura&gt;_&lt;tipo&gt;&lt;número&gt;.pdf</code>.</p>
+            <p>Le pide el número de factura y crea una extracción nueva de tipo <em>Ajuste de soportes</em>.</p>`,
+    alt: `<p>Al seleccionar un Soporte Unificado <strong>completado</strong> aparece, junto a Descargar, el botón
+          <strong>Ajustar soportes</strong>: une los PDF de cada afiliado en uno solo, renombrado
+          <code>HEV_900422757_&lt;factura&gt;_&lt;tipo&gt;&lt;número&gt;.pdf</code>.</p>
+          <p>Le pide el número de factura y crea una extracción nueva de tipo <em>Ajuste de soportes</em>.</p>`,
+  },
+  {
+    titulo: "Descargar el ajuste",
+    el: () => $("jlist")?.parentElement,
+    texto: `<p>El ajuste aparece en esta misma lista. Cuando termine, selecciónelo: verá el resumen
+            (PDF generados, excluidos y errores) y su botón <strong>Descargar .zip</strong> con los archivos
+            listos para radicar.</p>
+            <p>Puede repetir este recorrido con el botón <strong>¿Cómo se usa?</strong> del módulo.</p>`,
+    alt: `<p>El ajuste aparece en la lista de extracciones. Cuando termine, selecciónelo para ver el resumen y
+          descargar el .zip.</p>
+          <p>Puede repetir este recorrido con el botón <strong>¿Cómo se usa?</strong> del módulo.</p>`,
+  },
+];
+
+let _guiaSU = null;   // { paso, foco, tarjeta, bloqueo, previoFoco, onTecla, onReubicar }
+
+function iniciarGuiaSU() {
+  if (_guiaSU) return;
+  if (activeTab !== "soporte-unificado") {
+    switchTab("soporte-unificado");
+    // switchTab puede negarse (extracción corriendo en otro módulo); ya avisó con toast.
+    if (activeTab !== "soporte-unificado") return;
+  }
+  // Abrir el formulario para que los pasos 3-7 tengan qué resaltar
+  // (toggleForm no abre si hay una extracción en curso: esos pasos usan `alt`).
+  if (!formOpen) toggleForm();
+
+  const bloqueo = document.createElement("div");
+  bloqueo.id = "guia-bloqueo";
+  const foco = document.createElement("div");
+  foco.id = "guia-foco";
+  const tarjeta = document.createElement("div");
+  tarjeta.id = "guia-tarjeta";
+  tarjeta.setAttribute("role", "dialog");
+  tarjeta.setAttribute("aria-modal", "true");
+  tarjeta.setAttribute("aria-labelledby", "guia-titulo");
+  tarjeta.setAttribute("aria-describedby", "guia-texto");
+  document.body.append(bloqueo, foco, tarjeta);
+
+  const onTecla = (e) => {
+    if (e.key === "Escape")          { e.stopPropagation(); cerrarGuiaSU(); }
+    else if (e.key === "ArrowRight") { e.preventDefault(); _irPasoGuia(_guiaSU.paso + 1); }
+    else if (e.key === "ArrowLeft")  { e.preventDefault(); _irPasoGuia(_guiaSU.paso - 1); }
+  };
+  const onReubicar = () => _ubicarGuia();
+  document.addEventListener("keydown", onTecla, true);
+  window.addEventListener("resize", onReubicar);
+  document.addEventListener("scroll", onReubicar, true);
+
+  _guiaSU = { paso: 0, foco, tarjeta, bloqueo, previoFoco: document.activeElement, onTecla, onReubicar };
+  _irPasoGuia(0);
+}
+
+function cerrarGuiaSU() {
+  if (!_guiaSU) return;
+  const g = _guiaSU;
+  _guiaSU = null;
+  document.removeEventListener("keydown", g.onTecla, true);
+  window.removeEventListener("resize", g.onReubicar);
+  document.removeEventListener("scroll", g.onReubicar, true);
+  g.bloqueo.remove(); g.foco.remove(); g.tarjeta.remove();
+  g.previoFoco?.focus?.();
+}
+
+function _visibleEnPantalla(el) {
+  if (!el || !el.getClientRects().length) return false;
+  const r = el.getBoundingClientRect();
+  return r.width > 0 && r.height > 0 && r.right > 0 && r.left < window.innerWidth;
+}
+
+function _irPasoGuia(n) {
+  if (!_guiaSU) return;
+  if (n >= _PASOS_GUIA_SU.length) { cerrarGuiaSU(); return; }
+  if (n < 0) return;
+  _guiaSU.paso = n;
+  const p = _PASOS_GUIA_SU[n];
+  const el = p.el();
+  const visible = _visibleEnPantalla(el);
+  if (visible) el.scrollIntoView({ block: "nearest" });
+  const ultimo = n === _PASOS_GUIA_SU.length - 1;
+  _guiaSU.tarjeta.innerHTML = `
+    <div class="guia-franja"></div>
+    <div class="guia-cuerpo" aria-live="polite">
+      <div class="guia-paso">Paso ${n + 1} de ${_PASOS_GUIA_SU.length}</div>
+      <div class="guia-titulo" id="guia-titulo">${p.titulo}</div>
+      <div class="guia-texto" id="guia-texto">${visible ? p.texto : p.alt}</div>
+    </div>
+    <div class="guia-acciones">
+      ${ultimo ? "" : `<button type="button" class="guia-saltar" data-accion="cerrar">Saltar recorrido</button>`}
+      <span class="guia-espacio"></span>
+      ${n > 0 ? `<button type="button" class="guia-btn" data-accion="atras">Anterior</button>` : ""}
+      <button type="button" class="guia-btn primario" data-accion="siguiente">${ultimo ? "Terminar" : "Siguiente"}</button>
+    </div>`;
+  const t = _guiaSU.tarjeta;
+  t.querySelector('[data-accion="cerrar"]')?.addEventListener("click", cerrarGuiaSU);
+  t.querySelector('[data-accion="atras"]')?.addEventListener("click", () => _irPasoGuia(n - 1));
+  t.querySelector('[data-accion="siguiente"]').addEventListener("click", () => _irPasoGuia(n + 1));
+  _guiaSU.objetivo = visible ? el : null;
+  // Medir después del scroll y del reflow de la tarjeta nueva.
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    _ubicarGuia();
+    t.querySelector('[data-accion="siguiente"]')?.focus();
+  }));
+}
+
+function _ubicarGuia() {
+  if (!_guiaSU) return;
+  const { foco, tarjeta, objetivo } = _guiaSU;
+  const vw = window.innerWidth, vh = window.innerHeight, m = 16, pad = 6;
+  if (!objetivo || !_visibleEnPantalla(objetivo)) {
+    // Sin objetivo: oscurecer todo y centrar la tarjeta.
+    foco.classList.add("sin-objetivo");
+    Object.assign(foco.style, { top: `${vh / 2}px`, left: `${vw / 2}px`, width: "0px", height: "0px" });
+    tarjeta.style.left = `${Math.max(m, (vw - tarjeta.offsetWidth) / 2)}px`;
+    tarjeta.style.top  = `${Math.max(m, (vh - tarjeta.offsetHeight) / 2)}px`;
+    return;
+  }
+  foco.classList.remove("sin-objetivo");
+  const r = objetivo.getBoundingClientRect();
+  Object.assign(foco.style, {
+    top: `${r.top - pad}px`, left: `${r.left - pad}px`,
+    width: `${r.width + pad * 2}px`, height: `${r.height + pad * 2}px`,
+  });
+  if (vw < 640) return;   // en móvil la tarjeta va fija abajo (CSS)
+  const tw = tarjeta.offsetWidth, th = tarjeta.offsetHeight;
+  let left, top;
+  if (r.right + m + tw <= vw - m)      { left = r.right + m;  top = r.top; }        // a la derecha
+  else if (r.left - m - tw >= m)       { left = r.left - m - tw; top = r.top; }     // a la izquierda
+  else if (r.bottom + m + th <= vh - m){ left = r.left; top = r.bottom + m; }       // abajo
+  else                                 { left = r.left; top = r.top - m - th; }     // arriba
+  tarjeta.style.left = `${Math.min(Math.max(m, left), vw - tw - m)}px`;
+  tarjeta.style.top  = `${Math.min(Math.max(m, top), vh - th - m)}px`;
+}
+
 (async function () {
   const hoy = new Date().toISOString().slice(0, 10);
   const mes  = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
@@ -4556,6 +4888,8 @@ async function submitResetPwd() {
   loadDashboard();
   // 3. Al cargar las cards del dashboard, filtrar las que el user no puede ver.
   setTimeout(filtrarCardsDashboard, 700);
+  // 4. Aviso de novedad (una sola vez por navegador, solo si tiene el módulo).
+  mostrarNovedadSU();
 })();
 </script>
 </body>
