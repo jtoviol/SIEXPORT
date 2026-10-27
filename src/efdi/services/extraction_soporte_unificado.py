@@ -156,28 +156,34 @@ def conteo_por_modulo(
     Es un desglose de soportes ≈ PDFs por módulo. El total es cota superior de
     personas distintas (una persona en N módulos cuenta N veces). Barato: se usa
     en el preview antes de generar.
+
+    Los 8 COUNT son independientes y corren EN PARALELO (un hilo y una conexión
+    por módulo): en serie sumaban ~63 s en producción (sep-2026, SUBSIDIADO),
+    más que el timeout del proxy de IIS → 502 "Proxy Error" en el preview. En
+    paralelo el total ≈ el módulo más lento (~24 s, Pruebas Rápidas).
     """
-    out: dict[str, int] = {}
+    tareas: list[tuple[str, object]] = []
     for mod_id, getter, _, _ in _FACTURABLES:
-        try:
-            out[mod_id] = getter().get_total(desde, hasta, facturas=facturas)
-        except Exception:  # noqa: BLE001
-            log.exception("soporte_unif.conteo_falló", extra={"modulo": mod_id})
-            out[mod_id] = 0
+        tareas.append((mod_id, lambda g=getter: g().get_total(desde, hasta, facturas=facturas)))
     for mod_id, getter, _, _ in _REGIMEN_SIMPLE:
-        try:
-            out[mod_id] = getter().get_total(desde, hasta, regimen=regimen)
-        except Exception:  # noqa: BLE001
-            log.exception("soporte_unif.conteo_falló", extra={"modulo": mod_id})
-            out[mod_id] = 0
-    try:
-        out["caracterizacion-familiar"] = get_caracterizacion_repository().get_total(
-            desde, hasta, regimen=regimen
-        )
-    except Exception:  # noqa: BLE001
-        log.exception("soporte_unif.conteo_falló", extra={"modulo": "caracterizacion-familiar"})
-        out["caracterizacion-familiar"] = 0
-    return out
+        tareas.append((mod_id, lambda g=getter: g().get_total(desde, hasta, regimen=regimen)))
+    tareas.append((
+        "caracterizacion-familiar",
+        lambda: get_caracterizacion_repository().get_total(desde, hasta, regimen=regimen),
+    ))
+
+    out: dict[str, int] = {}
+    with ThreadPoolExecutor(max_workers=len(tareas)) as executor:
+        futuros = {executor.submit(fn): mod_id for mod_id, fn in tareas}
+        for futuro in as_completed(futuros):
+            mod_id = futuros[futuro]
+            try:
+                out[mod_id] = futuro.result()
+            except Exception:  # noqa: BLE001
+                log.exception("soporte_unif.conteo_falló", extra={"modulo": mod_id})
+                out[mod_id] = 0
+    # Mismo orden de módulos que antes (el frontend pinta el desglose en este orden).
+    return {mod_id: out[mod_id] for mod_id, _ in tareas}
 
 
 def _jefe_doc_key(fam: FamiliaCaracterizada) -> tuple[str, str | None]:
