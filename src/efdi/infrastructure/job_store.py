@@ -108,7 +108,6 @@ class JobStore:
 
             facturas_csv = ",".join(job.facturas) if job.facturas else None
             if existing:
-                # Mismas columnas que actualizaba el ON CONFLICT de SQLite.
                 conn.execute(
                     """
                     UPDATE extracciones SET

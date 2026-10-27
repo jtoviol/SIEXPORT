@@ -50,7 +50,7 @@ def _esquema_app() -> None:
 
 @pytest.fixture(autouse=True)
 def _tablas_vacias(_esquema_app) -> None:
-    """Cada test arranca con la base vacía (antes lo daba un SQLite por tmp_path)."""
+    """Cada test arranca con la base vacía."""
     from efdi.infrastructure.db import db
     with db.transaction() as conn:
         for tabla in ("lotes", "extracciones", "audit_log", "users"):

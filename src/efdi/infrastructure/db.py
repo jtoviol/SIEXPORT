@@ -1,14 +1,14 @@
 """Base propia de la aplicación en SQL Server (usuarios, extracciones, lotes, audit_log).
 
-Reemplaza al SQLite `data/efdi.db`. Conexión: variables `APP_DB_*` del .env.
+Conexión: variables `APP_DB_*` del .env.
 
 Las tablas NO se crean al arrancar la app: las crea el comando de migración
 `python -m efdi.migrar` (idempotente, ver `crear_esquema`). Al arrancar,
 `verificar_esquema` comprueba que existan y que la versión coincida; si no,
 la app no levanta y el log dice qué comando correr.
 
-`connect()` / `transaction()` devuelven un adaptador con la misma interfaz que
-usaban los stores con sqlite3: `conn.execute(sql, params)` → cursor con
+`connect()` / `transaction()` devuelven un adaptador simple:
+`conn.execute(sql, params)` → cursor con
 `fetchone()` / `fetchall()` (filas como dict, `row["columna"]`) y `rowcount`.
 Los placeholders siguen siendo `?` (pyodbc usa el mismo estilo).
 """
@@ -22,8 +22,7 @@ from efdi.config import settings
 
 log = logging.getLogger(__name__)
 
-# Versión del esquema en SQL Server. Empieza en 1: es una base nueva, no hereda
-# la numeración v2..v8 del SQLite anterior.
+# Versión del esquema. Subirla junto con el DDL nuevo en `_DDL`.
 SCHEMA_VERSION = 1
 
 TABLAS = ("schema_version", "users", "audit_log", "extracciones", "lotes")
@@ -157,7 +156,7 @@ class _Cursor:
 
 
 class _Conexion:
-    """Interfaz mínima compatible con lo que los stores usaban de sqlite3."""
+    """Interfaz mínima que usan los stores: execute() con placeholders `?`."""
 
     def __init__(self, conn: Any) -> None:
         self._conn = conn
@@ -173,9 +172,8 @@ class _Conexion:
 
 class Database:
     def __init__(self) -> None:
-        # Serializa las escrituras dentro del proceso (mismo comportamiento que
-        # con SQLite). Entre procesos, los SELECT ... WITH (UPDLOCK) de los
-        # stores evitan pisadas.
+        # Serializa las escrituras dentro del proceso. Entre procesos, los
+        # SELECT ... WITH (UPDLOCK) de los stores evitan pisadas.
         self._lock = Lock()
 
     def _abrir(self, autocommit: bool) -> Any:

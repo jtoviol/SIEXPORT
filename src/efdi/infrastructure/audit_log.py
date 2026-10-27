@@ -86,7 +86,7 @@ def list_audit(limit: int = 100, actor: str | None = None,
             out = []
             for r in rows:
                 d = dict(r)
-                # Mismo formato que devolvía SQLite (texto ISO) para no cambiar el contrato del API.
+                # El API devuelve `ts` como texto ISO 8601.
                 if isinstance(d.get("ts"), datetime):
                     d["ts"] = d["ts"].isoformat()
                 if d.get("detalle"):

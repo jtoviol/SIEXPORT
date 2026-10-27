@@ -535,7 +535,7 @@ docker logs siexport-siedfaser-1 --tail 20
 
 ### Base de datos de la aplicación (SQL Server)
 
-Usuarios, extracciones, lotes y el audit log viven en una base SQL Server propia de la app, configurada con `APP_DB_HOST`, `APP_DB_PORT`, `APP_DB_NAME`, `APP_DB_USER` y `APP_DB_PASS` en el `.env` (el driver es el mismo `DB_DRIVER`). Reemplaza al SQLite `data/efdi.db` que se usaba antes: ese archivo ya no se lee y se puede borrar.
+Usuarios, extracciones, lotes y el audit log viven en una base SQL Server propia de la app, configurada con `APP_DB_HOST`, `APP_DB_PORT`, `APP_DB_NAME`, `APP_DB_USER` y `APP_DB_PASS` en el `.env` (el driver es el mismo `DB_DRIVER`).
 
 La app **no crea las tablas sola**. Se crean con el comando de migración, que es idempotente (se puede repetir sin borrar nada):
 

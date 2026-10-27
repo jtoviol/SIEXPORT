@@ -30,8 +30,8 @@ class Settings(BaseSettings):
     db_password_sibacom: str = ""
 
     # Tercera conexión: base propia de la aplicación (usuarios, extracciones,
-    # lotes, audit_log). Reemplaza al SQLite data/efdi.db. Las tablas las crea
-    # `python -m efdi.migrar` — ver infrastructure/db.py.
+    # lotes, audit_log). Las tablas las crea `python -m efdi.migrar` — ver
+    # infrastructure/db.py.
     app_db_host: str = ""
     app_db_port: int = 1433
     app_db_name: str = ""
