@@ -98,3 +98,58 @@ def test_jefe_doc_key_siempre_consistente_con_doc_key_standalone():
     for fam in casos:
         doc_key, _ = _jefe_doc_key(fam)
         assert doc_key == fam.doc_key
+
+
+
+# ─── Conteo previo en paralelo ───────────────────────────────────────────────
+# Regresión: los 8 COUNT corrían en serie (~63 s en producción) y el proxy de
+# IIS cortaba el preview con 502. Ahora corren en paralelo.
+
+
+class _RepoLento:
+    def __init__(self, total: int, demora: float = 0.4, falla: bool = False) -> None:
+        self.total, self.demora, self.falla = total, demora, falla
+
+    def get_total(self, desde, hasta, **_kw) -> int:
+        import time
+        time.sleep(self.demora)
+        if self.falla:
+            raise RuntimeError("timeout simulado")
+        return self.total
+
+
+def _parchear_modulos(monkeypatch, repos: dict[str, _RepoLento]) -> None:
+    from efdi.services import extraction_soporte_unificado as su
+    monkeypatch.setattr(su, "_FACTURABLES", [
+        ("demanda-inducida", lambda: repos["demanda-inducida"], None, None),
+        ("findrisc", lambda: repos["findrisc"], None, None),
+    ])
+    monkeypatch.setattr(su, "_REGIMEN_SIMPLE", [
+        ("vacunacion", lambda: repos["vacunacion"], None, None),
+    ])
+    monkeypatch.setattr(su, "get_caracterizacion_repository", lambda: repos["caracterizacion-familiar"])
+
+
+def test_conteo_por_modulo_corre_en_paralelo(monkeypatch):
+    import time
+    from efdi.services.extraction_soporte_unificado import conteo_por_modulo
+    _parchear_modulos(monkeypatch, {
+        "demanda-inducida": _RepoLento(10), "findrisc": _RepoLento(20),
+        "vacunacion": _RepoLento(30), "caracterizacion-familiar": _RepoLento(40),
+    })
+    t = time.monotonic()
+    conteo = conteo_por_modulo(date(2026, 9, 1), date(2026, 9, 30), facturas=None, regimen="SUBSIDIADO")
+    duracion = time.monotonic() - t
+    assert conteo == {"demanda-inducida": 10, "findrisc": 20, "vacunacion": 30, "caracterizacion-familiar": 40}
+    assert list(conteo) == ["demanda-inducida", "findrisc", "vacunacion", "caracterizacion-familiar"]
+    assert duracion < 1.2, f"en serie serían ~1.6 s; tardó {duracion:.2f} s"
+
+
+def test_conteo_por_modulo_un_modulo_que_falla_no_tumba_a_los_demas(monkeypatch):
+    from efdi.services.extraction_soporte_unificado import conteo_por_modulo
+    _parchear_modulos(monkeypatch, {
+        "demanda-inducida": _RepoLento(10), "findrisc": _RepoLento(0, falla=True),
+        "vacunacion": _RepoLento(30), "caracterizacion-familiar": _RepoLento(40),
+    })
+    conteo = conteo_por_modulo(date(2026, 9, 1), date(2026, 9, 30), facturas=None, regimen="SUBSIDIADO")
+    assert conteo == {"demanda-inducida": 10, "findrisc": 0, "vacunacion": 30, "caracterizacion-familiar": 40}
