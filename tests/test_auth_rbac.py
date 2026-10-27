@@ -359,3 +359,63 @@ def test_audit_log_solo_admin(client):
     _login(client, "juan", "Juan12345")
     r = client.get("/api/users/_audit/log")
     assert r.status_code == 403
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 8. Firma de la cookie de sesión (secreto HMAC)
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+def _token_firmado_con(secreto: bytes, username: str) -> str:
+    """Arma un token con el mismo formato que make_token pero con otra clave."""
+    import base64
+    import hashlib
+    import hmac
+    import time
+    payload = f"{username}|{int(time.time()) + 3600}"
+    sig = hmac.new(secreto, payload.encode(), hashlib.sha256).hexdigest()
+    return base64.urlsafe_b64encode(f"{payload}|{sig}".encode()).decode()
+
+
+def test_cookie_firmada_con_clave_derivada_de_password_es_rechazada(client):
+    """Regresión: la clave HMAC se derivaba de AUTH_USER + AUTH_PASSWORD +
+    AUTH_SECRET. Sin esas variables quedaban los defaults públicos del código
+    y una cookie fabricada con ellos entraba como admin sin password."""
+    import hashlib
+    for password in ("Admin123123", "Admin123!"):
+        clave_vieja = hashlib.sha256(f"siexport-v1:admin:{password}:".encode()).digest()
+        client.cookies.set("siexport_session", _token_firmado_con(clave_vieja, "admin"))
+        assert client.get("/api/me").status_code == 401
+    client.cookies.clear()
+    assert _login(client, "admin", "Admin123!")
+    assert client.get("/api/me").status_code == 200
+
+
+def test_secreto_generado_se_persiste_y_se_reutiliza(client, tmp_path):
+    """Sin AUTH_SECRET se genera un secreto aleatorio en DATA_DIR/.auth_secret
+    y un reinicio lo reutiliza (las sesiones sobreviven al rebuild de Docker)."""
+    from efdi.api import dependencies
+    archivo = tmp_path / ".auth_secret"
+    assert archivo.exists()
+    assert bytes.fromhex(archivo.read_text(encoding="ascii")) == dependencies._SECRET
+    assert len(dependencies._SECRET) == 32
+    assert dependencies._cargar_secreto() == dependencies._SECRET
+
+
+def test_auth_secret_del_env_tiene_prioridad(client, tmp_path, monkeypatch):
+    import hashlib
+    from efdi.api import dependencies
+    otro_dir = tmp_path / "otro"
+    otro_dir.mkdir()
+    monkeypatch.setattr(dependencies.settings, "auth_secret", "x" * 40)
+    monkeypatch.setattr(dependencies.settings, "data_dir", otro_dir)
+    esperado = hashlib.sha256(("siexport-v2:" + "x" * 40).encode()).digest()
+    assert dependencies._cargar_secreto() == esperado
+    assert not (otro_dir / ".auth_secret").exists()
+
+
+def test_config_no_trae_password_por_defecto(monkeypatch):
+    """Sin AUTH_PASSWORD no hay password por defecto (antes: 'Admin123123')."""
+    from efdi.config import Settings
+    monkeypatch.delenv("AUTH_PASSWORD", raising=False)
+    assert Settings(_env_file=None).auth_password == ""

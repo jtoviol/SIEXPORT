@@ -1,12 +1,12 @@
 """Endpoints REST para el módulo Educación Grupal."""
 import math
-import shutil
 from datetime import date, datetime
 from pathlib import Path
 from uuid import UUID, uuid4
 
 from fastapi import Depends, APIRouter, BackgroundTasks, HTTPException, Query, status
 from efdi.api._files_util import listar_arbol_plano
+from efdi.services.cleanup import borrar_artefactos_extraccion
 from efdi.api.dependencies import current_user, require_modulo, require_no_viewer
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
@@ -256,13 +256,9 @@ async def eliminar_extraccion_educacion_grupal(job_id: UUID) -> dict:
     job = store.get(job_id)
     if job is None or job.tipo != ExtraccionTipo.EDUCACION_GRUPAL:
         raise HTTPException(status_code=404, detail="Extracción Educación Grupal no encontrada")
-    job_dir = settings.data_dir / f"job_{job_id}"
-    carpetas = 0
-    if job_dir.exists():
-        shutil.rmtree(job_dir, ignore_errors=True)
-        carpetas = 1
+    artefactos = await run_in_threadpool(borrar_artefactos_extraccion, job_id)
     store.delete(job_id)
-    return {"id": str(job_id), "borrado": True, "carpetas": carpetas}
+    return {"id": str(job_id), "borrado": True, **artefactos}
 
 
 @router.get(

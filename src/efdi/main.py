@@ -1,9 +1,11 @@
 """Punto de entrada FastAPI."""
+import asyncio
 import logging
 from datetime import timedelta
 from pathlib import Path
 
 from fastapi import FastAPI, Form, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -24,6 +26,7 @@ from efdi.api.routes_users import router as router_users
 from efdi.api.routes_vacunacion import router as router_vacunacion
 from efdi.config import settings
 from efdi.services.auth_service import autenticar, bootstrap_admin_si_vacio
+from efdi.services.cleanup import ejecutar_limpieza_automatica
 
 logging.basicConfig(
     level=settings.log_level,
@@ -87,6 +90,40 @@ async def _bootstrap() -> None:
             )
     except Exception:
         logging.getLogger(__name__).exception("auth: bootstrap_admin falló")
+
+
+# ── Limpieza automática de extracciones viejas (opcional, ver AUTO_CLEANUP_DIAS) ──
+_INTERVALO_LIMPIEZA = timedelta(days=1).total_seconds()
+
+
+async def _loop_limpieza_automatica() -> None:
+    """Corre en segundo plano mientras el proceso viva. Duerme 24h entre
+    corridas; la primera corrida espera 1 minuto (no compite con el arranque).
+    Nunca borra jobs 'pending'/'running' — eso lo garantiza
+    `ejecutar_limpieza_automatica()`."""
+    log = logging.getLogger(__name__)
+    await asyncio.sleep(60)
+    while True:
+        try:
+            if settings.auto_cleanup_dias > 0:
+                resumen = await run_in_threadpool(ejecutar_limpieza_automatica)
+                if resumen and resumen.get("borradas", 0) > 0:
+                    log.info("limpieza_automatica: %s", resumen)
+        except Exception:
+            log.exception("limpieza_automatica: error en el loop")
+        await asyncio.sleep(_INTERVALO_LIMPIEZA)
+
+
+@app.on_event("startup")
+async def _iniciar_limpieza_automatica() -> None:
+    if settings.auto_cleanup_dias > 0:
+        logging.getLogger(__name__).info(
+            "limpieza_automatica: activada, borra extracciones terminales de %s+ días cada 24h",
+            settings.auto_cleanup_dias,
+        )
+    # Guardar la referencia: asyncio solo mantiene referencias débiles a las
+    # tareas y el GC podría recolectar el loop si nadie la retiene.
+    app.state.tarea_limpieza = asyncio.create_task(_loop_limpieza_automatica())
 
 
 @app.middleware("http")

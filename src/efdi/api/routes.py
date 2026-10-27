@@ -1,8 +1,7 @@
 """Endpoints REST."""
 import math
 import re
-import shutil
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from pathlib import Path
 from uuid import UUID, uuid4
 
@@ -12,6 +11,8 @@ from fastapi.responses import FileResponse
 
 from efdi import __version__
 from efdi.api._files_util import listar_arbol_plano
+from efdi.services.cleanup import borrar_artefactos_extraccion
+from efdi.services.cleanup import limpiar_extracciones as limpiar_extracciones_servicio
 from efdi.api.dependencies import current_user, require_modulo, require_no_viewer
 from efdi.api.schemas import (
     ConteoFacturasResp,
@@ -474,20 +475,6 @@ async def descargar_lote(job_id: UUID, numero: int) -> FileResponse:
     )
 
 
-def _borrar_artefactos_extraccion(job_id: UUID) -> dict[str, int]:
-    """Borra del disco: carpeta job_<id>/ y zip extraccion_<id>.zip. Idempotente."""
-    borrados = {"carpetas": 0, "zips": 0}
-    job_dir = settings.data_dir / f"job_{job_id}"
-    if job_dir.exists() and job_dir.is_dir():
-        shutil.rmtree(job_dir, ignore_errors=True)
-        borrados["carpetas"] = 1
-    zip_path = settings.data_dir / f"extraccion_{job_id}.zip"
-    if zip_path.exists():
-        zip_path.unlink(missing_ok=True)
-        borrados["zips"] = 1
-    return borrados
-
-
 @router_di.post(
     "/extractions/{job_id}/cancel",
     tags=["extracciones"],
@@ -543,7 +530,7 @@ async def eliminar_extraccion(job_id: UUID) -> dict[str, object]:
     job = store.get(job_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Extracción no encontrada")
-    artefactos = _borrar_artefactos_extraccion(job_id)
+    artefactos = await run_in_threadpool(borrar_artefactos_extraccion, job_id)
     store.delete(job_id)
     return {"id": str(job_id), "borrado": True, **artefactos}
 
@@ -564,30 +551,9 @@ async def limpiar_extracciones(
     Con `older_than_days=30` → solo las viejas. Con `estado=failed` → solo fallidas.
     Pasar `confirmar=true` para ejecutar realmente.
     """
-    todas = store.list_all()
-    candidatas = todas
-    if older_than_days is not None:
-        umbral = datetime.now() - timedelta(days=older_than_days)
-        candidatas = [j for j in candidatas if j.creado_en < umbral]
-    if estado is not None:
-        candidatas = [j for j in candidatas if (j.estado.value if hasattr(j.estado, "value") else j.estado) == estado]
-
-    resumen = {
-        "modo": "ejecutado" if confirmar else "dry_run",
-        "total_candidatas": len(candidatas),
-        "ids": [str(j.id) for j in candidatas[:20]],
-        "borradas": 0,
-        "carpetas_borradas": 0,
-        "zips_borrados": 0,
-    }
-    if confirmar:
-        for j in candidatas:
-            artefactos = _borrar_artefactos_extraccion(j.id)
-            store.delete(j.id)
-            resumen["borradas"] += 1
-            resumen["carpetas_borradas"] += artefactos["carpetas"]
-            resumen["zips_borrados"] += artefactos["zips"]
-    return resumen
+    return await run_in_threadpool(
+        limpiar_extracciones_servicio, older_than_days=older_than_days, estado=estado, confirmar=confirmar,
+    )
 
 
 @router_di.get(

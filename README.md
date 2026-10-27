@@ -448,7 +448,7 @@ cp .env.example .env
 USE_MOCK=false              # false=SQL Server real (producción) | true=datos ficticios (dev)
 
 # ── SQL Server Seragil (módulos DI, FINDRISC, Captación, PlanFami) ──
-DB_HOST=10.244.21.11
+DB_HOST=10.x.x.x
 DB_PORT=1433
 DB_NAME=seragil
 DB_USER=sa
@@ -456,7 +456,7 @@ DB_PASSWORD=tu-password
 DB_DRIVER=ODBC Driver 17 for SQL Server
 
 # ── SQL Server sibacom (solo módulo Caracterización Familiar) ──
-DB_HOST_SIBACOM=10.244.21.13
+DB_HOST_SIBACOM=10.x.x.x
 DB_PORT_SIBACOM=1433
 DB_NAME_SIBACOM=sibacom
 DB_USER_SIBACOM=usuario
@@ -474,12 +474,14 @@ PDF_PARALLEL_THRESHOLD=100  # Mínimo de afiliados para activar Pool
 # ── Auth: solo se usa para BOOTSTRAP del primer admin si users está vacía ──
 AUTH_USER=admin
 AUTH_PASSWORD=cambiar-en-prod
-AUTH_SECRET=                # opcional; si vacío se deriva del user+password
+AUTH_SECRET=                # firma de las cookies; si vacío se genera uno aleatorio en DATA_DIR/.auth_secret
 ```
 
 > `.env` está en `.gitignore`. **Nunca lo commitees.**
 
 > Una vez creado el primer admin (bootstrap automático al arrancar con la tabla `users` vacía), el `.env` queda como referencia. Cambiar `AUTH_PASSWORD` en `.env` ya **no** cambia la password del admin — eso se hace desde la UI (Mi perfil → cambiar password) o vía `POST /api/users/{id}/reset-password`.
+
+> **Firma de las cookies de sesión:** la clave HMAC sale de `AUTH_SECRET` o, si no está definido, de un secreto aleatorio que el servidor genera la primera vez y guarda en `DATA_DIR/.auth_secret` (dentro del volumen `./data`, así que sobrevive a cada rebuild). Ya **no** se deriva de `AUTH_USER`/`AUTH_PASSWORD`: antes, sin esas variables en el `.env`, la clave quedaba armada con valores por defecto públicos y cualquiera podía fabricar una cookie de admin. Borrar `.auth_secret` (o cambiar `AUTH_SECRET`) cierra todas las sesiones abiertas. Sin `AUTH_PASSWORD` no se crea admin inicial: el código ya no trae contraseña por defecto.
 
 ---
 
@@ -734,7 +736,7 @@ Devuelve JSON con `global`, `modulos` (7 módulos) y `recientes` (últimas 8 ext
 
 ```bash
 # Primero login (guarda cookie para los siguientes curl)
-curl -c cookie.txt -X POST -d "username=admin&password=Admin123123" \
+curl -c cookie.txt -X POST -d "username=admin&password=<su-password>" \
   http://127.0.0.1:8765/auth/login
 
 # FINDRISC con código de régimen
@@ -771,6 +773,16 @@ Estados posibles: `pending` · `running` · `completed` · `failed` · `cancelle
 | `cancelled` | Cancelado |
 
 `POST /extractions/{id}/cancel` solo funciona en estados `pending` o `running`. Devuelve `409` con mensaje en español si la extracción ya terminó.
+
+---
+
+## Borrado y limpieza automática
+
+Eliminar una extracción (botón 🗑 o `DELETE /{modulo}/extractions/{id}`) borra su carpeta completa del disco — con jobs grandes esto puede tardar (mismo problema de fondo que `/files`, ver "Solución de problemas"), por eso corre en threadpool y no bloquea al resto de usuarios mientras dura.
+
+**Limpieza masiva manual:** `DELETE /extractions?older_than_days=60&confirmar=true` (bajo el prefijo de Demanda Inducida, pero opera sobre extracciones de **cualquier módulo**). Sin `confirmar=true` hace *dry-run* — solo reporta cuántas borraría. Acepta también `estado=failed` para limpiar solo fallidas.
+
+**Limpieza automática programada:** con `AUTO_CLEANUP_DIAS=N` en `.env` (0 = desactivado, default), el servidor revisa una vez al día y borra solo extracciones en estado **terminal** (completada/fallida/cancelada) con más de N días — **nunca** toca una `pending`/`running` sin importar su antigüedad. Requiere reiniciar el servidor para que tome el cambio de `.env`.
 
 ---
 
@@ -890,6 +902,7 @@ D:\proyecto\
     │   ├── extraction_educacion_grupal.py # Orquestador Educación Grupal
     │   ├── extraction_soporte_unificado.py # Orquestador transversal: reindexa los 8 módulos por afiliado
     │   ├── extraction_ajuste_soportes.py # Fusiona los PDFs de un Soporte Unificado completado en 1 por afiliado
+    │   ├── cleanup.py                  # Borrado de artefactos (manual + limpieza automática programada)
     │   └── auth_service.py             # bcrypt hash/verify + bootstrap admin + login
     ├── templates/
     │   ├── logo.png                    # Logo Mutualser (usado en headers de los PDFs)

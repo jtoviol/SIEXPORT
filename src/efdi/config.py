@@ -47,10 +47,18 @@ class Settings(BaseSettings):
     # 4 lotes paralelos × ~12k filas/lote da mejor throughput que 2 × 6k.
     lote_workers: int = 4
 
-    # Autenticación básica
+    # Limpieza automática: borra extracciones TERMINALES (completada/fallida/
+    # cancelada) más viejas que esto, una vez al día. 0 = desactivado (default).
+    # Nunca toca jobs 'pending'/'running' sin importar su antigüedad.
+    auto_cleanup_dias: int = Field(default=0, ge=0)
+
+    # Autenticación básica. AUTH_USER/AUTH_PASSWORD solo crean el primer admin
+    # si la tabla users está vacía (sin password no se crea ninguno).
     auth_user: str = Field(default="admin")
-    auth_password: str = Field(default="Admin123123")
-    auth_secret: str = Field(default="")   # Si vacío, se genera al arrancar (sesiones no persisten al reiniciar)
+    auth_password: str = Field(default="")
+    # Clave HMAC de las cookies. Si vacío, se genera y persiste en DATA_DIR/.auth_secret
+    # (ver api/dependencies.py::_cargar_secreto). Nunca se deriva de la password.
+    auth_secret: str = Field(default="")
 
     @property
     def db_dsn(self) -> str:

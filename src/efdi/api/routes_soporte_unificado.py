@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import logging
 import math
-import shutil
 from datetime import date, datetime
 from pathlib import Path
 from uuid import UUID, uuid4
@@ -47,6 +46,7 @@ from efdi.domain.models import (
     safe_filename,
 )
 from efdi.infrastructure.job_store import store
+from efdi.services.cleanup import borrar_artefactos_extraccion
 from efdi.services.extraction_ajuste_soportes import ejecutar_ajuste_soportes
 from efdi.services.extraction_soporte_unificado import (
     MODULO_LABEL,
@@ -316,13 +316,9 @@ async def cancelar_extraccion_soporte_unificado(job_id: UUID) -> dict:
 )
 async def eliminar_extraccion_soporte_unificado(job_id: UUID) -> dict:
     _get_job_del_modulo(job_id)
-    job_dir = settings.data_dir / f"job_{job_id}"
-    carpetas = 0
-    if job_dir.exists():
-        shutil.rmtree(job_dir, ignore_errors=True)
-        carpetas = 1
+    artefactos = await run_in_threadpool(borrar_artefactos_extraccion, job_id)
     store.delete(job_id)
-    return {"id": str(job_id), "borrado": True, "carpetas": carpetas}
+    return {"id": str(job_id), "borrado": True, **artefactos}
 
 
 # ─── Descargas (mega-zip + árbol + PDF individual) ───────────────────────────

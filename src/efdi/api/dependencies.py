@@ -8,7 +8,9 @@ import base64
 import hashlib
 import hmac
 import logging
+import os
 import secrets
+import time
 from datetime import datetime, timedelta
 
 from fastapi import HTTPException, Request, status
@@ -20,9 +22,45 @@ from efdi.infrastructure.user_store import users_store
 log = logging.getLogger(__name__)
 
 
-_SECRET = hashlib.sha256(
-    f"siexport-v1:{settings.auth_user}:{settings.auth_password}:{settings.auth_secret}".encode()
-).digest()
+_SECRET_FILE_NAME = ".auth_secret"
+
+
+def _cargar_secreto() -> bytes:
+    """Clave HMAC de las cookies de sesión.
+
+    Antes se derivaba de AUTH_USER + AUTH_PASSWORD + AUTH_SECRET; sin esas
+    variables en el .env quedaban los defaults del código (públicos en el repo)
+    y cualquiera podía firmar una cookie válida para cualquier usuario.
+
+    Ahora: si AUTH_SECRET viene en el .env se usa ese. Si no, se genera uno
+    aleatorio la primera vez y se guarda en DATA_DIR/.auth_secret, que es
+    volumen persistente en Docker — las sesiones sobreviven a reinicios y el
+    secreto nunca depende de la contraseña. O_EXCL evita que dos workers de
+    uvicorn generen secretos distintos al arrancar a la vez."""
+    if settings.auth_secret:
+        if len(settings.auth_secret) < 32:
+            log.warning("auth: AUTH_SECRET tiene menos de 32 caracteres; use uno aleatorio más largo")
+        return hashlib.sha256(f"siexport-v2:{settings.auth_secret}".encode()).digest()
+
+    path = settings.data_dir / _SECRET_FILE_NAME
+    try:
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except FileExistsError:
+        # Otro worker pudo crearlo hace milisegundos y aún no termina de escribir.
+        for _ in range(50):
+            contenido = path.read_text(encoding="ascii").strip()
+            if contenido:
+                return bytes.fromhex(contenido)
+            time.sleep(0.1)
+        raise RuntimeError(f"auth: {path} existe pero está vacío; bórrelo y reinicie") from None
+    secreto = secrets.token_bytes(32)
+    with os.fdopen(fd, "w", encoding="ascii") as f:
+        f.write(secreto.hex())
+    log.info("auth: AUTH_SECRET no definido; se generó un secreto aleatorio en %s", path)
+    return secreto
+
+
+_SECRET = _cargar_secreto()
 _SESSION_TTL = timedelta(hours=8)
 COOKIE_NAME = "siexport_session"
 
