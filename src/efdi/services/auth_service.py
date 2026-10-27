@@ -65,25 +65,37 @@ def bootstrap_admin_si_vacio() -> User | None:
         return None
 
     if not settings.auth_user or not settings.auth_password:
-        log.warning("bootstrap_admin: AUTH_USER/AUTH_PASSWORD vacíos en .env, no se crea admin")
+        log.warning(
+            "bootstrap_admin: la tabla users está vacía y no hay AUTH_USER/AUTH_PASSWORD en .env; "
+            "nadie podrá entrar. Cree el admin con: python -m efdi.migrar"
+        )
         return None
 
+    admin = crear_admin(settings.auth_user, settings.auth_password, creado_por="system:bootstrap")
+    log.info("bootstrap_admin: creado admin '%s' (tabla users estaba vacía)", admin.username)
+    return admin
+
+
+def crear_admin(username: str, password: str, creado_por: str) -> User:
+    """Crea un usuario ADMIN con todos los módulos. Lo usan el bootstrap del .env
+    y el comando de migración (`python -m efdi.migrar`)."""
+    if len(password or "") < PASSWORD_MIN_LEN:
+        raise ValueError(f"La password debe tener al menos {PASSWORD_MIN_LEN} caracteres")
     now = datetime.now()
     admin = User(
         id=uuid4(),
-        username=settings.auth_user.strip(),
+        username=username.strip(),
         nombre="Administrador",
         email=None,
-        password_hash=hash_password(settings.auth_password),
+        password_hash=hash_password(password),
         rol=Rol.ADMIN,
         modulos=list(MODULOS_VALIDOS),   # admin ve todos, pero lo dejamos explícito
         activo=True,
         creado_en=now,
         actualizado_en=now,
-        creado_por="system:bootstrap",
+        creado_por=creado_por,
     )
     users_store.save(admin)
-    log.info("bootstrap_admin: creado admin '%s' (tabla users estaba vacía)", admin.username)
     return admin
 
 

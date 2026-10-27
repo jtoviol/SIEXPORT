@@ -36,7 +36,7 @@ from efdi.services.auth_service import (
 
 @pytest.fixture
 def client(tmp_path: Path, monkeypatch) -> TestClient:
-    """TestClient con DB SQLite aislada en tmp_path (cada test arranca limpio)."""
+    """TestClient con DATA_DIR en tmp_path; la base de prueba la vacía conftest antes de cada test."""
     monkeypatch.setenv("USE_MOCK", "true")
     monkeypatch.setenv("DATA_DIR", str(tmp_path))
     monkeypatch.setenv("AUTH_USER", "admin")

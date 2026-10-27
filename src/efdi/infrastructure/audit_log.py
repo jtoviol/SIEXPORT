@@ -55,7 +55,7 @@ def write_audit(
                    (ts, actor_username, accion, target_type, target_id, target_label, detalle)
                    VALUES (?, ?, ?, ?, ?, ?, ?)""",
                 (
-                    datetime.now().isoformat(),
+                    datetime.now(),
                     actor or "system",
                     accion,
                     target_type,
@@ -73,20 +73,22 @@ def list_audit(limit: int = 100, actor: str | None = None,
     """Devuelve los últimos eventos. Útil para /api/audit (futuro endpoint admin)."""
     try:
         with db.connect() as conn:
-            sql = "SELECT * FROM audit_log WHERE 1=1"
-            params: list = []
+            params: list = [limit]
+            sql = "SELECT TOP (?) * FROM audit_log WHERE 1=1"
             if actor:
                 sql += " AND actor_username = ?"
                 params.append(actor)
             if target_id:
                 sql += " AND target_id = ?"
                 params.append(target_id)
-            sql += " ORDER BY ts DESC LIMIT ?"
-            params.append(limit)
+            sql += " ORDER BY ts DESC, id DESC"
             rows = conn.execute(sql, params).fetchall()
             out = []
             for r in rows:
                 d = dict(r)
+                # Mismo formato que devolvía SQLite (texto ISO) para no cambiar el contrato del API.
+                if isinstance(d.get("ts"), datetime):
+                    d["ts"] = d["ts"].isoformat()
                 if d.get("detalle"):
                     try:
                         d["detalle"] = json.loads(d["detalle"])

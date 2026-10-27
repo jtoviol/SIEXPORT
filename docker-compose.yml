@@ -7,7 +7,7 @@ services:
     env_file:
       - .env
     volumes:
-      # Persiste la BD SQLite (efdi.db) y los ZIPs/PDFs generados
+      # Persiste los ZIPs/PDFs generados y .auth_secret (la base de la app es SQL Server, APP_DB_*)
       - ./data:/app/data
     restart: unless-stopped
     healthcheck:

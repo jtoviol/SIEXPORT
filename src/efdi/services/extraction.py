@@ -145,7 +145,7 @@ def ejecutar_extraccion(job: Extraccion) -> None:
             extra={"job": str(job.id), "limite": job.limite, "lotes": n_lotes},
         )
 
-        # Crear lotes en SQLite (estado pending)
+        # Crear lotes en la base de la app (estado pending)
         lotes_planificados: list[Lote] = []
         for i in range(1, n_lotes + 1):
             offset = (i - 1) * job.tamano_lote

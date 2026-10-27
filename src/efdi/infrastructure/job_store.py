@@ -14,6 +14,19 @@ from efdi.domain.models import (
 from efdi.infrastructure.db import db
 
 
+def _a_date(v) -> date:
+    """SQL Server devuelve DATE como `date`; se acepta texto ISO por robustez."""
+    if isinstance(v, datetime):
+        return v.date()
+    return v if isinstance(v, date) else date.fromisoformat(str(v))
+
+
+def _a_datetime(v) -> datetime | None:
+    if v is None:
+        return None
+    return v if isinstance(v, datetime) else datetime.fromisoformat(str(v))
+
+
 def _row_to_extraccion(row) -> Extraccion:
     cols = row.keys()
     tipo_raw = row["tipo"] if "tipo" in cols else "demanda_inducida"
@@ -26,8 +39,8 @@ def _row_to_extraccion(row) -> Extraccion:
     facturas = [c for c in (facturas_raw or "").split(",") if c.strip()] or None
     return Extraccion(
         id=UUID(row["id"]),
-        desde=date.fromisoformat(row["desde"]),
-        hasta=date.fromisoformat(row["hasta"]),
+        desde=_a_date(row["desde"]),
+        hasta=_a_date(row["hasta"]),
         limite=row["limite"],
         tamano_lote=row["tamano_lote"],
         total_lotes=row["total_lotes"],
@@ -40,8 +53,8 @@ def _row_to_extraccion(row) -> Extraccion:
         total_atenciones=row["total_atenciones"],
         total_afiliados=row["total_afiliados"],
         total_pdfs=row["total_pdfs"],
-        creado_en=datetime.fromisoformat(row["creado_en"]),
-        completado_en=datetime.fromisoformat(row["completado_en"]) if row["completado_en"] else None,
+        creado_en=_a_datetime(row["creado_en"]),
+        completado_en=_a_datetime(row["completado_en"]),
         zip_path=row["zip_path"],
         mensaje_error=row["mensaje_error"],
         created_by_username=row["created_by_username"] if "created_by_username" in cols else None,
@@ -64,8 +77,8 @@ def _row_to_lote(row) -> Lote:
         total_afiliados=row["total_afiliados"],
         total_pdfs=row["total_pdfs"],
         zip_path=row["zip_path"],
-        iniciado_en=datetime.fromisoformat(row["iniciado_en"]) if row["iniciado_en"] else None,
-        completado_en=datetime.fromisoformat(row["completado_en"]) if row["completado_en"] else None,
+        iniciado_en=_a_datetime(row["iniciado_en"]),
+        completado_en=_a_datetime(row["completado_en"]),
         mensaje_error=row["mensaje_error"],
     )
 
@@ -81,8 +94,11 @@ class JobStore:
     def save(self, job: Extraccion) -> None:
         """Guarda el job preservando el estado CANCELLED si ya existe en disco."""
         with db.transaction() as conn:
+            # UPDLOCK+HOLDLOCK: bloquea la fila (o el hueco si no existe) hasta el
+            # COMMIT, así el "leer estado → decidir → escribir" es atómico también
+            # entre procesos (el `cancel` de un request vs. el hilo del job).
             existing = conn.execute(
-                "SELECT estado FROM extracciones WHERE id = ?", (str(job.id),)
+                "SELECT estado FROM extracciones WITH (UPDLOCK, HOLDLOCK) WHERE id = ?", (str(job.id),)
             ).fetchone()
             estado_a_guardar = job.estado.value if hasattr(job.estado, "value") else str(job.estado)
             if existing and existing["estado"] == "cancelled" and estado_a_guardar in ("running", "pending"):
@@ -91,6 +107,24 @@ class JobStore:
             tipo_val = job.tipo.value if hasattr(job.tipo, "value") else str(job.tipo)
 
             facturas_csv = ",".join(job.facturas) if job.facturas else None
+            if existing:
+                # Mismas columnas que actualizaba el ON CONFLICT de SQLite.
+                conn.execute(
+                    """
+                    UPDATE extracciones SET
+                        total_lotes=?, tipo=?, estado=?,
+                        total_atenciones=?, total_afiliados=?, total_pdfs=?,
+                        completado_en=?, mensaje_error=?, zip_path=?, resumen_json=?
+                    WHERE id=?
+                    """,
+                    (
+                        job.total_lotes, tipo_val, estado_a_guardar,
+                        job.total_atenciones, job.total_afiliados, job.total_pdfs,
+                        job.completado_en, job.mensaje_error, job.zip_path, job.resumen_json,
+                        str(job.id),
+                    ),
+                )
+                return
             conn.execute(
                 """
                 INSERT INTO extracciones (
@@ -100,20 +134,9 @@ class JobStore:
                     creado_en, completado_en, mensaje_error, zip_path,
                     created_by_username, origen_job_id, resumen_json
                 ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-                ON CONFLICT(id) DO UPDATE SET
-                    total_lotes=excluded.total_lotes,
-                    tipo=excluded.tipo,
-                    estado=excluded.estado,
-                    total_atenciones=excluded.total_atenciones,
-                    total_afiliados=excluded.total_afiliados,
-                    total_pdfs=excluded.total_pdfs,
-                    completado_en=excluded.completado_en,
-                    mensaje_error=excluded.mensaje_error,
-                    zip_path=excluded.zip_path,
-                    resumen_json=excluded.resumen_json
                 """,
                 (
-                    str(job.id), job.desde.isoformat(), job.hasta.isoformat(),
+                    str(job.id), job.desde, job.hasta,
                     job.limite, job.tamano_lote, job.total_lotes,
                     tipo_val,
                     job.modo_pdf.value if hasattr(job.modo_pdf, "value") else str(job.modo_pdf),
@@ -122,8 +145,8 @@ class JobStore:
                     facturas_csv,
                     estado_a_guardar,
                     job.total_atenciones, job.total_afiliados, job.total_pdfs,
-                    job.creado_en.isoformat(),
-                    job.completado_en.isoformat() if job.completado_en else None,
+                    job.creado_en,
+                    job.completado_en,
                     job.mensaje_error, job.zip_path,
                     job.created_by_username,
                     str(job.origen_job_id) if job.origen_job_id else None,
@@ -184,7 +207,29 @@ class JobStore:
     # LOTES
     # ============================================================
     def save_lote(self, lote: Lote) -> None:
+        estado_val = lote.estado.value if hasattr(lote.estado, "value") else str(lote.estado)
         with db.transaction() as conn:
+            existing = conn.execute(
+                "SELECT 1 AS hay FROM lotes WITH (UPDLOCK, HOLDLOCK) WHERE job_id = ? AND numero = ?",
+                (str(lote.job_id), lote.numero),
+            ).fetchone()
+            if existing:
+                conn.execute(
+                    """
+                    UPDATE lotes SET
+                        estado=?, fase=?,
+                        total_atenciones=?, total_afiliados=?, total_pdfs=?,
+                        zip_path=?, iniciado_en=?, completado_en=?, mensaje_error=?
+                    WHERE job_id=? AND numero=?
+                    """,
+                    (
+                        estado_val, lote.fase,
+                        lote.total_atenciones, lote.total_afiliados, lote.total_pdfs,
+                        lote.zip_path, lote.iniciado_en, lote.completado_en, lote.mensaje_error,
+                        str(lote.job_id), lote.numero,
+                    ),
+                )
+                return
             conn.execute(
                 """
                 INSERT INTO lotes (
@@ -192,25 +237,15 @@ class JobStore:
                     total_atenciones, total_afiliados, total_pdfs,
                     zip_path, iniciado_en, completado_en, mensaje_error
                 ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
-                ON CONFLICT(job_id, numero) DO UPDATE SET
-                    estado=excluded.estado,
-                    fase=excluded.fase,
-                    total_atenciones=excluded.total_atenciones,
-                    total_afiliados=excluded.total_afiliados,
-                    total_pdfs=excluded.total_pdfs,
-                    zip_path=excluded.zip_path,
-                    iniciado_en=excluded.iniciado_en,
-                    completado_en=excluded.completado_en,
-                    mensaje_error=excluded.mensaje_error
                 """,
                 (
                     str(lote.job_id), lote.numero, lote.offset_inicio, lote.tamano,
-                    lote.estado.value if hasattr(lote.estado, "value") else str(lote.estado),
+                    estado_val,
                     lote.fase,
                     lote.total_atenciones, lote.total_afiliados, lote.total_pdfs,
                     lote.zip_path,
-                    lote.iniciado_en.isoformat() if lote.iniciado_en else None,
-                    lote.completado_en.isoformat() if lote.completado_en else None,
+                    lote.iniciado_en,
+                    lote.completado_en,
                     lote.mensaje_error,
                 ),
             )

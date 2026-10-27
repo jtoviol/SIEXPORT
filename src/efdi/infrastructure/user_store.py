@@ -1,9 +1,16 @@
-"""UserStore — persistencia de usuarios y permisos en SQLite (WAL)."""
+"""UserStore — persistencia de usuarios y permisos en la base SQL Server de la app."""
 from datetime import datetime
 from uuid import UUID
 
 from efdi.domain.models import MODULOS_VALIDOS, Rol, User
 from efdi.infrastructure.db import db
+
+
+def _a_datetime(v) -> datetime | None:
+    """SQL Server devuelve DATETIME2 como `datetime`; se acepta texto ISO por robustez."""
+    if v is None:
+        return None
+    return v if isinstance(v, datetime) else datetime.fromisoformat(str(v))
 
 
 def _row_to_user(row) -> User:
@@ -19,9 +26,9 @@ def _row_to_user(row) -> User:
         rol=Rol(row["rol"]),
         modulos=modulos,
         activo=bool(row["activo"]),
-        creado_en=datetime.fromisoformat(row["creado_en"]),
-        actualizado_en=datetime.fromisoformat(row["actualizado_en"]) if row["actualizado_en"] else None,
-        ultimo_login_en=datetime.fromisoformat(row["ultimo_login_en"]) if row["ultimo_login_en"] else None,
+        creado_en=_a_datetime(row["creado_en"]),
+        actualizado_en=_a_datetime(row["actualizado_en"]),
+        ultimo_login_en=_a_datetime(row["ultimo_login_en"]),
         creado_por=row["creado_por"],
     )
 
@@ -35,7 +42,7 @@ class UserStore:
         rol_val = user.rol if isinstance(user.rol, str) else user.rol.value
         with db.transaction() as conn:
             existing = conn.execute(
-                "SELECT id FROM users WHERE id = ?", (str(user.id),)
+                "SELECT id FROM users WITH (UPDLOCK, HOLDLOCK) WHERE id = ?", (str(user.id),)
             ).fetchone()
             params = (
                 str(user.id),
@@ -46,9 +53,9 @@ class UserStore:
                 rol_val,
                 modulos_csv,
                 1 if user.activo else 0,
-                user.creado_en.isoformat(),
-                user.actualizado_en.isoformat() if user.actualizado_en else None,
-                user.ultimo_login_en.isoformat() if user.ultimo_login_en else None,
+                user.creado_en,
+                user.actualizado_en,
+                user.ultimo_login_en,
                 user.creado_por,
             )
             if existing:
@@ -89,7 +96,7 @@ class UserStore:
     def list_all(self) -> list[User]:
         with db.connect() as conn:
             rows = conn.execute(
-                "SELECT * FROM users ORDER BY username COLLATE NOCASE"
+                "SELECT * FROM users ORDER BY LOWER(username)"
             ).fetchall()
             return [_row_to_user(r) for r in rows]
 
@@ -107,14 +114,14 @@ class UserStore:
         with db.transaction() as conn:
             conn.execute(
                 "UPDATE users SET ultimo_login_en = ? WHERE id = ?",
-                (ts.isoformat(), str(user_id)),
+                (ts, str(user_id)),
             )
 
     def update_password(self, user_id: UUID, password_hash: str) -> None:
         with db.transaction() as conn:
             conn.execute(
                 "UPDATE users SET password_hash = ?, actualizado_en = ? WHERE id = ?",
-                (password_hash, datetime.now().isoformat(), str(user_id)),
+                (password_hash, datetime.now(), str(user_id)),
             )
 
 

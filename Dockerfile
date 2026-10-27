@@ -24,7 +24,7 @@ RUN uv sync --no-dev --extra sqlserver --extra excel --no-install-project
 COPY src/ ./src/
 RUN uv sync --no-dev --extra sqlserver --extra excel
 
-# Directorio de datos persistente (SQLite + ZIPs generados)
+# Directorio de datos persistente (ZIPs/PDFs generados + .auth_secret)
 RUN mkdir -p data
 
 EXPOSE 8765

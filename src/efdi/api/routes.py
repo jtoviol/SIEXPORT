@@ -83,13 +83,12 @@ async def diagnostics() -> DiagnosticsResp:
     checks: dict[str, DiagCheck] = {}
     advertencias: list[str] = []
 
-    # 1. SQLite operativo
+    # 1. Base de la app (SQL Server, APP_DB_*) operativa
     try:
-        with db.connect() as conn:
-            conn.execute("SELECT COUNT(*) FROM extracciones").fetchone()
-        checks["sqlite"] = DiagCheck(ok=True, descripcion="SQLite operativo")
+        await run_in_threadpool(db.verificar_esquema)
+        checks["base_app"] = DiagCheck(ok=True, descripcion=f"Base de la app operativa ({settings.app_db_name})")
     except Exception as e:
-        checks["sqlite"] = DiagCheck(ok=False, descripcion="SQLite no responde", detalle=str(e)[:200])
+        checks["base_app"] = DiagCheck(ok=False, descripcion="Base de la app no responde", detalle=str(e)[:200])
 
     # 2. Data dir escribible
     try:
@@ -523,7 +522,7 @@ async def renombrar_extraccion(job_id: UUID, req: RenombrarJobReq) -> Extraccion
 @router_di.delete(
     "/extractions/{job_id}",
     tags=["extracciones"],
-    summary="Eliminar una extracción (SQLite + archivos en disco)",
+    summary="Eliminar una extracción (base de la app + archivos en disco)",
     dependencies=[Depends(require_no_viewer)],
 )
 async def eliminar_extraccion(job_id: UUID) -> dict[str, object]:

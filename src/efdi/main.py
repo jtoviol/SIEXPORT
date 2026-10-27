@@ -25,6 +25,7 @@ from efdi.api.routes_soporte_unificado import router as router_soporte_unificado
 from efdi.api.routes_users import router as router_users
 from efdi.api.routes_vacunacion import router as router_vacunacion
 from efdi.config import settings
+from efdi.infrastructure.db import db
 from efdi.services.auth_service import autenticar, bootstrap_admin_si_vacio
 from efdi.services.cleanup import ejecutar_limpieza_automatica
 
@@ -82,6 +83,9 @@ async def _bootstrap() -> None:
     """Si la tabla `users` está vacía, crea el primer admin con las credenciales
     del .env. A partir de ese momento, .env queda como referencia pero ya no es
     fuente de autenticación: todos los logins van contra DB con bcrypt."""
+    # Sin la base SQL Server lista la app no levanta: mejor un error claro en el
+    # log ("ejecute python -m efdi.migrar") que una app que falla en cada request.
+    await run_in_threadpool(db.verificar_esquema)
     try:
         u = bootstrap_admin_si_vacio()
         if u is not None:

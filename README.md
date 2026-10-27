@@ -16,7 +16,7 @@
 
 [![Status](https://img.shields.io/badge/status-production-22a84a?style=flat-square)](#)
 [![Multi-module](https://img.shields.io/badge/m%C3%B3dulos-7-1a2f6e?style=flat-square)](#módulos-disponibles)
-[![Persistence](https://img.shields.io/badge/persistencia-SQLite%20WAL-234674?style=flat-square)](#stack)
+[![Persistence](https://img.shields.io/badge/persistencia-SQL%20Server-234674?style=flat-square)](#stack)
 [![Concurrency](https://img.shields.io/badge/concurrencia-Pool%20%2B%20Threads-22a84a?style=flat-square)](#procesamiento-por-lotes)
 [![Auth](https://img.shields.io/badge/auth-RBAC%20multi--user-234674?style=flat-square)](#autenticación-y-roles)
 
@@ -360,7 +360,7 @@ El nombre se sanitiza vía `safe_filename()` en `domain/models.py`:
 | **PDF** | ReportLab (multiprocessing Pool) |
 | **DB clínica** | pyodbc — SQL Server (Seragil) via ODBC Driver 17 |
 | **DB caracterización** | pyodbc — SQL Server (sibacom, servidor aparte) |
-| **Persistencia jobs/users** | SQLite WAL — sobrevive reinicios |
+| **Persistencia jobs/users** | SQL Server — base propia de la app (`APP_DB_*`), tablas creadas con `python -m efdi.migrar` |
 | **Auth** | bcrypt + cookie HMAC (multi-user, RBAC) |
 | **Frontend** | HTML + Tailwind (compilado localmente) + Vanilla JS — SPA sin build step en runtime, sidebar lateral + Cmd+K palette |
 
@@ -462,7 +462,14 @@ DB_NAME_SIBACOM=sibacom
 DB_USER_SIBACOM=usuario
 DB_PASSWORD_SIBACOM=tu-password
 
-DATA_DIR=./data             # Directorio de salida de ZIPs y PDFs (y SQLite efdi.db)
+DATA_DIR=./data             # Directorio de salida de ZIPs y PDFs (y .auth_secret)
+
+# ── SQL Server de la aplicación (usuarios, extracciones, lotes, audit_log) ──
+APP_DB_HOST=10.x.x.x
+APP_DB_PORT=1433
+APP_DB_NAME=siexport
+APP_DB_USER=usuario
+APP_DB_PASS=tu-password
 API_HOST=0.0.0.0
 API_PORT=8765
 LOG_LEVEL=INFO
@@ -513,7 +520,7 @@ El despliegue real usa `docker-compose.yml` (imagen `siedfaser`, con ODBC Driver
 docker compose up --build -d
 ```
 
-Esto reconstruye la imagen con el código actual y reinicia el contenedor sin perder datos — `./data` queda montado como volumen (`data/efdi.db` con usuarios/extracciones, y los PDFs/ZIPs generados), así que sobrevive a cada rebuild.
+Esto reconstruye la imagen con el código actual y reinicia el contenedor sin perder datos — `./data` queda montado como volumen (los PDFs/ZIPs generados y `.auth_secret`), así que sobrevive a cada rebuild. Usuarios, extracciones y lotes viven en la base SQL Server de la app (`APP_DB_*`), fuera del contenedor.
 
 Verificar que quedó sano después de desplegar:
 
@@ -525,6 +532,25 @@ docker logs siexport-siedfaser-1 --tail 20
 `docker compose down` detiene el contenedor sin borrar el volumen de datos. Para ver qué contenedor/imagen está corriendo: `docker ps --filter name=siexport`.
 
 > Importante: `DATA_DIR` en `.env` debe ser una ruta **relativa** (`./data`), no una ruta absoluta de Windows — una ruta absoluta de Windows no tiene sentido dentro del contenedor Linux y los datos quedarían en un lugar que no sobrevive al rebuild.
+
+### Base de datos de la aplicación (SQL Server)
+
+Usuarios, extracciones, lotes y el audit log viven en una base SQL Server propia de la app, configurada con `APP_DB_HOST`, `APP_DB_PORT`, `APP_DB_NAME`, `APP_DB_USER` y `APP_DB_PASS` en el `.env` (el driver es el mismo `DB_DRIVER`). Reemplaza al SQLite `data/efdi.db` que se usaba antes: ese archivo ya no se lee y se puede borrar.
+
+La app **no crea las tablas sola**. Se crean con el comando de migración, que es idempotente (se puede repetir sin borrar nada):
+
+```bash
+# Con Docker (como corre hoy) — antes del primer `docker compose up`:
+docker compose build
+docker compose run --rm siedfaser uv run python -m efdi.migrar
+
+# Sin Docker:
+uv run python -m efdi.migrar
+```
+
+Si la tabla de usuarios queda vacía, el comando pide por pantalla el usuario y la contraseña del primer administrador (no quedan en el `.env`). Si se corre sin terminal interactiva, la app usará `AUTH_USER`/`AUTH_PASSWORD` del `.env` al arrancar.
+
+Tablas (esquema versión 1, ver `src/efdi/infrastructure/db.py`): `users`, `audit_log`, `extracciones`, `lotes` (FK a `extracciones` con borrado en cascada) y `schema_version`. El usuario de `APP_DB_USER` necesita permiso para crear tablas solo al correr la migración; para operar le basta leer y escribir en esas tablas.
 
 ### URLs
 
@@ -872,7 +898,7 @@ D:\proyecto\
     │   │                               #   MODULOS_VALIDOS, AFILIADO_*
     │   └── services.py                 # agrupar_por_afiliado_* / agrupar_por_familia_caracterizacion
     ├── infrastructure/
-    │   ├── db.py                       # SQLite schema con migraciones (v7 — users + audit_log)
+    │   ├── db.py                       # Base SQL Server de la app: DDL, conexión y verificación de esquema
     │   ├── job_store.py                # Persistencia de extracciones y lotes
     │   ├── user_store.py               # Persistencia de usuarios (CRUD)
     │   ├── repository.py               # Consulta Demanda Inducida (SQL Server + mock)
@@ -923,6 +949,14 @@ El proyecto usa **pytest** con `pytest-asyncio` y un mock determinista para corr
 
 ### Correr toda la suite
 
+Los tests usan una base SQL Server **de prueba**, nunca la del `.env`. Se define con variables de entorno (el nombre debe terminar en `_test`; si no, pytest se niega a correr porque cada test vacía las tablas):
+
+```bash
+export TEST_APP_DB_HOST=10.x.x.x TEST_APP_DB_NAME=siexport_test TEST_APP_DB_USER=usuario TEST_APP_DB_PASS=...
+# Alternativa local desechable: docker run -d -e ACCEPT_EULA=Y -e MSSQL_SA_PASSWORD=... -p 1433:1433 mcr.microsoft.com/mssql/server:2022-latest
+uv sync --extra dev --extra sqlserver
+```
+
 ```bash
 pytest                 # suite completa
 pytest -v              # verboso
@@ -942,7 +976,7 @@ asyncio_mode = "auto"     # tests async se marcan automáticamente
 
 | Archivo | Qué cubre |
 |---|---|
-| `tests/conftest.py` | Setup global: apunta `DATA_DIR` a un tmp único por sesión antes de cualquier import de `efdi.*` (resuelve DB readonly heredada de Docker en WSL). |
+| `tests/conftest.py` | Setup global: `DATA_DIR` en un tmp por sesión, base SQL Server de **prueba** (`TEST_APP_DB_*`, nombre terminado en `_test`), crea el esquema una vez y vacía las tablas antes de cada test. |
 | `tests/test_agrupacion.py` | `agrupar_por_afiliado` colapsa atenciones por `(documento, fecha)` correctamente. |
 | `tests/test_api.py` | Endpoints HTTP de Demanda Inducida via `TestClient`: `/health`, `/docs`, flow completo (crear → consultar → descargar → eliminar), multi-lote, errores 400/404, lote inexistente. |
 | `tests/test_facturas.py` | Cruce CAB+N/FAB+N de DI contra `AVS_REGISTROS_AP`. |
@@ -981,7 +1015,7 @@ Mismo patrón aplica para `repository_findrisc` / `repository_captacion` / `repo
 
 ### Verificación del orquestador end-to-end
 
-Para validar el flujo completo de extracción (incluyendo SQLite, paralelismo y empaquetado ZIP) con datos mock:
+Para validar el flujo completo de extracción (incluyendo la base de la app, paralelismo y empaquetado ZIP) con datos mock:
 
 ```bash
 python -c "
@@ -1044,16 +1078,7 @@ curl -I http://127.0.0.1:8765/
 # Debe responder HTTP 200 text/html
 ```
 
-**Migración de base de datos:** Al actualizar desde versiones anteriores, la BD SQLite se migra automáticamente al arrancar. El schema actual es **v7**:
-
-| Versión | Cambio |
-|---|---|
-| v2 | `lotes.fase` (texto de la fase actual) |
-| v3 | `extracciones.tipo` (qué módulo generó el job) |
-| v4 | `extracciones.nombre` (nombre custom del job) |
-| v5 | `extracciones.regimen` + `extracciones.facturas` (cruce CAB/FAB Fase 2 DI) |
-| v6 | tabla `users` (multi-user + RBAC con bcrypt) |
-| v7 | `extracciones.created_by_username` + tabla `audit_log` (auditoría "quién hizo qué") |
+**Base de la app (SQL Server) — "Faltan tablas" al arrancar:** la app no levanta si la base `APP_DB_*` no tiene las tablas o la versión que espera el código; el log dice exactamente qué falta. Solución: correr la migración (`python -m efdi.migrar`, ver "Base de datos de la aplicación"). Si el error es de conexión, revisar `APP_DB_HOST`/`APP_DB_PORT`, firewall y que el usuario tenga acceso a `APP_DB_NAME`.
 
 **Una extracción falla con error SQL:**
 1. Mirá el job en la vista — al expandir, el `mensaje_error` muestra el detalle del fallo SQL Server.

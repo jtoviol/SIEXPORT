@@ -29,6 +29,15 @@ class Settings(BaseSettings):
     db_user_sibacom: str = ""
     db_password_sibacom: str = ""
 
+    # Tercera conexión: base propia de la aplicación (usuarios, extracciones,
+    # lotes, audit_log). Reemplaza al SQLite data/efdi.db. Las tablas las crea
+    # `python -m efdi.migrar` — ver infrastructure/db.py.
+    app_db_host: str = ""
+    app_db_port: int = 1433
+    app_db_name: str = ""
+    app_db_user: str = ""
+    app_db_pass: str = ""
+
     data_dir: Path = Field(default=Path("./data"))
     templates_dir: Path = Field(default=Path("./src/efdi/templates"))
 
@@ -77,6 +86,16 @@ class Settings(BaseSettings):
             f"SERVER={self.db_host_sibacom},{self.db_port_sibacom};"
             f"DATABASE={self.db_name_sibacom};"
             f"UID={self.db_user_sibacom};PWD={self.db_password_sibacom};"
+            "TrustServerCertificate=yes;Encrypt=no;"
+        )
+
+    @property
+    def app_db_dsn(self) -> str:
+        return (
+            f"DRIVER={{{self.db_driver}}};"
+            f"SERVER={self.app_db_host},{self.app_db_port};"
+            f"DATABASE={self.app_db_name};"
+            f"UID={self.app_db_user};PWD={self.app_db_pass};"
             "TrustServerCertificate=yes;Encrypt=no;"
         )
 
